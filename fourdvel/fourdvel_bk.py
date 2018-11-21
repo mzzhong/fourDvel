@@ -141,154 +141,6 @@ class fourdvel():
 
         #print(track_timefraction)
 
-    def synthetics(self,point=None,tracks=None):
-
-        # Tide periods.
-        tides = self.tides
-
-        # Rutford data.
-        tidesRut = {}
-        
-        tidesRut['K2'] =    [0.31,  163,    29.1,   99]
-        tidesRut['S2'] =    [0.363, 184,    101.6,  115]
-        tidesRut['M2'] =    [0.259, 177,    156.3,  70]
-        tidesRut['K1'] =    [0.19,  79,     49,     73]
-        tidesRut['P1'] =    [0.24,  77.0,   16.6,   64]
-        tidesRut['O1'] =    [0.264, 81.0,   43,     54]
-        tidesRut['Mf'] =    [2.54,  250.0,  2.9,    163]
-        tidesRut['Msf'] =   [13.28, 18.8,   0.3,    164]
-        tidesRut['Mm'] =    [5.04,  253.0,  1.6,    63]
-        tidesRut['Ssa'] =   [26.74, 256.0,  1.5,    179]
-        tidesRut['Sa'] =    [19.18, 273.0,  0.2,    179]
-
-        # Constants for ice flow model.
-        A = 2.4e-24
-        alpha = 0.04
-        g = 9.81
-        h = 1000
-        n_g = 3
-        rho = 900
-        s_v = 0.6
-
-        # Gravitional driving stress
-        tau_d = rho*g*h*alpha
-
-        # Basal drag
-        tau_b = 0.8 * tau_d
-
-        w = 50*1000 #m
-        L = 150*1000 #m
-
-        # End of constants
-
-        # Beginning of simulations
-
-        x = np.linspace(0,L,num=np.round(L/500))
-        y = np.linspace(0,2*w,num=np.round(2*w/500))
-
-        yy,xx = np.meshgrid(y,x)
-        #print(xx.shape)
-        #print(tau_d)
-        #print(tau_d * w/h)
-        #print(tau_d * w/h * 0.2)
-
-        #print(2*A*w/(n_g+1))
-
-        v_ideal_center = 2*A*w/(n_g+1) * (tau_d * w / h * 0.2)**n_g
-        print(v_ideal_center)
-        
-        #print(stop)
-        
-        v_ideal = v_ideal_center * (1 - (1-yy/w)**(n_g+1))
-
-        k_h=10**(-1*np.abs(np.log10(L)-0.8))
-        gamma = (1 + np.tanh(k_h * (x-0.6*L)))/2
-
-        Gamma = {}
-
-        Gamma_const = v_ideal/v_ideal_center
-
-        # Time of origin
-        t_origin = self.t_origin
-
-        t_axis = np.arange(-365,365,0.01)
-        t_axis = np.arange(0,300,0.01)
-
-        # Signal of every tide at a particular grid point.
-        # Fix the grid point for now.
-        ind_x = 200
-        ind_y = 50
-
-        x_loc = xx[ind_x,ind_y]
-        y_loc = yy[ind_x,ind_y]
-
-        sim_const = Gamma_const[ind_x,ind_y]
-        sim = {}
-
-        fig = plt.figure(figsize=(7,7))
-        ax = fig.add_subplot(111)
-        for key in tidesRut.keys():
-            print(key)
-
-            a_n = tidesRut[key][0]/100 # meter
-            phi_n = tidesRut[key][1]/180 * np.pi # rad
-            a_u = tidesRut[key][2]/100 * gamma[ind_x] # meter, modulated by the grounding line.
-            phi_u = tidesRut[key][3]/180 * np.pi
-
-            omega = 2*np.pi / tides[key] 
-
-            sim[(key,'e')] = np.zeros(shape=t_axis.shape)
-            sim[(key,'n')] = sim_const * a_n * (np.sin(omega*t_axis + phi_n))
-            sim[(key,'u')] = sim_const * a_u * (np.sin(omega*t_axis + phi_u))
-
-            ax.plot(t_axis,sim[(key,'n')])
-
-
-        #plt.show()
-        #print(stop)
-
-
-        # Add all tide signals together
-        p_e = np.zeros(shape=t_axis.shape)
-        p_n = np.zeros(shape=t_axis.shape)
-        p_u = np.zeros(shape=t_axis.shape)
-
-        for key in tidesRut.keys():
-            p_e = p_e + sim[(key,'e')]
-            p_n = p_n + sim[(key,'n')]
-            p_u = p_u + sim[(key,'u')]
-
-        # Full velocity signals
-        v_e = np.zeros(shape=t_axis.shape)
-
-        v_n = s_v * x_loc/L * (-v_ideal[ind_x,ind_y]*t_axis + p_n)
-        v_n_tides = s_v * x_loc/L * p_n
-
-        v_u = s_v * (x_loc-L)/(10*L) * v_ideal[ind_x,ind_y] + p_u
-        v_u_tides = p_u
-
-        # Plotting.
-        fig = plt.figure(figsize=(7,7))
-        ax = fig.add_subplot(111)
-        
-        # Choice 1
-        #p1 = ax.imshow(v_ideal/v_ideal_center,cmap=plt.cm.coolwarm)
-        #p1 = ax.imshow(v_ideal,cmap=plt.cm.coolwarm)
-        #fig.colorbar(p1)
-
-        # Choice 2
-        ax.plot(t_axis, p_n)
-
-
-        # velocity
-        #v_e = np.zeros(shape=xx.shape)
-        #v_n = np.z
-
-        plt.show()
-
-        return
-
-
     def get_CSK_trackDates(self):
 
         import csv
@@ -300,10 +152,12 @@ class fourdvel():
         #file_folder = '/home/mzzhong/links/kraken-nobak-net/CSKData/data_20171116_20180630'
         file_folder = self.csk_log
 
-
         data_file = os.path.join(file_folder,'all.csv')
 
         csk = CSK_Utils()
+
+        tot_product = 0
+        tot_frames = 0
 
         with open(data_file) as dataset:
             csv_reader = csv.reader(dataset, delimiter=';')
@@ -312,6 +166,10 @@ class fourdvel():
                 line = line + 1
                 if line == 1:
                     continue
+                
+                # Count as one product.
+                tot_product = tot_product + 1
+                
                 #print(row)
                 sate = 'CSKS' + row[1][-1]
                 acq_datefmt = row[5].split(' ')[0]
@@ -332,6 +190,13 @@ class fourdvel():
                     csk_data[track[0]].append(theDate)
                 else:
                     csk_data[track[0]] = [theDate]
+
+                tot_frames = tot_frames + csk.numOfFrames[track[0]]
+
+        
+        print("number of product: ", tot_product)
+        print("number of frames: ", tot_frames)
+
 
         for track_num in sorted(csk_data.keys()):
             csk_data[track_num].sort()
@@ -978,6 +843,7 @@ class fourdvel():
         
         print('Done')
 
+
     def preparation(self):
 
         # Get pre-defined grid points and the corresponding tracks and vectors.
@@ -996,28 +862,19 @@ class fourdvel():
             self.get_CSK_trackDates()
         elif self.use_s1:
             self.get_S1_trackDates()
- 
-    def simulation(self):
 
-        # Different types of simulations.
-        # 1. Continuous time series
-        # 2. Same information as the real available offsetfields
-
-        self.synthetics()
-        return
-        grid_set = self.grid_set
-        for grid in grid_set.keys():
-            if len(grid_set[grid]) == 6:
-                self.synthetics(point=grid, tracks=grid_set[grid])
-                print(stop)
- 
 def main():
 
     fourD = fourdvel()
+    
     #fourD.get_track_latlon()
     
     #fourD.simulation()
-    fourD.driver()
+
+    #fourD.driver()
+
+    # To count the number of products.
+    #fourD.get_CSK_trackDates()
 
 if __name__=='__main__':
     main()
