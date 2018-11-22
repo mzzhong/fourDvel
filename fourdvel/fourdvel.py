@@ -269,11 +269,14 @@ class fourdvel(basics):
 
     def get_grid_set_velo(self):
 
-        grid_set_velo_pkl = self.grid_set_velo_name + '.pkl'
+        dim = 3
+        if dim == 3:
+            grid_set_velo_pkl = self.grid_set_velo_name + '_3d' + '.pkl'
+        else:
+            raise Exception('Need three dimensional velocity model')
 
         if os.path.exists(grid_set_velo_pkl):
             print('Loading grid_set_velo...')
-
             with open(grid_set_velo_pkl,'rb') as f:
                 self.grid_set_velo = pickle.load(f)
 

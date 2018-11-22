@@ -148,9 +148,12 @@ class simulation(basics):
         tidesRut = ['K2','S2','M2','K1','P1','O1','Mf','Msf','Mm','Ssa','Sa']
 
         # Original data from paper.
-        # Assume this corresponds to 1 meter /day.
-        self.ref_speed = 1 # m/d
+        # Horizontal: assume this corresponds to 1 meter /day.
+        self.ref_speed = 1
+        # Vertical: assume the vertical scale.
+        self.verti_scale = 0.5
 
+        # Actual parameters from Murray (2007)
         tidesRut_params['K2'] =    [3.91,   163,    29.1,   99  ]
         tidesRut_params['S2'] =    [4.56,   184,    101.6,  115 ]
         tidesRut_params['M2'] =    [3.15,   177,    156.3,  70  ]
@@ -222,28 +225,33 @@ class simulation(basics):
         return param_vec
 
 
-    def syn_velocity(self, secular_v, horizontal = False):
+    def syn_velocity(self, velo_model):
         
         # Tides.
         tide_periods = self.tide_periods
 
+        print(velo_model)
+
+        #print(stop)
+
         # Reference speed to tide amplitudes.
         ref_speed = self.ref_speed
+        verti_scale = self.verti_scale
 
         # Rutford tide model.
         tidesRut_params = self.tidesRut_params
         syn_tidesRut = self.syn_tidesRut
 
         # Secular velcity.
-        secular_v_e = secular_v[0]
-        secular_v_n = secular_v[1]
+        secular_v_e = velo_model[0]
+        secular_v_n = velo_model[1]
         secular_v_u = 0
+
+        verti_ratio = velo_model[2]
 
         print(secular_v_e, secular_v_n)
         secular_speed = np.sqrt(secular_v_e**2 + secular_v_n**2)
-
         secular_v = (secular_v_e, secular_v_n, secular_v_u)
-
 
         # Tides
         tide_amp = {}
@@ -258,21 +266,28 @@ class simulation(basics):
             horiz_amp = tidesRut_params[tide_name][0]/100 # velocity
             horiz_phase = np.deg2rad(tidesRut_params[tide_name][1])
 
+            verti_amp = tidesRut_params[tide_name][2]/100 # velocity
+            verti_phase = np.deg2rad(tidesRut_params[tide_name][3])
+
             # East component.
-            a_e = horiz_amp * abs(secular_v_e/secular_speed) * ref_speed
+            a_e = horiz_amp * abs(secular_v_e/secular_speed) * secular_speed / ref_speed
             phi_e = np.sign(secular_v_e) * horiz_phase
 
             # North component.
-            a_n = horiz_amp * abs(secular_v_n/secular_speed) * ref_speed
+            a_n = horiz_amp * abs(secular_v_n/secular_speed) * secular_speed / ref_speed
             phi_n = np.sign(secular_v_n) * horiz_phase # rad
 
-            # Up component. (Depending on the flow is horizontal nor not)
-            if horizontal == False:
-                a_u = tidesRut_params[tide_name][2]/100 # m/d
-                phi_u = np.deg2rad(tidesRut_params[tide_name][3]) # rad
-            else:
-                a_u = 0
-                phi_u = 0
+            # Up component. 
+            a_u = verti_amp * verti_scale * verti_ratio
+            phi_u = verti_phase
+            
+            #(Depending on the flow is horizontal nor not)
+            #if horizontal == False:
+            #    a_u = verti_amp # m/d
+            #    phi_u = verti_phase # rad
+            #else:
+            #    a_u = 0
+            #    phi_u = 0
 
             # Record the tides.
             tide_amp[(tide_name,'e')] = a_e
@@ -458,96 +473,9 @@ class simulation(basics):
 
         return data_vector
 
-    def driver(self):
-
-        # Different types of simulations.
-        # 1. Continuous time series
-        # 2. Same information as the real available offsetfields
-        
-        self.preparation() 
- 
-        grid_set = self.grid_set
-
-        for grid in grid_set.keys():
-
-            lon, lat = grid
-
-            # On the ice shelves.
-            #if lon == -77 and lat == -76.7:
-
-            # On the ice streams.
-            if lon == -73 and lat == -75.6:
-
-            #if lon>-79 and lon<-78 and lat>-76.2 and lat<-75.8:
-
-                ### DATA ###
-                # The coordinates.
-                print(lon, lat)
-                #print(stop)
-
-                tracks = grid_set[grid]
-
-                # Obtain the synthetic ice flow.
-                (t_axis, secular_velocity, velocity, tide_amp, tide_phase) = self.syn_velocity(horizontal = True)
-
-                # Synthetic data.
-                noise_sigma = 0.02
-
-                syn_data_vec = self.syn_offset_data(t_axis, secular_velocity, velocity, tide_amp, tide_phase, tracks, noise_sigma = noise_sigma)
-                
-                print("Data vector (G)\n", syn_data_vec)
-
-                # Data prior.
-                invCd = self.simple_data_uncertainty(syn_data_vec, noise_sigma)
-
-                ### MODEL ###
-
-                # True tidal params.
-                true_tide_vec = self.true_tide_vec(secular_velocity, tide_amp, tide_phase)
-                print('True tide vec:\n', true_tide_vec)
-
-                # Design matrix.
-                design_mat =  self.build_G(tracks = tracks)
-                print("Design matrix (G)\n:", design_mat)
-
-                # Model prior.
-                invCm = self.model_prior(horizontal = False)
-
-                # Model posterior.
-                Cm_p = self.model_posterior(design_mat, invCd, invCm)
-
-                print('Model posterior: ', Cm_p)
-
-                # Show the model posterior.
-                display().show_model_mat(Cm_p)
-
-                # Estimated model params.
-                #model_vec = self.param_estimation_simple(design_mat, syn_data_vec)
-                model_vec = self.param_estimation(design_mat, syn_data_vec, invCd, invCm, Cm_p)
-
-                #print('Estimated model vec:\n', model_vec)
-
-                # Convert model params to tidal params.
-                tide_vec = self.model_vec_to_tide_vec(model_vec)
-
-                # Convert model posterior to uncertainty of params.
-                # Require: tide_vec and Cm_p
-                tide_vec_uq = self.model_posterior_to_uncertainty(tide_vec, Cm_p)
-
-
-                ### Show the results ###
-                # Stack the true and inverted models.
-                stacked_vecs = np.hstack((true_tide_vec, tide_vec, tide_vec_uq))
-
-                # Show the results.
-                label = '200'
-                display().display_vecs(stacked_vecs,label)
-
 def main():
 
     fourD_sim = simulation()
-
-    fourD_sim.driver()
 
 if __name__=='__main__':
 

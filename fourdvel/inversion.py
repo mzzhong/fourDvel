@@ -155,7 +155,7 @@ class inversion(fourdvel):
 
         return data_vec
 
-    def data_formation(self, point, tracks, horizontal = False, test_mode=None):
+    def data_formation(self, point, tracks, test_mode=None):
 
         from simulation import simulation
 
@@ -172,8 +172,9 @@ class inversion(fourdvel):
 
             # Synthetic data.
             fourD_sim = simulation()
+            velo_model = self.grid_set_velo[point]
             # Obtain the synthetic ice flow.
-            (t_axis, secular_v, velocity, tide_amp, tide_phase) = fourD_sim.syn_velocity(horizontal = horizontal)
+            (t_axis, secular_v, velocity, tide_amp, tide_phase) = fourD_sim.syn_velocity(velo_model=velo_model)
 
             # Obtain SAR data.
             noise_sigma = 0.02
@@ -209,8 +210,8 @@ class inversion(fourdvel):
             # Synthetic data.
             fourD_sim = simulation()
             # Obtain the synthetic ice flow.
-            secular_v = self.grid_set_velo[point]
-            (t_axis, secular_v, velocity, tide_amp, tide_phase) = fourD_sim.syn_velocity(secular_v = secular_v, horizontal = horizontal)
+            velo_model = self.grid_set_velo[point]
+            (t_axis, secular_v, velocity, tide_amp, tide_phase) = fourD_sim.syn_velocity(velo_model = velo_model)
 
             # Obtain SAR data.
             noise_sigma = 0.02
@@ -259,10 +260,8 @@ class inversion(fourdvel):
         test_mode = 2   
         test_id = self.test_id
 
-        horizontal = True
-
         # Data formation.
-        (data_vec, invCd, offsetfields, true_tide_vec) = self.data_formation(point, tracks, horizontal, test_mode)
+        (data_vec, invCd, offsetfields, true_tide_vec) = self.data_formation(point, tracks, test_mode)
 
         ### MODEL ###
         # Design matrix.
@@ -270,7 +269,7 @@ class inversion(fourdvel):
         print("Design matrix (G)\n:", design_mat)
  
         # Model prior.
-        invCm = self.model_prior(horizontal = horizontal)
+        invCm = self.model_prior(horizontal = self.horizontal_prior)
 
         # Model posterior.
         Cm_p = self.model_posterior(design_mat, invCd, invCm)
@@ -316,6 +315,9 @@ class inversion(fourdvel):
 
         grid_set = self.grid_set
 
+        
+
+        self.horizontal_prior = False
         for grid in grid_set.keys():
 
             lon, lat = grid
@@ -323,11 +325,11 @@ class inversion(fourdvel):
             #if len(grid_set[grid]) == 2:
 
             # On ice stream. 
-            if lon == -75 and lat == -75.7:
-
+            #if lon == -75 and lat == -75.7:
+            
             # On ice shelves.
             # T52 and T37
-            #if lon == -77 and lat == -76.7:
+            if lon == -77 and lat == -76.7:
             # Only T37
             #if lon == -74 and lat == -77:
 
