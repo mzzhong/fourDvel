@@ -16,17 +16,11 @@ import pickle
 from Ant_data import Ant_data
 
 
-lon_re = 50
-lat_re = 200
-
-lon_step = 1/lon_re
-lat_step = 1/lat_re
-
 class grouping(fourdvel):
 
     def __init__(self):
         super(grouping,self).__init__()
-        self.preparation()
+        self.get_grid_set()
         self.doub_diff_file ='/net/jokull/nobak/mzzhong/S1-Evans/track_37/cuDenseOffsets/doub_diff.off'
 
     def rounding(self,x):
@@ -52,8 +46,8 @@ class grouping(fourdvel):
             v_comb = npzfile['v_comb']
 
             # Rounding latlon to grid points.
-            vel_lon = np.round(vel_lon * lon_re)/lon_re
-            vel_lat = np.round(vel_lat * lat_re)/lat_re
+            vel_lon = np.round(vel_lon * self.lon_re)/self.lon_re
+            vel_lat = np.round(vel_lat * self.lat_re)/self.lat_re
 
             # Match velo to grid_set
             matched_velo = {}
@@ -114,8 +108,8 @@ class grouping(fourdvel):
                         dist = dist + 1
                         for ix in range(-dist, dist+1):
                             for iy in range(-dist, dist+1):
-                                new_lon = self.rounding(lon + lon_step * ix)
-                                new_lat = self.rounding(lat + lat_step * iy)
+                                new_lon = self.rounding(lon + self.lon_step * ix)
+                                new_lat = self.rounding(lat + self.lat_step * iy)
     
                                 if (new_lon, new_lat) in matched_velo.keys():
                                     grid_set_velo_2d[key] = matched_velo[(new_lon, new_lat)]
@@ -139,65 +133,7 @@ class grouping(fourdvel):
     
         return 0
 
-    def process_velo(self):
-
-        self.match_velo_to_grid_set()
-        self.create_grid_set_velo_2d()
-
-
-    ##############################################
-
-    def coloring_bfs(self, point_set, x, y):
-
-        redo = 0
-        if os.path.exists('./pickles/quene.pkl') and redo == 0:
-            with open('./pickles/quene.pkl','rb') as f:
-                quene = pickle.load(f)
-        else:
-            x = np.round(x*1000)/1000
-            y = np.round(y*1000)/1000
-     
-            quene = []
-            quene.append((x,y))
-    
-            head = -1
-            while head < len(quene)-1:
-    
-                print(len(quene))
-    
-                head = head + 1
-                head_x = quene[head][0]
-                head_y = quene[head][1]
-    
-                for direction in range(4):
-                    if direction==0:
-                        next_x = head_x - self.lon_step
-                        next_y = head_y
-                    elif direction==1:
-                        next_x = head_x + self.lon_step
-                        next_y = head_y
-                    elif direction==2:
-                        next_x = head_x
-                        next_y = head_y - self.lat_step
-                    elif direction==3:
-                        next_x = head_x
-                        next_y = head_y + self.lat_step
-                
-                    next_x = np.round(next_x*1000)/1000
-                    next_y = np.round(next_y*1000)/1000
-            
-                    if ((next_x,next_y) in point_set) and (not (next_x, next_y) in quene):
-                        quene.append((next_x,next_y))
-
-            # Fill in the holes.
-            #quene = self.fill_in_holes(quene)
-            
-            with open('./pickles/quene.pkl','wb') as f:
-                pickle.dump(quene,f)
-
-        return quene
-
-    def shelves(self):
+    def add_verti(self):
 
         from dense_offset import dense_offset
         from scipy.signal import  medfilt
@@ -315,6 +251,68 @@ class grouping(fourdvel):
 
         return
 
+    def velo_model(self):
+
+        # 2D
+        self.match_velo_to_grid_set()
+        self.create_grid_set_velo_2d()
+
+        # 3D
+        self.add_verti()
+
+
+    ##############################################
+
+    def coloring_bfs(self, point_set, x, y):
+
+        redo = 0
+        if os.path.exists('./pickles/quene.pkl') and redo == 0:
+            with open('./pickles/quene.pkl','rb') as f:
+                quene = pickle.load(f)
+        else:
+            x = np.round(x*1000)/1000
+            y = np.round(y*1000)/1000
+     
+            quene = []
+            quene.append((x,y))
+    
+            head = -1
+            while head < len(quene)-1:
+    
+                print(len(quene))
+    
+                head = head + 1
+                head_x = quene[head][0]
+                head_y = quene[head][1]
+    
+                for direction in range(4):
+                    if direction==0:
+                        next_x = head_x - self.lon_step
+                        next_y = head_y
+                    elif direction==1:
+                        next_x = head_x + self.lon_step
+                        next_y = head_y
+                    elif direction==2:
+                        next_x = head_x
+                        next_y = head_y - self.lat_step
+                    elif direction==3:
+                        next_x = head_x
+                        next_y = head_y + self.lat_step
+                
+                    next_x = np.round(next_x*1000)/1000
+                    next_y = np.round(next_y*1000)/1000
+            
+                    if ((next_x,next_y) in point_set) and (not (next_x, next_y) in quene):
+                        quene.append((next_x,next_y))
+
+            # Fill in the holes.
+            #quene = self.fill_in_holes(quene)
+            
+            with open('./pickles/quene.pkl','wb') as f:
+                pickle.dump(quene,f)
+
+        return quene
+
     def define_shelves(self):
 
         grid_set = self.grid_set
@@ -394,8 +392,8 @@ class grouping(fourdvel):
         vel, vel_lon, vel_lat = Ant.get_veloData()
 
         # Rounding coordinates.
-        vel_lon  = np.round(vel_lon * lon_re) / lon_re
-        vel_lat = np.round(vel_lat* lat_re)/lat_re
+        vel_lon  = np.round(vel_lon * self.lon_re) / self.lon_re
+        vel_lat = np.round(vel_lat* self.lat_re)/self.lat_re
 
         #print(vel_lon)
         #print(vel_lat)
@@ -434,19 +432,83 @@ class grouping(fourdvel):
     
         fig.savefig('./fig_sim/streams.png',format='png')
 
+    ##############################################
+
+    def grid_tiles(self):
+
+        grid_set = self.grid_set
+
+        # Evans bounding box.
+        west = self.round1000(-85)
+        east = self.round1000(-69)
+        north = self.round1000(-74.2)
+        south = self.round1000(-77.6)
+
+        tile_lon_size = 1
+        tile_lat_size = 0.2
+
+        looks = 1
+        tile_lon_num = np.round(self.lon_re * tile_lon_size)
+        tile_lat_num = np.round(self.lat_re * tile_lat_size)
+
+        sub_lon_list = np.arange(tile_lon_num) / tile_lon_num * tile_lon_size
+        sub_lat_list = np.arange(tile_lat_num) / tile_lat_num * tile_lat_size
+    
+        count = 0
+        tile_set = {}
+        
+        for tile_lon in self.round1000(np.arange(west, east,tile_lon_size)):
+            
+            for tile_lat in self.round1000(np.arange(south, north,tile_lat_size)):
+
+                location = (tile_lon,tile_lat)
+                tile_set[location] = []
+
+                tile_west = self.round1000(tile_lon)
+                tile_east = self.round1000(tile_lon+ tile_lon_size)
+
+                tile_south = self.round1000(tile_lat)
+                tile_north = self.round1000(tile_lat + tile_lat_size)
+
+                lon_list = self.round1000(tile_west + sub_lon_list)
+                lat_list = self.round1000(tile_south + sub_lat_list)
+
+                for lon in lon_list:
+                    for lat in lat_list:
+                        
+                        point = (lon, lat)
+                        if point in grid_set.keys():
+                            count = count + 1
+                            tile_set[location].append(point)
+
+        print(count)
+        print(len(grid_set))
+        print(len(tile_set))
+
+        # Remove empty tiles.
+        empty_tiles = []
+        for tile in tile_set.keys():
+            if len(tile_set[tile])==0:
+                empty_tiles.append(tile)
+
+        for tile in empty_tiles:
+            tile_set.pop(tile)
+
+        print(len(tile_set))
+        with open('./pickles/tile_set_csk.pkl','wb') as f:
+            pickle.dump(tile_set,f)
+
 def main():
     
     group = grouping()
 
     # Generate constant velocity.
     # First two component.
-    group.process_velo()
+    #group.velo_model()
+    
+    # Find tiles.
+    group.grid_tiles()
 
-    # Add up component.
-    group.shelves()
-
-    # Using velocity model.
-    #group.streams()
  
 if __name__=='__main__':
     main()

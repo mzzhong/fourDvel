@@ -27,14 +27,23 @@ class basics():
         tide_periods['Ssa'] = 182.62
         tide_periods['Sa'] = 365.27
 
-
         self.tide_omegas = {}
         for tide_name in self.tides:
             self.tide_omegas[tide_name] = 2*np.pi/tide_periods[tide_name]
-    
+
+        # Pixel size
+        self.lon_re = 50
+        self.lat_re = 200
+
+        self.lon_step = 1/self.lon_re
+        self.lat_step = 1/self.lat_re
+
     def wrapped(self,phase):
         
         return (phase + np.pi) % (2*np.pi) - np.pi
+
+    def round1000(self, value):
+        return np.round(value*1000)/1000
 
     def comp_name(self,comp):
 

@@ -85,6 +85,10 @@ class fourdvel(basics):
                 self.grid_set_velo_name = value
                 print('grid_set_velo_name: ',value)
 
+            if name == 'tile_set_name':
+                self.tile_set_name = value
+                print('tile_set_name: ',value)
+
             if name == 'est_dict_name':
                 self.est_dict_name = value
                 print('est_dict_name: ',value)
@@ -280,14 +284,21 @@ class fourdvel(basics):
             with open(grid_set_velo_pkl,'rb') as f:
                 self.grid_set_velo = pickle.load(f)
 
- 
+    def get_tile_set(self):
+
+        tile_set_pkl = self.tile_set_name + '.pkl'
+
+        if os.path.exists(tile_set_pkl):
+            print('Loading tile_set ...')
+            with open(tile_set_pkl,'rb') as f:
+                self.tile_set = pickle.load(f)
+
     def get_grid_set(self):
         import gdal
 
         # Currently only CSK
 
         redo = 0
-
         grid_set_pkl = self.grid_set_name + '.pkl'
 
         # Step size
@@ -486,6 +497,7 @@ class fourdvel(basics):
         # Get pre-defined grid points and the corresponding tracks and vectors.
         self.get_grid_set()
         self.get_grid_set_velo()
+        self.get_tile_set()
         # Show the counts.
         print('Number of total grid points: ', len(self.grid_set.keys()))
 
@@ -738,16 +750,27 @@ class fourdvel(basics):
                 error_s_t = variance[3+k*6+t+3]
 
                 # Amplitude
-                amp = tide_vec[3+k*6+t]
+                amp = tide_vec[3+k*6+t][0]
 
                 # Phase
-                phase = tide_vec[3+k*6+t+3]
+                phase = tide_vec[3+k*6+t+3][0]
 
                 # Amplitude error
                 amp_error = (error_c_t * np.sin(phase)**2 - error_s_t * np.cos(phase)**2) / (np.sin(phase)**4 - np.cos(phase)**4)
 
                 # Phase error
                 phase_error = (-error_c_t * np.cos(phase)**2 + error_s_t * np.sin(phase)**2) / (amp**2 * (np.sin(phase)**4 - np.cos(phase)**4))
+
+                #if modeling_tides[k] == 'O1' and t==2:
+                #    print(error_c_t)
+                #    print(error_s_t)
+                #    print(phase)
+                #    print(amp_error)
+                #    print(phase_error)
+
+                #    print((error_c_t * np.sin(phase)**2 - error_s_t * np.cos(phase)**2) )
+                #    print((np.sin(phase)**4 - np.cos(phase)**4))
+                #    print(stop)
 
                 param_uq[3+k*6+t,0] = amp_error
                 param_uq[3+k*6+t+3,0] = phase_error

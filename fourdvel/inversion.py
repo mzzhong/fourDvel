@@ -30,6 +30,7 @@ class inversion(fourdvel):
         super(inversion,self).__init__()
 
         self.display = display()
+        self.preparation()
 
     def model_analysis(self,point=None,tracks=None,offsetfields=None,design_mat=None):
 
@@ -37,7 +38,6 @@ class inversion(fourdvel):
             G = self.build_G(point=point, tracks=tracks, offsetfields=offsetfields)
         else:
             G = design_mat
-
 
         n_row, n_cols = G.shape
         
@@ -308,46 +308,139 @@ class inversion(fourdvel):
 
         return 0
 
-    def driver_serial(self):
-        # Grid by grid.
+    def set_tides(self, point_set, tracks_set):
 
-        self.preparation()
+        ### Data ###
 
-        grid_set = self.grid_set
+        # Choose the test mode.
+        test_mode = 2
+        test_id = self.test_id
 
+        # Num of points.
+        n_points = len(point_set)
+
+        # Data formation.
+        (data_vec, invCd, offsetfields, true_tide_vec) = self.data_formation(point_set, tracks_set, test_mode)
+
+        ### MODEL ###
+        # Design matrix.
+        design_mat = self.build_G(offsetfields=offsetfields)
+        print("Design matrix (G)\n:", design_mat)
+ 
+        # Model prior.
+        invCm = self.model_prior(horizontal = self.horizontal_prior)
+
+        # Model posterior.
+        Cm_p = self.model_posterior(design_mat, invCd, invCm)
+        print('Model posterior: ',Cm_p)
+
+        # Show the model posterior.
+        #self.display.show_model_mat(Cm_p)
+
+        #self.model_analysis(design_mat = design_mat, model_prior = invCm)
+
+        ### Inversion ###
+        # Estimate model params.
+        model_vec = self.param_estimation(design_mat, data_vec, invCd, invCm, Cm_p)
+
+        # Convert to tidal params.
+        tide_vec = self.model_vec_to_tide_vec(model_vec)
+
+        # Convert model posterior to uncertainty of params.
+        # Require: tide_vec and Cm_p
+        tide_vec_uq = self.model_posterior_to_uncertainty(tide_vec, Cm_p)
+
+        print('Inversion Done')
         
+        ##### Show the results ####
+        # Stack the true and inverted models.
+        if true_tide_vec is not None:
+            stacked_vecs = np.hstack((true_tide_vec, tide_vec, tide_vec_uq))
+            row_names = ['Input','Estimated','Uncertainty']
+            column_names = ['Secular'] + self.modeling_tides
+        else:
+            stacked_vecs = np.hstack((tide_vec, tide_vec_uq))
+            row_names = ['Estimated','Uncertainty']
+            column_names = ['Secular'] + self.modeling_tides
+
+        self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
+
+        return 0
+
+
+
+
+
+
+    def driver_serial(self):
+        
+        # Tile by tile.
+        tile_set = self.tile_set
+        grid_set = self.grid_set 
 
         self.horizontal_prior = False
-        for grid in grid_set.keys():
 
-            lon, lat = grid
+        for tile in tile_set.keys():
 
-            #if len(grid_set[grid]) == 2:
+            if tile == (-77, -76.8):
 
-            # On ice stream. 
-            #if lon == -75 and lat == -75.7:
-            
-            # On ice shelves.
-            # T52 and T37
-            if lon == -77 and lat == -76.7:
-            # Only T37
-            #if lon == -74 and lat == -77:
-
-                #if lon>-79 and lon<-78 and lat>-76.2 and lat<-75.8:
+                for point in tile_set[tile]:
+    
+                    lon, lat = point
     
                     # The coordinates.
                     print(lon,lat)
-
-                    tracks = grid_set[grid]
-
+    
+                    # Find the tracks.
+                    tracks = grid_set[point]
+    
                     # Obtain the real data.
-                    self.point_tides(point = grid, tracks = tracks)
+                    self.point_tides(point = point, tracks = tracks)
+
+                    print(stop)
+        
+                    ###########################
+                    #if len(grid_set[point]) == 2:
+    
+                    # On ice stream. 
+                    #if lon == -75 and lat == -75.7:
+                    
+                    # On ice shelves.
+                    # T52 and T37
+                    #if lon == -77 and lat == -76.7:
+                    # Only T37
+                    #if lon == -74 and lat == -77:
+
+    def driver_serial_tile(self):
+        
+        # Tile by tile.
+        tile_set = self.tile_set
+        grid_set = self.grid_set 
+
+        self.horizontal_prior = False
+
+        for tile in tile_set.keys():
+
+            if tile == (-77, -76.8):
+
+                point_set = tile_set[tile] # List of tuples
+                #print(point_set)
+
+                # Find the tracks.
+                tracks_set = []
+                for point in point_set:
+                    tracks_set.append(grid_set[point]) # [ [(T1),(T2)],[(T1),(T2)],.... ]
+
+                #print(tracks_set)
+    
+                # Obtain the real data.
+                self.set_tides(point_set = point_set, tracks_set = tracks_set)
+
+                print(stop)
 
 
     def driver_mp(self):
         # Using multi-threads to get map view estimation.
-
-        self.preparation()
 
         # Calcuate design matrix and do estimations.
         # Always redo it.
@@ -435,7 +528,7 @@ def main():
 
     fourd_inv = inversion()
 
-    fourd_inv.driver_serial()
+    fourd_inv.driver_serial_tile()
     
     #fourd_inv.driver_mp()
 
