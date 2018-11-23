@@ -127,6 +127,23 @@ class display(fourdvel):
 
         return 0
 
+    def write_dict_to_xyz(self, show_dict, xyz_name):
+        
+        # Write to txt file.
+        f = open(xyz_name,'w')
+        cap=100
+        for key in sorted(show_dict.keys()):
+            lon, lat = key
+            value = show_dict[key]
+            value = min(value,cap)
+            if value == 0:
+                value == 100
+            if not np.isnan(value):
+                f.write(str(lon)+' '+str(lat)+' '+str(min(value,cap))+'\n')
+
+        f.close()
+        return
+ 
 
     def tide_symbols(self,tide_name):
         pass

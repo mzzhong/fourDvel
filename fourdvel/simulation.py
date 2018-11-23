@@ -181,6 +181,18 @@ class simulation(basics):
         self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Msf','Mf','Mm','Ssa','Sa']
         #self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Mf','Msf','Mm','Ssa','Sa']
 
+    def true_tide_vec_set(self, point_set, secular_v_set, modeling_tides, tide_amp_set, tide_phase_set):
+        
+        true_tide_vec_set = {}
+        
+        for point in point_set:
+            true_tide_vec_set[point] = self.true_tide_vec(secular_v_set[point],
+                                            modeling_tides,
+                                            tide_amp_set[point],
+                                            tide_phase_set[point])
+
+        return true_tide_vec_set
+
     def true_tide_vec(self, secular_v, modeling_tides, tide_amp, tide_phase):
 
         # Model parameters.
@@ -224,14 +236,34 @@ class simulation(basics):
 
         return param_vec
 
+    def syn_velocity_set(self, point_set, velo_model_set):
+        
+        # Initilization
+        secular_v_set = {}
+        tide_amp_set = {}
+        tide_phase_set = {}
+        
+        for point in point_set:
+
+            velo_model = velo_model_set[point]
+        
+            (t_axis, secular_v, v, tide_amp, tide_phase) = self.syn_velocity(
+                                                            velo_model = velo_model)
+
+            secular_v_set[point] = secular_v           
+            tide_amp_set[point] = tide_amp
+            tide_phase_set[point] = tide_phase
+       
+        # Return parameters.
+        return (secular_v_set, tide_amp_set, tide_phase_set)
+
 
     def syn_velocity(self, velo_model):
         
         # Tides.
         tide_periods = self.tide_periods
 
-        print(velo_model)
-
+        #print(velo_model)
         #print(stop)
 
         # Reference speed to tide amplitudes.
@@ -249,7 +281,7 @@ class simulation(basics):
 
         verti_ratio = velo_model[2]
 
-        print(secular_v_e, secular_v_n)
+        #print(secular_v_e, secular_v_n)
         secular_speed = np.sqrt(secular_v_e**2 + secular_v_n**2)
         secular_v = (secular_v_e, secular_v_n, secular_v_u)
 
@@ -259,7 +291,7 @@ class simulation(basics):
 
         # Tides. (Find the parameters)
         for tide_name in syn_tidesRut:
-            print(tide_name)
+            #print(tide_name)
 
             omega = 2*np.pi / tide_periods[tide_name] 
 
@@ -361,12 +393,37 @@ class simulation(basics):
         # Return synthetic velocity time series.
         return (t_axis, secular_v, v, tide_amp, tide_phase)
 
+    def syn_offsets_data_vec_set(self, point_set, secular_v_set, modeling_tides, 
+                            tide_amp_set, tide_phase_set, offsetfields_set, noise_sigma_set):
 
-    def syn_offset_data(self, t_axis, secular_v, v=None, modeling_tides=None, tide_amp=None, tide_phase=None, offsetfields=None, noise_sigma = 0):
+        data_vec_set = {}
+        count = 0
+        for point in point_set:
+            print('simulation at point: ', count)
+            count = count + 1
+
+            # Obtain offsets from synthetics.
+            offsetfields = offsetfields_set[point]
+            secular_v = secular_v_set[point]
+            tide_amp = tide_amp_set[point]
+            tide_phase = tide_phase_set[point]
+            noise_sigma = noise_sigma_set[point]
+
+            data_vec_set[point] = self.syn_offsets_data_vec( secular_v = secular_v,
+                                                        modeling_tides = modeling_tides,
+                                                        tide_amp = tide_amp,
+                                                        tide_phase = tide_phase,
+                                                        offsetfields = offsetfields,
+                                                        noise_sigma = noise_sigma
+                                                        )
+
+        return data_vec_set
+
+    def syn_offsets_data_vec(self, t_axis=None, secular_v=None, v=None, modeling_tides=None, tide_amp=None, tide_phase=None, offsetfields=None, noise_sigma = None):
 
         # Obtain offsets from synthetics.
         n_offsets = len(offsetfields)
-        print("number of offsetfields:", n_offsets)
+        #print("number of offsetfields:", n_offsets)
         n_rows = n_offsets * 2
         data_vector = np.zeros(shape=(n_rows,1))
         t_origin = self.t_origin.date()
@@ -380,7 +437,7 @@ class simulation(basics):
 
         for i in range(n_offsets):
 
-            print('offsetfield: ',i,'/',n_offsets,'\n')
+            #print('offsetfield: ',i,'/',n_offsets,'\n')
 
             #print(offsetfields[i])
             vecs = [offsetfields[i][2],offsetfields[i][3]]
@@ -446,11 +503,11 @@ class simulation(basics):
                         offset[comp] = offset[comp] + tide_dis
                 
                 # Velocity vector.
-                offset_vec_2 = np.zeros(shape=(3,1))
-                offset_vec_2[:,0] = [offset['e'],offset['n'],offset['u']]
+                offset_vec = np.zeros(shape=(3,1))
+                offset_vec[:,0] = [offset['e'],offset['n'],offset['u']]
 
             # Final offset_vec
-            offset_vec = offset_vec_2
+            #offset_vec = offset_vec_2
 
             # Two observation vectors.
             for j in range(2):
@@ -469,9 +526,8 @@ class simulation(basics):
         np.random.seed(seed=2018)
         data_vector = data_vector + np.random.normal(scale = noise_sigma, size=data_vector.shape)
 
-        print('Data vector Done')
-
         return data_vector
+
 
 def main():
 
@@ -480,3 +536,157 @@ def main():
 if __name__=='__main__':
 
     main()
+
+## Obsoleted:
+#    def syn_offsets_data_vec_set(self, point_set, secular_v_set, modeling_tides, 
+#                            tide_amp_set, tide_phase_set, offsetfields_set, noise_sigma_set):
+#
+#        data_vec_set = {}
+#        # Point by Point.
+#        count = 0
+#        for point in point_set:
+#            print(count)
+#            count = count + 1
+#
+#            # Obtain offsets from synthetics.
+#            offsetfields = offsetfields_set[point]
+#            secular_v = secular_v_set[point]
+#            tide_amp = tide_amp_set[point]
+#            tide_phase = tide_phase_set[point]
+#            
+#            n_offsets = len(offsetfields)
+#            #print("number of offsetfields:", n_offsets)
+#            n_rows = n_offsets * 2
+#            data_vector = np.zeros(shape=(n_rows,1))
+#            t_origin = self.t_origin.date()
+#   
+#            for i in range(n_offsets):
+#    
+#                #print('offsetfield: ',i,'/',n_offsets,'\n')
+#                vecs = [offsetfields[i][2],offsetfields[i][3]]
+#                t_a = (offsetfields[i][0] - t_origin).days + offsetfields[i][4]
+#                t_b = (offsetfields[i][1] - t_origin).days + offsetfields[i][4]
+#    
+#                offset={}
+#                offset['e'] = 0
+#                offset['n'] = 0
+#                offset['u'] = 0
+#
+#                n_modelng_tides = len(modeling_tides) # Three components.
+#                comps = ['e','n','u']
+#    
+#                ii = 0
+#                for comp in comps:
+#                    offset[comp] = offset[comp] + secular_v[ii] * (t_b - t_a)
+#                    ii = ii + 1
+#                    for tide_name in modeling_tides:
+#                        omega = 2*np.pi / self.tide_periods[tide_name] 
+#                        dis_amp = tide_amp[(tide_name,comp)] / omega
+#                        dis_phase = tide_phase[(tide_name,comp)] + np.pi
+#    
+#                        tide_dis = dis_amp*np.cos(omega*t_b + dis_phase) - dis_amp * np.cos(omega*t_a + dis_phase)
+#                        offset[comp] = offset[comp] + tide_dis
+#                
+#                # Velocity vector.
+#                offset_vec = np.zeros(shape=(3,1))
+#                offset_vec[:,0] = [offset['e'],offset['n'],offset['u']]
+#    
+#                # Project to two observation vectors.
+#                for j in range(2):
+#                    obs_vec = np.zeros(shape=(3,1))
+#                    obs_vec[:,0] = np.asarray(vecs[j])
+#                    #print("Observation vector:\n", obs_vec)
+#                    
+#                    # Projection onto the observation vectors.
+#                    obs_offset = np.matmul(np.transpose(offset_vec),obs_vec)
+#                    #print(obs_offset)
+#                    
+#                    # Record the data.
+#                    data_vector[2*i+j] = obs_offset
+#
+#            data_vec_set[point] = data_vector
+#    
+#        # Add noise
+#        np.random.seed(seed=2018)
+#        for point in point_set:
+#            data_vec_set[point] = data_vec_set[point] +  \
+#                np.random.normal(scale = noise_sigma_set[point], size=data_vec_set[point].shape)
+#    
+#        print('Data vector Done')
+#
+#        return data_vec_set
+
+
+#    def syn_velocity_set(self, point_set, velo_model_set):
+#        
+#        # Tides.
+#        tide_periods = self.tide_periods
+#
+#        # Reference speed to tide amplitudes.
+#        ref_speed = self.ref_speed
+#        verti_scale = self.verti_scale
+#
+#        # Rutford tide model.
+#        tidesRut_params = self.tidesRut_params
+#        syn_tidesRut = self.syn_tidesRut
+#
+#        # Initilization
+#        secular_v_set = {}
+#        tide_amp_set = {}
+#        tide_phase_set = {}
+#        
+#        for point in point_set:
+#            # Secular velcity.
+#            secular_v_e = velo_model_set[point][0]
+#            secular_v_n = velo_model_set[point][1]
+#            secular_v_u = 0
+#            verti_ratio = velo_model_set[point][2]
+#
+#            secular_speed = np.sqrt(secular_v_e**2 + secular_v_n**2)
+#            secular_v_set[point] = (secular_v_e, secular_v_n, secular_v_u)
+#
+#            # Tides
+#            tide_amp = {}
+#            tide_phase = {}
+#
+#            # Tides. (Find the parameters)
+#            for tide_name in syn_tidesRut:
+#                #print(tide_name)
+#
+#                omega = 2*np.pi / tide_periods[tide_name] 
+#
+#                horiz_amp = tidesRut_params[tide_name][0]/100 # velocity
+#                horiz_phase = np.deg2rad(tidesRut_params[tide_name][1])
+#
+#                verti_amp = tidesRut_params[tide_name][2]/100 # velocity
+#                verti_phase = np.deg2rad(tidesRut_params[tide_name][3])
+#
+#                # East component.
+#                a_e = horiz_amp * abs(secular_v_e/secular_speed) * secular_speed / ref_speed
+#                phi_e = np.sign(secular_v_e) * horiz_phase
+#
+#                # North component.
+#                a_n = horiz_amp * abs(secular_v_n/secular_speed) * secular_speed / ref_speed
+#                phi_n = np.sign(secular_v_n) * horiz_phase # rad
+#
+#                # Up component. 
+#                a_u = verti_amp * verti_scale * verti_ratio
+#                phi_u = verti_phase
+#                
+#                # Record the tides.
+#                tide_amp[(tide_name,'e')] = a_e
+#                tide_amp[(tide_name,'n')] = a_n
+#                tide_amp[(tide_name,'u')] = a_u
+#
+#                tide_phase[(tide_name,'e')] = phi_e
+#                tide_phase[(tide_name,'n')] = phi_n
+#                tide_phase[(tide_name,'u')] = phi_u
+#            
+#            tide_amp_set[point] = tide_amp
+#            tide_phase_set[point] = tide_phase
+#       
+#        # Return parameters.
+#        return (secular_v_set, tide_amp_set, tide_phase_set)
+
+
+

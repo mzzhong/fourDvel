@@ -559,6 +559,15 @@ class fourdvel(basics):
 
         return offsetfields
 
+    def build_G_set(self, point_set, offsetfields_set):
+        
+        design_mat_set = {}
+        for point in point_set:
+            offsetfields = offsetfields_set[point]
+            design_mat_set[point] = self.build_G(offsetfields=offsetfields)
+
+        return design_mat_set
+
     def build_G(self, point=None, tracks=None, offsetfields=None, horizontal = False):
 
         if point is not None:
@@ -666,6 +675,13 @@ class fourdvel(basics):
         return G
         # End of building.
 
+    def model_vec_set_to_tide_vec_set(self, point_set, model_vec_set):
+        tide_vec_set = {}
+
+        for point in point_set:
+            tide_vec_set[point] = self.model_vec_to_tide_vec(model_vec_set[point])
+
+        return tide_vec_set
 
     def model_vec_to_tide_vec(self,model_vec):
 
@@ -723,6 +739,16 @@ class fourdvel(basics):
                 param_vec[3+k*6+t+3,0] = phase
         
         return param_vec
+
+    def model_posterior_to_uncertainty_set(self, point_set, tide_vec_set, Cm_p_set):
+
+        tide_vec_uq_set = {}
+        for point in point_set:
+            tide_vec_uq_set[point] = self.model_posterior_to_uncertainty(
+                                            tide_vec = tide_vec_set[point],
+                                            Cm_p = Cm_p_set[point])
+
+        return tide_vec_uq_set
 
     def model_posterior_to_uncertainty(self, tide_vec, Cm_p):
 
@@ -793,6 +819,23 @@ class fourdvel(basics):
 
         return invCd
 
+
+    def simple_data_uncertainty_set(self, point_set, data_vec_set, noise_sigma_set):
+        
+        invCd_set = {}
+        for point in point_set:
+            invCd_set[point] = self.simple_data_uncertainty(data_vec_set[point], 
+                                                            noise_sigma_set[point])
+        return invCd_set
+
+    def model_prior_set(self, point_set, horizontal = False):
+
+        invCm_set = {}
+        for point in point_set:
+            invCm_set[point] = self.model_prior(horizontal = horizontal)
+
+        return invCm_set
+
     def model_prior(self, horizontal = False):
 
         n_modeling_tides = self.n_modeling_tides
@@ -827,6 +870,15 @@ class fourdvel(basics):
 
         return invCm
 
+    def model_posterior_set(self, point_set, design_mat_set, data_prior_set, model_prior_set):
+        Cm_p_set = {}
+        for point in point_set:
+            Cm_p_set[point] = self.model_posterior(design_mat_set[point], 
+                                                    data_prior_set[point], 
+                                                    model_prior_set[point])
+
+        return Cm_p_set
+
     def model_posterior(self, design_mat, data_prior, model_prior):
 
         G = design_mat
@@ -848,6 +900,17 @@ class fourdvel(basics):
 
         return model_vec
 
+    def param_estimation_set(self, point_set, design_mat_set, data_vec_set,
+                        data_prior_set, model_prior_set, model_posterior_set):
+
+        model_vec_set = {}
+        for point in point_set:
+            model_vec_set[point] = self.param_estimation(design_mat_set[point],
+                                        data_vec_set[point], data_prior_set[point],
+                                        model_prior_set[point], model_posterior_set[point])
+
+        return model_vec_set
+
     # Bayesian version. 
     def param_estimation(self, design_mat, data, data_prior, model_prior, model_posterior=None):
 
@@ -866,10 +929,22 @@ class fourdvel(basics):
 
         model_vec = model_p
 
-        print(model_vec)
-        print(model_vec.shape)
+        #print(model_vec)
+        #print(model_vec.shape)
 
         return model_vec
+
+    def tide_vec_to_quantity(self, tide_vec, quant_name):
+
+        t_vec = tide_vec[:,0]
+
+        if quant_name == 'secular_horizontal_speed':
+            quant = np.sqrt(t_vec[0]**2 + t_vec[1]**2)
+
+        else:
+            quant = None
+
+        return quant
  
 def main():
 
