@@ -66,9 +66,23 @@ class basics():
     def float_rounding(self,value,precision):
         return np.round(value * precision)/precision
 
+    def velo_amp_to_dis_amp(self,velo,tide_name):
+        return velo / self.tide_omegas[tide_name]
 
-    def velo_to_amp(self,velo,tide_name):
-        return velo * self.tide_periods[tide_name]/2
+    def dis_amp_to_velo_amp(self, dis_amp, tide_name):
+        return dis_amp * self.tide_omegas[tide_name]
+
+    def velo_phase_to_dis_phase(self, phase, deg = False):
+        if deg:
+            return phase - 90
+        else:
+            return phase - np.pi/2
+
+    def dis_phase_to_velo_phase(self, phase, deg = False):
+        if deg:
+            return phase + 90
+        else:
+            return phase + np.pi/2
 
     def unit_vec(self, v1, v2=None):
         if v2:

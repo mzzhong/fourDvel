@@ -144,11 +144,15 @@ class display(fourdvel):
         f.close()
         return
  
-
     def tide_symbols(self,tide_name):
         pass
 
     def display_vecs(self, stacked_vecs, row_names, column_names, label):
+
+        # The unit of tide_vec is m/d.
+        # The method takes care of unit conversion:
+        # Velocity to amplitudes.
+        # meter to centimeter.
         
         # For the three components.
         modeling_tides = self.modeling_tides
@@ -160,7 +164,7 @@ class display(fourdvel):
             comp_name = self.comp_name(comp)
             print(comp_name, ':')
 
-            ## column names.
+            ## Generate column names in table format.
             columns_all = []
             for column_name in column_names:
                 if column_name == 'Secular':
@@ -173,13 +177,11 @@ class display(fourdvel):
                 n_cols = 1 + self.n_modeling_tides
                 columns = columns_all[0:n_cols+1]
 
-            #print(n_cols)
-            #print(columns)
-
+            # Number of rows for all tides.
             rows = row_names
             n_rows = len(rows)
 
-            ## Amplitude.
+            ##########  Amplitude ###################
             cell_values = np.zeros(shape=(n_rows,n_cols))
             cell_text = []
             # For synthetic and estimated values.
@@ -191,12 +193,14 @@ class display(fourdvel):
                 col_values = np.zeros(shape=(n_cols,))
                 col_text = []
                 for col in range(n_cols):
+                    # Secular velocity.
                     if col==0:
                         col_values[col] = vec[comp]
 
+                    # Tides, convert to displacement.
                     else:
                         col_values[col] = vec[int(col>=1)*(3 + 6*(col-1)) + comp]
-                        col_values[col] = self.velo_to_amp(col_values[col],modeling_tides[col-1])
+                        col_values[col] = self.velo_amp_to_dis_amp(col_values[col],modeling_tides[col-1])
                     
                     col_values[col] = self.float_rounding(self.m2cm(col_values[col]),100)
                     col_text.append('%.2f' % col_values[col])
@@ -244,7 +248,7 @@ class display(fourdvel):
 
             #print(cell_text)
 
-            ## Phase.
+            ################  Phase ################################
             columns_all = []
             for column_name in column_names:
                 if column_name == 'Secular':
@@ -281,7 +285,16 @@ class display(fourdvel):
 
                         # If velocity_amp is large enough.
                         #if velo_amp>threshold:
-                        col_values[col] = self.float_rounding(self.rad2deg(vec[3 + 6*(col-1) + comp + 3]),100)
+                        phase_value = vec[3 + 6*(col-1) + comp + 3]
+                        
+                        if rows[row] != 'Uncertainty':
+                            phase_value = self.velo_phase_to_dis_phase(phase_value)
+                            phase_value = self.wrapped(phase_value)
+                        
+                        phase_value = self.rad2deg(phase_value)
+                        phase_value = self.float_rounding(phase_value,100)
+                        col_values[col] = phase_value
+
                     col_text.append('%.2f' % col_values[col])
 
                 cell_text.append(col_text)

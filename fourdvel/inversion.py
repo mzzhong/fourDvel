@@ -77,21 +77,6 @@ class inversion(fourdvel):
 
 
 
-    def chunk_run(self,start,end,grid_est):
-
-        grid_set = self.grid_set
-
-        count = 0
-        for grid in grid_set.keys():
-            # Output the percentage of completeness.
-            if count % 500 == 0 and start==0 and count<end:
-                print(count/end)
-
-            if count>=start and count<end:
-                est_value = self.model_analysis(point=grid, tracks=grid_set[grid])
-                grid_est[grid] = est_value
-            count = count + 1
-
 
     def find_track_data(self, point, track):
 
@@ -499,7 +484,7 @@ class inversion(fourdvel):
             row_names = ['Estimated','Uncertainty']
             column_names = ['Secular'] + self.modeling_tides
 
-        self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
+        #self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
 
         return 0
 
@@ -569,21 +554,69 @@ class inversion(fourdvel):
         ##### Show the results ####
         # Stack the true and inverted models.
         # Show on point in the point set.
+        show_vecs = False
 
-        if true_tide_vec_set is not None:
-            stacked_vecs = np.hstack((  true_tide_vec_set[self.test_point], 
-                                        tide_vec_set[self.test_point], 
-                                        tide_vec_uq_set[self.test_point]))
-            row_names = ['Input','Estimated','Uncertainty']
-            column_names = ['Secular'] + self.modeling_tides
-        else:
-            stacked_vecs = np.hstack((  tide_vec_set[self.test_point], 
-                                        tide_vec_uq_set[self.test_point]))
-            row_names = ['Estimated','Uncertainty']
-            column_names = ['Secular'] + self.modeling_tides
+        if show_vecs == True:
 
-        self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
+            if true_tide_vec_set is not None:
+                stacked_vecs = np.hstack((  true_tide_vec_set[self.test_point], 
+                                            tide_vec_set[self.test_point], 
+                                            tide_vec_uq_set[self.test_point]))
+                row_names = ['Input','Estimated','Uncertainty']
+                column_names = ['Secular'] + self.modeling_tides
+            else:
+                stacked_vecs = np.hstack((  tide_vec_set[self.test_point], 
+                                            tide_vec_uq_set[self.test_point]))
+                row_names = ['Estimated','Uncertainty']
+                column_names = ['Secular'] + self.modeling_tides
+
+            self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
+        
         return (true_tide_vec_set, tide_vec_set, tide_vec_uq_set)
+
+
+    def output_estimations(self):
+
+        modeling_tides = self.modeling_tides
+        n_modeling_tide = self.n_modeling_tides
+
+        test_id = self.test_id
+        result_folder = '/home/mzzhong/insarRoutines/estimations'
+        with open(result_folder + '/' 
+                    + str(test_id) + '_' + 'grid_set_true_tide_vec.pkl','rb') as f:
+            self.grid_set_true_tide_vec = pickle.load(f)
+
+        with open(result_folder + '/' 
+                    + str(test_id) + '_' + 'grid_set_tide_vec.pkl','rb') as f:
+            self.grid_set_tide_vec = pickle.load(f)
+
+        with open(result_folder + '/' 
+                    + str(test_id) + '_' + 'grid_set_tide_vec_uq.pkl','rb') as f:
+            self.grid_set_tide_vec_uq = pickle.load(f)
+
+        quant_list = [ 'secular_horizontal_speed',
+                        'secular_vertical_velocity',
+                        'Msf_horizontal_speed']
+
+        # Loop through the quantities.
+        for quant_name in quant_list:
+        
+            print('Output quantity name: ', quant_name)
+            grid_set_quant = {}
+
+            # For all available points in grid_set.
+            for point in self.grid_set_tide_vec.keys():
+            
+                # Check if this point is valid.
+                grid_set_quant[point] = self.tide_vec_to_quantity(
+                                            tide_vec = self.grid_set_tide_vec[point],
+                                            quant_name = quant_name)
+
+            #print(grid_set_quant)
+            xyz_name = os.path.join(result_folder, str(test_id) + '_' + quant_name + '.xyz')
+            self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
+
+        return 0
 
     def driver_serial(self):
         
@@ -620,21 +653,33 @@ class inversion(fourdvel):
                     #if lon == -74 and lat == -77:
 
 
-    def driver_serial_tile(self):
-        
+    def driver_serial_tile(self, start_tile=None, stop_tile=None, use_threading = False,
+                                                    grid_set_true_tide_vec=None,
+                                                    grid_set_tide_vec=None,
+                                                    grid_set_tide_vec_uq=None):
         # Problem Input
         tile_set = self.tile_set
         grid_set = self.grid_set 
         self.horizontal_prior = False
 
-        # Problem output
-        self.grid_set_true_tide_vec = {}
-        self.grid_set_tide_vec = {}
-        self.grid_set_tide_vec_uq = {}
+        # if not multi-threading:
+        if not use_threading:
+            grid_set_true_tide_vec = {}
+            grid_set_tide_vec = {}
+            grid_set_tide_vec_uq = {}
+            start_tile = 0
+            stop_tile = 10^10
 
-        for tile in tile_set.keys():
+        print(start_tile, stop_tile)
 
-            if tile == (-77, -76.8):
+        count_tile = 0
+        count_run = 0
+        for tile in sorted(tile_set.keys()):
+            # Work on a particular tile.
+            #if count_tile >= start_tile and count_tile < stop_tile and tile == (-77, -76.8):
+            lon, lat = tile
+            if (count_tile >= start_tile and count_tile < stop_tile and 
+                                                        count_tile % 2 == 1):
 
                 point_set = tile_set[tile] # List of tuples
                 print(tile)
@@ -654,15 +699,64 @@ class inversion(fourdvel):
                                                                     point_set = point_set, 
                                                                     tracks_set = tracks_set)
 
-                self.grid_set_true_tide_vec.update(true_tide_vec_set)
-                self.grid_set_tide_vec.update(tide_vec_set)
-                self.grid_set_tide_vec_uq.update(tide_vec_uq_set)
+                # Update.
+                grid_set_true_tide_vec.update(true_tide_vec_set)
+                grid_set_tide_vec.update(tide_vec_set)
+                grid_set_tide_vec_uq.update(tide_vec_uq_set)
 
-        print(len(self.grid_set_true_tide_vec))
-        print(len(self.grid_set_tide_vec))
-        print(len(self.grid_set_tide_vec_uq))
+                count_run = count_run + 1
+
+                # Only do three tiles.
+                #if count_run > 3:
+                #    break
+
+            count_tile = count_tile + 1
+
+        if not use_threading:
+            self.grid_set_true_tide_vec = grid_set_true_tide_vec
+            self.grid_set_tide_vec = grid_set_tide_vec
+            self.grid_set_tide_vec_uq = grid_set_tide_vec_uq
+
+            print(len(self.grid_set_true_tide_vec))
+            print(len(self.grid_set_tide_vec))
+            print(len(self.grid_set_tide_vec_uq))
 
         return 0
+
+
+    def chop_into_threads(self, total_number, nthreads):
+
+        # Devide chunk size.
+        mod = total_number % nthreads        
+        if mod > 0:
+            chunk_size = (total_number - mod + nthreads) // nthreads
+        else:
+            chunk_size = total_number // nthreads
+
+        # Deduce divides.
+        divide = np.zeros(shape=(nthreads+1,))
+        divide[0] = 0
+
+        for it in range(1, nthreads+1):
+            divide[it] = chunk_size * it
+        divide[nthreads] = total_number
+
+        return divide
+
+    def chunk_run(self,start,end,grid_est):
+
+        grid_set = self.grid_set
+        
+        count = 0
+        for grid in grid_set.keys():
+            # Output the percentage of completeness.
+            if count % 500 == 0 and start==0 and count<end:
+                print(count/end)
+
+            if count>=start and count<end:
+                est_value = self.model_analysis(point=grid, tracks=grid_set[grid])
+                grid_est[grid] = est_value
+            count = count + 1
 
     def driver_parallel_tile(self):
         # Using multi-threads to get map view estimation.
@@ -670,72 +764,64 @@ class inversion(fourdvel):
 
         tile_set = self.tile_set
 
+        self.grid_set_true_tide_vec = {}
+        self.grid_set_tide_vec = {}
+        self.grid_set_tide_vec_uq = {}
+
         # Count the total number of tiles
         n_tiles = len(tile_set.keys())
         print('Total number of tiles: ', n_tiles)
 
-        ## Chop into multiple threads. 
-        #nthreads = 16
-        #
-        #mod = total_number % nthreads
-        #
-        #if mod > 0:
-        #    chunk_size = (total_number - mod + nthreads) // nthreads
-        #else:
-        #    chunk_size = total_number // nthreads
+        # Chop into multiple threads. 
+        nthreads = 7
+        total_number = n_tiles
+        divide = self.chop_into_threads(total_number, nthreads)
+        print(divide)
 
-        #divide = np.zeros(shape=(nthreads+1,))
-        #divide[0] = 0
+        # Multithreading starts here.
+        # The function to run every chunk.
+        func = self.driver_serial_tile
 
-        #for it in range(1, nthreads+1):
-        #    divide[it] = chunk_size * it
-        #divide[nthreads] = total_number
+        manager = multiprocessing.Manager()
+        grid_set_true_tide_vec = manager.dict()
+        grid_set_tide_vec = manager.dict()
+        grid_set_tide_vec_uq = manager.dict()
 
-        #print(divide)
-        #print(len(divide))
+        jobs=[]
+        for ip in range(nthreads):
+            start_tile = divide[ip]
+            stop_tile = divide[ip+1]
+            p=multiprocessing.Process(target=func, args=(start_tile, stop_tile, True,
+                                                    grid_set_true_tide_vec,
+                                                    grid_set_tide_vec,
+                                                    grid_set_tide_vec_uq, ))
+            jobs.append(p)
+            p.start()
 
-        ## Multithreading starts here.
-        ## The function to run every chunk.
-        #func = self.chunk_run
+        for ip in range(nthreads):
+            jobs[ip].join()
 
-        #manager = multiprocessing.Manager()
-        #grid_est = manager.dict()
+        # Save the results.
+        self.grid_set_true_tide_vec = dict(grid_set_true_tide_vec)
+        self.grid_set_tide_vec = dict(grid_set_tide_vec)
+        self.grid_set_tide_vec_uq = dict(grid_set_tide_vec_uq)
 
-        #jobs=[]
-        #for ip in range(nthreads):
-        #    start = divide[ip]
-        #    end = divide[ip+1]
-        #    p=multiprocessing.Process(target=func, args=(start,end,grid_est,))
-        #    jobs.append(p)
-        #    p.start()
+        test_id = self.test_id
+        result_folder = '/home/mzzhong/insarRoutines/estimations'
+        with open(result_folder + '/' 
+                    + str(test_id) + '_' + 'grid_set_true_tide_vec.pkl', 'wb') as f:
+            
+            pickle.dump(self.grid_set_true_tide_vec, f)
 
-        #for ip in range(nthreads):
-        #    jobs[ip].join()
+        with open(result_folder + '/' 
+                    + str(test_id) + '_' + 'grid_set_tide_vec.pkl','wb') as f:
+            pickle.dump(self.grid_set_tide_vec, f)
 
-        #est_dict = dict(grid_est)
+        with open(result_folder + '/' 
+                    + str(test_id) + '_' + 'grid_set_tide_vec_uq.pkl','wb') as f:
+            pickle.dump(self.grid_set_tide_vec_uq, f)
 
-
-    def output_estimations(self):
-
-        modeling_tides = self.modeling_tides
-        n_modeling_tide = self.n_modeling_tides
-
-        output_folder = './estimations'
-
-        quant_name = 'secular_horizontal_speed'
-        grid_set_quant = {}
-        for point in self.grid_set_tide_vec.keys():
-            grid_set_quant[point] = self.tide_vec_to_quantity(
-                                            tide_vec = self.grid_set_tide_vec[point],
-                                            quant_name = quant_name)
-
-        print(grid_set_quant)
-
-        xyz_name = os.path.join(output_folder,quant_name + '.xyz')
-        self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
-
-        return
-
+        return 0
 
     def driver_mp(self):
         # Using multi-threads to get map view estimation.
@@ -822,7 +908,6 @@ class inversion(fourdvel):
         # Show the estimation.
         self.show_est(est_dict)
 
-
 def main():
 
     fourd_inv = inversion()
@@ -834,7 +919,7 @@ def main():
     #fourd_inv.driver_serial_tile()
     fourd_inv.driver_parallel_tile()
 
-    #fourd_inv.output_estimations()
+    fourd_inv.output_estimations()
 
 if __name__=='__main__':
 

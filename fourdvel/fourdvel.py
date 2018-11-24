@@ -701,6 +701,7 @@ class fourdvel(basics):
             tide_name = modeling_tides[k]
 
             # Model_vec terms: cosE, cosN, cosU, sinE, sinN, sinU.
+            # Tide_vec terms:, ampE, ampN, ampU, phaseE, phaseN, phaseU
             
             # E N U
             for t in range(3):
@@ -936,13 +937,30 @@ class fourdvel(basics):
 
     def tide_vec_to_quantity(self, tide_vec, quant_name):
 
+        # modeling tides.
+        modeling_tides = self.modeling_tides
+        tide_periods = self.tide_periods
+        tide_omegas = self.tide_omegas
+
         t_vec = tide_vec[:,0]
 
         if quant_name == 'secular_horizontal_speed':
             quant = np.sqrt(t_vec[0]**2 + t_vec[1]**2)
+        elif quant_name == 'secular_vertical_velocity':
+            quant = t_vec[2]
+        elif quant_name == 'Msf_horizontal_speed':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Msf':
+                    ampE = t_vec[3+k*6]
+                    ampN = t_vec[3+k*6+3]
+                    quant = np.sqrt(ampE**2 + ampN**2)
+                else:
+                    k=k+1
 
         else:
             quant = None
+            raise Exception('Quantity not defined!')
 
         return quant
  

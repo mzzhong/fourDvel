@@ -31,7 +31,7 @@ class grouping(fourdvel):
         grid_set = self.grid_set
 
         # Generate matched_velo
-        redo = 0
+        redo = 1
 
         if redo == 1:
             velo_dir = '/net/jokull/nobak/mzzhong/Ant_Plot/Data/velocity_models'
@@ -56,13 +56,18 @@ class grouping(fourdvel):
                 for j in range(vel_lat.shape[0]):
                    
                     if (vel_lon[i,j],vel_lat[i,j]) in grid_set.keys():
-                        matched_velo[(vel_lon[i,j], vel_lat[i,j])] = [ve[i,j],vn[i,j]]
-                        #if vel_lon[i,j] > -77.1 and vel_lon[i,j] < -76.9 and vel_lat[i,j]>-76.8 and vel_lat[i,j]<-76.6:
-                        #if vel_lon[i,j] == -77 and vel_lat[i,j] == -76.7:
+                        # only save valid values.
+                        valid = True
 
-                            #print((vel_lon[i,j], vel_lat[i,j], ve[i,j], vn[i,j]))
+                        if (ve[i,j]==0 and vn[i,j]==0):
+                            valid = False
+
+                        if vel_lon[i,j] > -75 and vel_lon[i,j] < -74.5 and vel_lat[i,j]<-77 and vel_lat[i,j] > -77.2:
+                            valid = False
+                        
+                        if valid:
+                            matched_velo[(vel_lon[i,j], vel_lat[i,j])] = [ve[i,j],vn[i,j]]
  
-
             with open('./pickles/matched_velo.pkl','wb') as f:
                 pickle.dump(matched_velo,f)
 
@@ -77,7 +82,7 @@ class grouping(fourdvel):
     def create_grid_set_velo_2d(self):
 
         grid_set_velo_name = self.grid_set_velo_name
-        redo = 0
+        redo = 1
         if redo == 1:
 
             grid_set = self.grid_set
@@ -130,7 +135,18 @@ class grouping(fourdvel):
 
 
         self.grid_set_velo_2d = grid_set_velo_2d
-    
+
+        write_to_file = True
+        if write_to_file:
+            xyz_file = '/home/mzzhong/insarRoutines/estimations/grid_set_velo_2d_speed.xyz'
+            f = open(xyz_file,'w')
+            for key in sorted(grid_set_velo_2d.keys()):
+                lon, lat = key
+                value = np.sqrt(grid_set_velo_2d[key][0]**2 + grid_set_velo_2d[key][1]**2)
+                if not np.isnan(value) and value>0:
+                    f.write(str(lon)+' '+str(lat)+' '+str(value)+'\n')
+
+        f.close()
         return 0
 
     def add_verti(self):
@@ -248,6 +264,19 @@ class grouping(fourdvel):
             pickle.dump(grid_set_velo_3d,f)
 
         print('Done with 3d velocity fields')
+
+        ##################
+        write_to_file = True
+        if write_to_file:
+            xyz_file = '/home/mzzhong/insarRoutines/estimations/grid_set_velo_3d_verti.xyz'
+            f = open(xyz_file,'w')
+            for key in sorted(grid_set_velo_3d.keys()):
+                lon, lat = key
+                value = np.sqrt(grid_set_velo_3d[key][2]**2)
+                if not np.isnan(value) and value>0:
+                    f.write(str(lon)+' '+str(lat)+' '+str(value)+'\n')
+
+        f.close()
 
         return
 
@@ -504,10 +533,10 @@ def main():
 
     # Generate constant velocity.
     # First two component.
-    #group.velo_model()
+    group.velo_model()
     
     # Find tiles.
-    group.grid_tiles()
+    #group.grid_tiles()
 
  
 if __name__=='__main__':

@@ -128,19 +128,6 @@ class simulation(basics):
         self.tidesRut_params = {}
         tidesRut_params = self.tidesRut_params
 
-        # Displacement.        
-        #tidesRut['K2'] =    [0.31,  163,    29.1,   99]
-        #tidesRut['S2'] =    [0.363, 184,    101.6,  115]
-        #tidesRut['M2'] =    [0.259, 177,    156.3,  70]
-        #tidesRut['K1'] =    [0.19,  79,     49,     73]
-        #tidesRut['P1'] =    [0.24,  77.0,   16.6,   64]
-        #tidesRut['O1'] =    [0.264, 81.0,   43,     54]
-        #tidesRut['Mf'] =    [2.54,  250.0,  2.9,    163]
-        #tidesRut['Msf'] =   [13.28, 18.8,   0.3,    164]
-        #tidesRut['Mm'] =    [5.04,  253.0,  1.6,    63]
-        #tidesRut['Ssa'] =   [26.74, 256.0,  1.5,    179]
-        #tidesRut['Sa'] =    [19.18, 273.0,  0.2,    179]
-
         # Velocity
         # First two columns are horizontal responses. (amplitude cm/d)
         # Last two columns are vertical forcings. (amplitude cm)
@@ -151,35 +138,75 @@ class simulation(basics):
         # Horizontal: assume this corresponds to 1 meter /day.
         self.ref_speed = 1
         # Vertical: assume the vertical scale.
-        self.verti_scale = 0.5
+        self.verti_scale = 1
 
+        ###############################################
         # Actual parameters from Murray (2007)
-        tidesRut_params['K2'] =    [3.91,   163,    29.1,   99  ]
-        tidesRut_params['S2'] =    [4.56,   184,    101.6,  115 ]
-        tidesRut_params['M2'] =    [3.15,   177,    156.3,  70  ]
-        tidesRut_params['K1'] =    [1.22,   79,     49,     73  ]
-        tidesRut_params['P1'] =    [1.48,   77.0,   16.6,   64  ]
-        tidesRut_params['O1'] =    [1.54,   81.0,   43.1,   54  ]
-        tidesRut_params['Mf'] =    [1.17,   250.0,  2.9,    163 ]
-        tidesRut_params['Msf'] =   [5.65,   18.8,   0.3,    164 ]
-        tidesRut_params['Mm'] =    [1.15,   253.0,  1.6,    63  ]
-        tidesRut_params['Ssa'] =   [0.92,   256.0,  1.5,    179 ]
-        tidesRut_params['Sa'] =    [0.33,   273.0,  0.2,    179 ]
+        #tidesRut_params['K2'] =    [3.91,   163,    29.1,   99  ]
+        #tidesRut_params['S2'] =    [4.56,   184,    101.6,  115 ]
+        #tidesRut_params['M2'] =    [3.15,   177,    156.3,  70  ]
+        #tidesRut_params['K1'] =    [1.22,   79,     49,     73  ]
+        #tidesRut_params['P1'] =    [1.48,   77.0,   16.6,   64  ]
+        #tidesRut_params['O1'] =    [1.54,   81.0,   43.1,   54  ]
+        #tidesRut_params['Mf'] =    [1.17,   250.0,  2.9,    163 ]
+        #tidesRut_params['Msf'] =   [5.65,   18.8,   0.3,    164 ]
+        #tidesRut_params['Mm'] =    [1.15,   253.0,  1.6,    63  ]
+        #tidesRut_params['Ssa'] =   [0.92,   256.0,  1.5,    179 ]
+        #tidesRut_params['Sa'] =    [0.33,   273.0,  0.2,    179 ]
 
-        # Find angular frequency
+        ## Convert displacement to velocity.
+        #for tide_name in tidesRut_params.keys():
+        #    tidesRut_params[tide_name][2] = self.dis_amp_to_velo_amp(
+        #                                            tidesRut_params[tide_name][2],
+        #                                            tide_name = tide_name)
+        #    # We don't know the definition of phase of vertical motion in displacement domian.
+        #    # We directly use this phase.
+        #    #tidesRut_params[tide_name][3] = tidesRut_params[tide_name][3]
+        
+        ###############################################
+        # Displacement.        
+        tidesRut_params['K2'] =    [0.31,  163,    29.1,   99]
+        tidesRut_params['S2'] =    [0.363, 184,    101.6,  115]
+
+        tidesRut_params['M2'] =    [0.259, 177,    156.3,  70] # M2
+
+        tidesRut_params['K1'] =    [0.19,  79,     49,     73]
+        tidesRut_params['P1'] =    [0.24,  77.0,   16.6,   64]
+
+        tidesRut_params['O1'] =    [0.264, 81.0,   43,     54]  # O1
+        tidesRut_params['Mf'] =    [2.54,  250.0,  2.9,    163] # Mf
+        tidesRut_params['Msf'] =   [13.28, 18.8,   0.3,    164] # Msf
+
+        tidesRut_params['Mm'] =    [5.04,  253.0,  1.6,    63]
+        tidesRut_params['Ssa'] =   [26.74, 256.0,  1.5,    179]
+        tidesRut_params['Sa'] =    [19.18, 273.0,  0.2,    179]
+
         # Convert displacement to velocity.
         for tide_name in tidesRut_params.keys():
-            omega = 2*np.pi / tide_periods[tide_name] 
-            tidesRut_params[tide_name][2] = tidesRut_params[tide_name][2] * omega
-            tidesRut_params[tide_name][3] = tidesRut_params[tide_name][3] + 270
+            tidesRut_params[tide_name][0] = self.dis_amp_to_velo_amp(
+                                                    tidesRut_params[tide_name][0],
+                                                    tide_name = tide_name)
+ 
+            tidesRut_params[tide_name][2] = self.dis_amp_to_velo_amp(
+                                                    tidesRut_params[tide_name][2],
+                                                    tide_name = tide_name)
+            
+            # Phase of displacement is 90 degree after velocity.
+            # Assume the same functional form in velocity and displacement domain.
+            tidesRut_params[tide_name][1] = self.dis_phase_to_velo_phase(
+                                                    tidesRut_params[tide_name][1],
+                                                    deg = True)
 
-        print(tidesRut_params)
+            tidesRut_params[tide_name][3] = self.dis_phase_to_velo_phase(
+                                                    tidesRut_params[tide_name][3],
+                                                    deg = True)
+ 
+        #print(tidesRut_params)
 
         # Included constituents in synthetic data.
         #self.syn_tidesRut = ['M2','O1','Msf']
         #self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Mf','Msf']
         self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Msf','Mf','Mm','Ssa','Sa']
-        #self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Mf','Msf','Mm','Ssa','Sa']
 
     def true_tide_vec_set(self, point_set, secular_v_set, modeling_tides, tide_amp_set, tide_phase_set):
         
@@ -226,7 +253,7 @@ class simulation(basics):
             amp_N = amp_N
             amp_U = amp_U
 
-            # Phases.
+            # Phases (rad).
             phi_E = self.wrapped(phi_E)
             phi_N = self.wrapped(phi_N)
             phi_U = self.wrapped(phi_U)
@@ -295,10 +322,10 @@ class simulation(basics):
 
             omega = 2*np.pi / tide_periods[tide_name] 
 
-            horiz_amp = tidesRut_params[tide_name][0]/100 # velocity
+            horiz_amp = self.cm2m(tidesRut_params[tide_name][0]) # m/d velocity
             horiz_phase = np.deg2rad(tidesRut_params[tide_name][1])
 
-            verti_amp = tidesRut_params[tide_name][2]/100 # velocity
+            verti_amp = self.cm2m(tidesRut_params[tide_name][2]) # velocity
             verti_phase = np.deg2rad(tidesRut_params[tide_name][3])
 
             # East component.
@@ -399,7 +426,7 @@ class simulation(basics):
         data_vec_set = {}
         count = 0
         for point in point_set:
-            print('simulation at point: ', count)
+            #print('simulation at point: ', count)
             count = count + 1
 
             # Obtain offsets from synthetics.
