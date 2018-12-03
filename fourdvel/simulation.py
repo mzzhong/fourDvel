@@ -328,12 +328,14 @@ class simulation(basics):
             verti_amp = self.cm2m(tidesRut_params[tide_name][2]) # velocity
             verti_phase = np.deg2rad(tidesRut_params[tide_name][3])
 
-            # East component.
+            # East component. (Amp always positive)
             a_e = horiz_amp * abs(secular_v_e/secular_speed) * secular_speed / ref_speed
+            # Phase change sign, when amp is negative.
             phi_e = np.sign(secular_v_e) * horiz_phase
 
-            # North component.
+            # North component. (Amp always positive)
             a_n = horiz_amp * abs(secular_v_n/secular_speed) * secular_speed / ref_speed
+            # Phase change sign, when amp is negative.
             phi_n = np.sign(secular_v_n) * horiz_phase # rad
 
             # Up component. 
@@ -436,7 +438,7 @@ class simulation(basics):
             tide_phase = tide_phase_set[point]
             noise_sigma = noise_sigma_set[point]
 
-            data_vec_set[point] = self.syn_offsets_data_vec( secular_v = secular_v,
+            data_vec_set[point] = self.syn_offsets_data_vec( point=point, secular_v = secular_v,
                                                         modeling_tides = modeling_tides,
                                                         tide_amp = tide_amp,
                                                         tide_phase = tide_phase,
@@ -446,7 +448,7 @@ class simulation(basics):
 
         return data_vec_set
 
-    def syn_offsets_data_vec(self, t_axis=None, secular_v=None, v=None, modeling_tides=None, tide_amp=None, tide_phase=None, offsetfields=None, noise_sigma = None):
+    def syn_offsets_data_vec(self, point=None, t_axis=None, secular_v=None, v=None, modeling_tides=None, tide_amp=None, tide_phase=None, offsetfields=None, noise_sigma = None):
 
         # Obtain offsets from synthetics.
         n_offsets = len(offsetfields)
@@ -549,9 +551,17 @@ class simulation(basics):
                 # Record the data.
                 data_vector[2*i+j] = obs_offset
 
-        # Add noise
-        np.random.seed(seed=2018)
-        data_vector = data_vector + np.random.normal(scale = noise_sigma, size=data_vector.shape)
+        # Add noise.
+        lon, lat = point
+        seed_num = int(lon/self.lon_step * 100000 + \
+                        lat/self.lat_step) % (2**30-1)
+        np.random.seed(seed=seed_num)
+
+        # Range.
+        data_vector[0::2] = data_vector[0::2] + np.random.normal(scale = noise_sigma[0], size=data_vector[0::2].shape)
+
+        # Azimuth.
+        data_vector[1::2] = data_vector[1::2] + np.random.normal(scale = noise_sigma[1], size=data_vector[1::2].shape)
 
         return data_vector
 

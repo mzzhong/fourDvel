@@ -130,16 +130,29 @@ class display(fourdvel):
     def write_dict_to_xyz(self, show_dict, xyz_name):
         
         # Write to txt file.
+
         f = open(xyz_name,'w')
         cap=100
         for key in sorted(show_dict.keys()):
             lon, lat = key
             value = show_dict[key]
-            value = min(value,cap)
-            if value == 0:
-                value == 100
-            if not np.isnan(value):
-                f.write(str(lon)+' '+str(lat)+' '+str(min(value,cap))+'\n')
+
+
+            # More then one value (velocity vector).
+            if isinstance(value,tuple):
+                if not np.isnan(value[0]):
+                    record = str(lon)+' '+str(lat)
+                    for irec in range(len(value)):
+                        record = record + ' ' + str(value[irec])
+                    record = record + '\n'
+                    f.write(record)
+
+            else:
+
+                # Only output valid values.
+                value = min(value,cap)
+                if not np.isnan(value):
+                    f.write(str(lon)+' '+str(lat)+' '+str(value)+'\n')
 
         f.close()
         return
@@ -322,10 +335,26 @@ class display(fourdvel):
             #        cells[ir,ic]._loc = 'center'
 
             #plt.show()
-            plt.savefig(os.path.join('./fig_sim',label+'_'+comp_name[0]+'.png'), format='png')
-            #plt.close()
+            plt.savefig(os.path.join('/home/mzzhong/insarRoutines/fig_sim',label+'_'+comp_name[0]+'.png'), format='png')
+
+            plt.close()
 
         return 0
+
+    def show_resid_dist(self, resid, label):
+
+        fig = plt.figure(figsize=(15,10))
+        ax = fig.add_subplot(121)
+        ax.hist(resid[0:-1:2])
+        ax.set_title('range') 
+
+        ax = fig.add_subplot(122)
+        ax.hist(resid[1:-1:2])
+        ax.set_title('azimuth')
+
+        plt.savefig(os.path.join('/home/mzzhong/insarRoutines/fig_sim',label+'_'+'resid.png'), format='png')
+
+        plt.close()
 
     def show_model_mat(self,showmat):
 

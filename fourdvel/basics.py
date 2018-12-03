@@ -2,6 +2,7 @@
 
 import numpy as np
 import datetime
+import math
 
 class basics():
 
@@ -37,6 +38,34 @@ class basics():
 
         self.lon_step = 1/self.lon_re
         self.lat_step = 1/self.lat_re
+
+
+    def latlon_distance(self, lon1,lat1,lon2,lat2):
+        
+        R = 6371
+        lat1 = np.deg2rad(lat1)
+        lon1 = np.deg2rad(lon1)
+        lat2 = np.deg2rad(lat2)
+        lon2 = np.deg2rad(lon2)
+
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+
+        a = np.sin(dlat / 2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2)**2
+        c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+
+        distance = R * c
+
+        return distance
+    
+    def km2m(self, value):
+        return value*1000
+
+    def deg2km(self,deg):
+        return deg/180*np.pi*6371
+
+    def deg2m(self,deg):
+        return deg/180*np.pi*6371*1000
 
     def wrapped(self,phase):
         

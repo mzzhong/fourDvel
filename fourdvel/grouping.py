@@ -30,8 +30,9 @@ class grouping(fourdvel):
 
         grid_set = self.grid_set
 
-        # Generate matched_velo
-        redo = 1
+        # Generate matched_velo.
+        print('Matching velocity model to grids set')
+        redo = 0
 
         if redo == 1:
             velo_dir = '/net/jokull/nobak/mzzhong/Ant_Plot/Data/velocity_models'
@@ -59,9 +60,11 @@ class grouping(fourdvel):
                         # only save valid values.
                         valid = True
 
+                        # Nan value.
                         if (ve[i,j]==0 and vn[i,j]==0):
                             valid = False
 
+                        # Holes.
                         if vel_lon[i,j] > -75 and vel_lon[i,j] < -74.5 and vel_lat[i,j]<-77 and vel_lat[i,j] > -77.2:
                             valid = False
                         
@@ -81,8 +84,10 @@ class grouping(fourdvel):
 
     def create_grid_set_velo_2d(self):
 
+        print('Interpolating grid set velocity model...')
+
         grid_set_velo_name = self.grid_set_velo_name
-        redo = 1
+        redo = 0
         if redo == 1:
 
             grid_set = self.grid_set
@@ -153,6 +158,9 @@ class grouping(fourdvel):
 
         from dense_offset import dense_offset
         from scipy.signal import  medfilt
+
+
+        print('Add vertical component to grid set model...')
 
         # Load the double difference data. 
         stack = 'tops'

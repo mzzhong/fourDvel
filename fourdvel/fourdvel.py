@@ -10,6 +10,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import sys
 import pickle
 
 from matplotlib import cm
@@ -44,7 +45,7 @@ class fourdvel(basics):
             self.csk_data[i] = []
 
         self.s1_data = {}
-        self.s1_tracks = [37,52]
+        self.s1_tracks = [37,52,169,65]
         
         for i in self.s1_tracks:
             self.s1_data[i] = []
@@ -77,6 +78,10 @@ class fourdvel(basics):
                 self.test_id = value
                 print('test_id',value)
 
+            if name == 'test_mode':
+                self.test_mode = int(value)
+                print('test_mode',value)
+
             if name == 'grid_set_name':
                 self.grid_set_name = value
                 print('grid_set_name: ',value)
@@ -88,6 +93,10 @@ class fourdvel(basics):
             if name == 'tile_set_name':
                 self.tile_set_name = value
                 print('tile_set_name: ',value)
+
+            if name == 'grid_set_data_uncert_name':
+                self.grid_set_data_uncert_name = value
+                print('grid_set_data_uncert_name: ',value)
 
             if name == 'est_dict_name':
                 self.est_dict_name = value
@@ -137,6 +146,12 @@ class fourdvel(basics):
                     self.modeling_tides = []
                     self.n_modeling_tides = 0
 
+            if name == 'horizontal_prior':
+                if value == 'True':
+                    self.horizontal_prior = True
+                else:
+                    self.horizontal_prior = False
+
         return 0
             
     def satellite_constants(self):
@@ -160,6 +175,14 @@ class fourdvel(basics):
         track_timefraction[('s1',37)] = (t37.hour * 3600 + t37.minute*60 + t37.second)/(24*3600)
         t52 = datetime.time(7,7,30)
         track_timefraction[('s1',52)] = (t52.hour * 3600 + t52.minute*60 + t52.second)/(24*3600)
+
+        t169 = datetime.time(7,40,30)
+        track_timefraction[('s1',169)] = (t169.hour * 3600 + t169.minute*60 + t169.second)/(24*3600)
+
+        t65 = datetime.time(4,34,10)
+        track_timefraction[('s1',65)] = (t65.hour * 3600 + t65.minute*60 + t65.second)/(24*3600)
+
+
 
         #print(track_timefraction)
 
@@ -293,6 +316,15 @@ class fourdvel(basics):
             with open(tile_set_pkl,'rb') as f:
                 self.tile_set = pickle.load(f)
 
+    def get_data_uncert(self):
+
+        grid_set_data_uncert_set_pkl = self.grid_set_data_uncert_name + '.pkl'
+
+        if os.path.exists(grid_set_data_uncert_set_pkl):
+            print('Loading data uncert set ...')
+            with open(grid_set_data_uncert_set_pkl,'rb') as f:
+                self.grid_set_data_uncert = pickle.load(f)
+
     def get_grid_set(self):
         import gdal
 
@@ -311,12 +343,14 @@ class fourdvel(basics):
             with open(grid_set_pkl,'rb') as f:
                 self.grid_set = pickle.load(f)
 
+            #print(self.grid_set[-77,-76.8])
+
         else:
             print('Calculating grid_set...')
             grid_set = {}
 
-            #satellites = ['csk','s1']
-            satellites = ['csk']
+            satellites = ['csk','s1']
+            #satellites = ['csk']
 
             directory = {}
             tracklist = {}
@@ -327,7 +361,7 @@ class fourdvel(basics):
             offset_id['csk'] = 20180712
 
             directory['s1'] = '/net/jokull/nobak/mzzhong/S1-Evans'
-            tracklist['s1'] = [37,52]
+            tracklist['s1'] = [37,52,169,65]
             offset_id['s1'] = 20180703
 
             for sate in satellites:
@@ -365,8 +399,8 @@ class fourdvel(basics):
                     grid_lon, grid_lat = np.meshgrid(lon_list, lat_list)
         
                     # rounding
-                    grid_lon = np.round(grid_lon * 1000)/1000
-                    grid_lat = np.round(grid_lat * 1000)/1000
+                    grid_lon = self.round1000(grid_lon)
+                    grid_lat = self.round1000(grid_lat)
         
                     # maskout the invalid
                     los = dataset.GetRasterBand(1).ReadAsArray()
@@ -424,7 +458,7 @@ class fourdvel(basics):
                         # 1. track number; 2. los (three vectors) 3. azi (three vectors) 4. satellite name.
                         info = (track_num,(elos[ii,jj],nlos[ii,jj],ulos[ii,jj]),(eazi[ii,jj],nazi[ii,jj],uazi[ii,jj]),sate)
         
-                        # Push into the grid_set, only when sate is csk.
+                        # Push into the grid_set, only add new grid when sate is csk.
                         if (grid_lon[ii,jj],grid_lat[ii,jj]) not in grid_set.keys():
                             if sate=='csk':
                                 grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])] = [info]
@@ -498,6 +532,8 @@ class fourdvel(basics):
         self.get_grid_set()
         self.get_grid_set_velo()
         self.get_tile_set()
+        self.get_data_uncert()
+
         # Show the counts.
         print('Number of total grid points: ', len(self.grid_set.keys()))
 
@@ -693,6 +729,12 @@ class fourdvel(basics):
         num_params = 3 + n_modeling_tides*6
         param_vec = np.zeros(shape=(num_params,1))
 
+        # If model_vec is invalid.
+        if np.isnan(model_vec[0,0]):
+            param_vec = param_vec + np.nan
+            return param_vec
+
+        # Model_vec is valid.
         param_vec[0:3,0] = model_vec[0:3,0]
 
         # Tides.
@@ -746,8 +788,8 @@ class fourdvel(basics):
         tide_vec_uq_set = {}
         for point in point_set:
             tide_vec_uq_set[point] = self.model_posterior_to_uncertainty(
-                                            tide_vec = tide_vec_set[point],
-                                            Cm_p = Cm_p_set[point])
+                                                tide_vec = tide_vec_set[point],
+                                                Cm_p = Cm_p_set[point])
 
         return tide_vec_uq_set
 
@@ -759,6 +801,14 @@ class fourdvel(basics):
 
         num_params = 3 + n_modeling_tides*6
         param_uq = np.zeros(shape=(num_params,1))
+
+
+        # If Cm_p is invalid.
+        if np.isnan(Cm_p[0,0]):
+            param_uq = param_uq + np.nan
+            return param_uq
+
+        # Cm_p is valid, so is tide_vec
 
         # Secular velocity.
         variance = np.diag(Cm_p)
@@ -807,6 +857,14 @@ class fourdvel(basics):
         return param_uq
 
 
+    def simple_data_uncertainty_set(self, point_set, data_vec_set, noise_sigma_set):
+        
+        invCd_set = {}
+        for point in point_set:
+            invCd_set[point] = self.simple_data_uncertainty(data_vec_set[point], 
+                                                            noise_sigma_set[point])
+        return invCd_set
+
     def simple_data_uncertainty(self,data_vec, sigma):
 
         n_data = data_vec.shape[0]
@@ -821,13 +879,34 @@ class fourdvel(basics):
         return invCd
 
 
-    def simple_data_uncertainty_set(self, point_set, data_vec_set, noise_sigma_set):
+    def real_data_uncertainty_set(self, point_set, data_vec_set, noise_sigma_set):
         
         invCd_set = {}
         for point in point_set:
-            invCd_set[point] = self.simple_data_uncertainty(data_vec_set[point], 
+            invCd_set[point] = self.real_data_uncertainty(data_vec_set[point], 
                                                             noise_sigma_set[point])
         return invCd_set
+
+    def real_data_uncertainty(self,data_vec, sigma):
+
+        # Range the azimuth are different.
+        n_data = data_vec.shape[0]
+
+        Cd = np.zeros(shape = (n_data,n_data))
+        invCd = np.zeros(shape = (n_data,n_data))
+
+        for i in range(n_data):
+            # Range.
+            if i % 2 == 0:
+                Cd[i,i] = sigma[0]**2
+            # Azimuth.
+            else:
+                Cd[i,i] = sigma[1]**2
+
+            invCd[i,i] = 1/Cd[i,i]
+
+        return invCd
+
 
     def model_prior_set(self, point_set, horizontal = False):
 
@@ -847,7 +926,7 @@ class fourdvel(basics):
         
         # Sigmas of model parameters.
         inf_permiss = 0
-        inf_restrict = 10000
+        inf_restrict = 100000
  
         inv_sigma = np.zeros(shape=(num_params, num_params))
 
@@ -886,7 +965,13 @@ class fourdvel(basics):
         invCd = data_prior
         invCm = model_prior
 
-        Cm_p = np.linalg.inv(np.matmul(np.matmul(np.transpose(G), invCd),G) + invCm)
+        invCm_p = np.matmul(np.matmul(np.transpose(G), invCd),G) + invCm
+
+        # Check the singularity of the matrix.
+        if np.linalg.cond(invCm_p) < 1/sys.float_info.epsilon:
+            Cm_p = np.linalg.pinv(invCm_p)
+        else:
+            Cm_p = np.zeros(shape=invCm_p.shape) + np.nan
 
         return Cm_p
 
@@ -895,7 +980,7 @@ class fourdvel(basics):
 
         G = design_mat
         d = data
-        
+
         invG = np.linalg.pinv(G)
         model_vec = np.matmul(invG, d)
 
@@ -907,8 +992,8 @@ class fourdvel(basics):
         model_vec_set = {}
         for point in point_set:
             model_vec_set[point] = self.param_estimation(design_mat_set[point],
-                                        data_vec_set[point], data_prior_set[point],
-                                        model_prior_set[point], model_posterior_set[point])
+                                            data_vec_set[point], data_prior_set[point],
+                                            model_prior_set[point], model_posterior_set[point])
 
         return model_vec_set
 
@@ -922,8 +1007,15 @@ class fourdvel(basics):
         invCm = model_prior
         Cm_p = model_posterior
 
+        # If not provided, find Cm_p.
         if Cm_p is None:
             Cm_p = self.model_posterior(design_mat=G, data_prior=invCd, model_prior=invCm)
+
+        # Check singularity.
+        if np.isnan(Cm_p[0,0]):
+            model_vec = np.zeros(shape=(1,1)) + np.nan
+            return model_vec
+
         dd = np.matmul(np.matmul(np.transpose(G),invCd),d)
 
         model_p = np.matmul(Cm_p, dd)
@@ -935,6 +1027,97 @@ class fourdvel(basics):
 
         return model_vec
 
+
+    # Calculate residual sets.
+    def resids_set(self, point_set, design_mat_set, data_vec_set, model_vec_set):
+
+        resid_of_secular_set = {}
+        resid_of_tides_set = {}
+
+        # Only keep the mean and standard deviation due to disk space.
+        for point in point_set:
+
+            # secular.
+            resid_of_secular = self.resid_of_secular(design_mat_set[point],
+                                                data_vec_set[point], model_vec_set[point])
+
+            if not np.isnan(resid_of_secular[0,0]):
+                resid_of_secular_set[point] = ( np.mean(resid_of_secular[0:-1:2]),
+                                                np.std (resid_of_secular[0:-1:2]),
+                                                np.mean(resid_of_secular[1:-1:2]),
+                                                np.std (resid_of_secular[1:-1:2]))
+
+                #print(resid_of_secular_set[point])
+
+            else:
+                resid_of_secular_set[point] = (np.nan,np.nan,np.nan,np.nan)
+
+            # tides.
+            resid_of_tides = self.resid_of_tides(design_mat_set[point],
+                                                data_vec_set[point], model_vec_set[point])
+            if not np.isnan(resid_of_tides[0,0]):
+                resid_of_tides_set[point] = ( np.mean(resid_of_tides[0:-1:2]),
+                                                np.std (resid_of_tides[0:-1:2]),
+                                                np.mean(resid_of_tides[1:-1:2]),
+                                                np.std (resid_of_tides[1:-1:2]))
+
+                #print(resid_of_tides_set[point])
+
+            else:
+                resid_of_tides_set[point] = (np.nan,np.nan,np.nan,np.nan)
+
+        return (resid_of_secular_set, resid_of_tides_set)
+
+    # Residual of secular velocity.
+    def resid_of_secular(self, design_mat, data, model):
+
+        G = design_mat
+        d = data
+        m = model
+        
+        # Check singularity.
+        if np.isnan(m[0,0]):
+            resid_of_secular = np.zeros(shape=(1,1))+np.nan
+            return resid_of_secular
+
+        # Only keep secular velocity.
+        m_secular = np.zeros(shape=m.shape)
+        m_secular[0:2] = m[0:2]
+       
+        pred = np.matmul(G,m_secular)
+
+        resid_of_secular = d - pred 
+
+        #print("resid of secular")
+        #print(np.hstack((d, pred, resid_of_secular)))
+ 
+        return resid_of_secular
+
+    # Residual including all tides.
+    def resid_of_tides(self, design_mat, data, model):
+
+        G = design_mat
+        d = data
+        m = model
+        
+        # Check singularity.
+        if np.isnan(m[0,0]):
+            resid_of_tides = np.zeros(shape=(1,1))+np.nan
+            return resid_of_tides
+
+        pred = np.matmul(G,m)
+        resid_of_tides = d - pred
+
+        #print("resid of tides")
+        #print(np.hstack((d, pred, resid_of_tides)))
+        
+        #plt.figure()
+        #plt.plot(resid_of_tides)
+        #plt.savefig('./fig_sim/resid.png',format='png')
+        #plt.close()
+        
+        return resid_of_tides
+
     def tide_vec_to_quantity(self, tide_vec, quant_name):
 
         # modeling tides.
@@ -944,29 +1127,177 @@ class fourdvel(basics):
 
         t_vec = tide_vec[:,0]
 
+        # Secular horizontal speed.
         if quant_name == 'secular_horizontal_speed':
             quant = np.sqrt(t_vec[0]**2 + t_vec[1]**2)
-        elif quant_name == 'secular_vertical_velocity':
+
+        # Secular east.
+        elif quant_name == 'secular_east_velocity':
+            quant = t_vec[0]
+
+        # Secular north.
+        elif quant_name == 'secular_north_velocity':
+            quant = t_vec[1]
+
+        # Secular horizontal speed.
+        elif quant_name == 'secular_horizontal_velocity':
+            
+            # Degree.
+            angle = np.rad2deg(np.arctan2(t_vec[1],t_vec[0]))
+            # Length.
+            speed = np.sqrt(t_vec[0]**2 + t_vec[1]**2)
+
+            if not np.isnan(angle) and speed >=0.1:
+                length = 0.2
+                quant = (angle, length)
+
+            else:
+                quant = (0, 0)
+
+            return quant
+        
+        # Secular up.
+        elif quant_name == 'secular_up_velocity':
             quant = t_vec[2]
-        elif quant_name == 'Msf_horizontal_speed':
+
+        # Msf horizontal amplitude (speed).        
+        elif quant_name == 'Msf_horizontal_velocity_amplitude':
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
                     ampE = t_vec[3+k*6]
-                    ampN = t_vec[3+k*6+3]
+                    ampN = t_vec[3+k*6+1]
                     quant = np.sqrt(ampE**2 + ampN**2)
+                else:
+                    k=k+1
+
+        # Msf crude displacement amplitude.
+        elif quant_name == 'Msf_horizontal_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Msf':
+                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
+                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    quant = np.sqrt(ampE**2 + ampN**2)
+                else:
+                    k=k+1
+
+        # Msf along flow displacement amplitude.
+        elif quant_name == 'Msf_along_flow_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Msf':
+                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
+                    phaseE = self.velo_phase_to_dis_phase(t_vec[3+k*6+3], tide_name)
+
+                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    phaseN = self.velo_amp_to_dis_amp(t_vec[3+k*6+4],tide_name)
+
+                else:
+                    k=k+1
+
+        # Msf across flow displacement amplitude.
+        elif quant_name == 'Msf_across_flow_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Msf':
+                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
+                    phaseE = self.velo_phase_to_dis_phase(t_vec[3+k*6+3], tide_name)
+
+                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    phaseN = self.velo_amp_to_dis_amp(t_vec[3+k*6+4],tide_name)
+
+                else:
+                    k=k+1
+
+
+        # Msf East amp.
+        elif quant_name == 'Msf_east_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Msf':
+                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
+                    quant = ampE
+                else:
+                    k=k+1
+        # Msf East phase.
+        elif quant_name == 'Msf_east_displacement_phase':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Msf':
+                    phaseE = self.velo_phase_to_dis_phase(t_vec[3+k*6+3],tide_name)
+                    quant = phaseE
+                else:
+                    k=k+1
+
+        # Msf North amp.
+        elif quant_name == 'Msf_north_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Msf':
+                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    quant = ampN
+                else:
+                    k=k+1
+
+        # Msf North phase.
+        elif quant_name == 'Msf_north_displacement_phase':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Msf':
+                    phaseN = self.velo_phase_to_dis_phase(t_vec[3+k*6+4],tide_name)
+                    quant = phaseN
+                else:
+                    k=k+1
+
+        # O1 Up amp.
+        elif quant_name == 'O1_up_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'O1':
+                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    quant = np.sqrt(ampU**2)
+                else:
+                    k=k+1
+        # O1 Up phase.
+        elif quant_name == 'O1_up_displacement_phase':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'O1':
+                    phaseU = self.velo_phase_to_dis_phase(t_vec[3+k*6+5],tide_name)
+                    quant = phaseU
+                else:
+                    k=k+1
+
+        # M2 Up amplitude.
+        elif quant_name == 'M2_up_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'M2':
+                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    quant = np.sqrt(ampU**2)
+                else:
+                    k=k+1
+        # M2 Up phase.
+        elif quant_name == 'M2_up_displacement_phase':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'M2':
+                    phaseU = self.velo_phase_to_dis_phase(t_vec[3+k*6+5],tide_name)
+                    quant = phaseU
                 else:
                     k=k+1
 
         else:
             quant = None
-            raise Exception('Quantity not defined!')
+            raise Exception(quant_name, ' is not defined yet!')
 
         return quant
  
 def main():
 
     fourD = fourdvel()
+    fourD.preparation()
     
 if __name__=='__main__':
     main()
