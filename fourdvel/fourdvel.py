@@ -45,7 +45,7 @@ class fourdvel(basics):
             self.csk_data[i] = []
 
         self.s1_data = {}
-        self.s1_tracks = [37,52,169,65]
+        self.s1_tracks = [37,52,169,65,7]
         
         for i in self.s1_tracks:
             self.s1_data[i] = []
@@ -152,6 +152,18 @@ class fourdvel(basics):
                 else:
                     self.horizontal_prior = False
 
+            if name == 'no_secular_up':
+                if value == 'True':
+                    self.no_secular_up = True
+                else:
+                    self.no_secular_up = False
+
+            if name == 'up_short_period':
+                if value == 'True':
+                    self.up_short_period = True
+                else:
+                    self.up_short_period = False
+
         return 0
             
     def satellite_constants(self):
@@ -160,7 +172,7 @@ class fourdvel(basics):
         track_timefraction = self.track_timefraction
 
         # CSK.
-        fid = open('csk_times.txt')
+        fid = open('/net/kamb/ssd-tmp1/mzzhong/insarRoutines/csk_times.txt')
         csk_times = fid.readlines()
         fid.close()
 
@@ -173,6 +185,7 @@ class fourdvel(basics):
         # Time of scene.
         t37 = datetime.time(6,26,45)
         track_timefraction[('s1',37)] = (t37.hour * 3600 + t37.minute*60 + t37.second)/(24*3600)
+        
         t52 = datetime.time(7,7,30)
         track_timefraction[('s1',52)] = (t52.hour * 3600 + t52.minute*60 + t52.second)/(24*3600)
 
@@ -182,7 +195,8 @@ class fourdvel(basics):
         t65 = datetime.time(4,34,10)
         track_timefraction[('s1',65)] = (t65.hour * 3600 + t65.minute*60 + t65.second)/(24*3600)
 
-
+        t7 = datetime.time(5,6,30)
+        track_timefraction[('s1',7)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
 
         #print(track_timefraction)
 
@@ -296,34 +310,40 @@ class fourdvel(basics):
 
     def get_grid_set_velo(self):
 
-        dim = 3
-        if dim == 3:
-            grid_set_velo_pkl = self.grid_set_velo_name + '_3d' + '.pkl'
-        else:
-            raise Exception('Need three dimensional velocity model')
+        self.grid_set_velo = None
 
-        if os.path.exists(grid_set_velo_pkl):
-            print('Loading grid_set_velo...')
-            with open(grid_set_velo_pkl,'rb') as f:
-                self.grid_set_velo = pickle.load(f)
+        if hasattr(self, 'grid_set_velo_name'):
+            dim = 3
+            if dim == 3:
+                grid_set_velo_pkl = self.grid_set_velo_name + '_3d' + '.pkl'
+    
+            if os.path.exists(grid_set_velo_pkl):
+                print('Loading grid_set_velo...')
+                with open(grid_set_velo_pkl,'rb') as f:
+                    self.grid_set_velo = pickle.load(f)
 
     def get_tile_set(self):
 
-        tile_set_pkl = self.tile_set_name + '.pkl'
+        self.tile_set = None
+        if hasattr(self,'tile_set_name'):
+            tile_set_pkl = self.tile_set_name + '.pkl'
+            if os.path.exists(tile_set_pkl):
+                print('Loading tile_set ...')
+                with open(tile_set_pkl,'rb') as f:
+                    self.tile_set = pickle.load(f)
 
-        if os.path.exists(tile_set_pkl):
-            print('Loading tile_set ...')
-            with open(tile_set_pkl,'rb') as f:
-                self.tile_set = pickle.load(f)
 
     def get_data_uncert(self):
 
-        grid_set_data_uncert_set_pkl = self.grid_set_data_uncert_name + '.pkl'
+        self.grid_set_data_uncert = None
+        if hasattr(self,'grid_set_data_uncert_name'):
+            grid_set_data_uncert_set_pkl = self.grid_set_data_uncert_name + '.pkl'
+    
+            if os.path.exists(grid_set_data_uncert_set_pkl):
+                print('Loading data uncert set ...')
+                with open(grid_set_data_uncert_set_pkl,'rb') as f:
+                    self.grid_set_data_uncert = pickle.load(f)
 
-        if os.path.exists(grid_set_data_uncert_set_pkl):
-            print('Loading data uncert set ...')
-            with open(grid_set_data_uncert_set_pkl,'rb') as f:
-                self.grid_set_data_uncert = pickle.load(f)
 
     def get_grid_set(self):
         import gdal
@@ -361,7 +381,7 @@ class fourdvel(basics):
             offset_id['csk'] = 20180712
 
             directory['s1'] = '/net/jokull/nobak/mzzhong/S1-Evans'
-            tracklist['s1'] = [37,52,169,65]
+            tracklist['s1'] = [37, 52, 169, 65, 7]
             offset_id['s1'] = 20180703
 
             for sate in satellites:
@@ -530,6 +550,7 @@ class fourdvel(basics):
 
         # Get pre-defined grid points and the corresponding tracks and vectors.
         self.get_grid_set()
+
         self.get_grid_set_velo()
         self.get_tile_set()
         self.get_data_uncert()
@@ -852,7 +873,7 @@ class fourdvel(basics):
                 param_uq[3+k*6+t,0] = amp_error
                 param_uq[3+k*6+t+3,0] = phase_error
 
-        # From variance to standard deviation.
+        # From variance to standard deviation (Important!).
         param_uq = np.sqrt(param_uq)
         return param_uq
 
@@ -919,6 +940,7 @@ class fourdvel(basics):
     def model_prior(self, horizontal = False):
 
         n_modeling_tides = self.n_modeling_tides
+        modeling_tides = self.modeling_tides
 
         num_params = 3 + n_modeling_tides*6
 
@@ -935,16 +957,35 @@ class fourdvel(basics):
             # Remove upper component.
             inv_sigma[2,2] = inf_restrict
 
-        # Always no secular velocity on up component.
-        inv_sigma[2,2] = inf_restrict
+        if hasattr(self,'no_secular_up'):
+            if self.no_secular_up == True:
+                inv_sigma[2,2] = inf_restrict
+
+        if hasattr(self,'up_short_period'):
+            if self.up_short_period:
+                up_short_period = True
+
+        else:
+            up_short_period = False
+
+        #print(up_short_period)
+        #print(stop)
 
         # Tides.
         for i in range(n_modeling_tides):
+            tide_name = modeling_tides[i]
+            #print(tide_name)
             for j in range(6):
                 k = 3 + i*6 + j
                 
                 if horizontal==True and (j==2 or j==5):
                     inv_sigma[k,k] = inf_restrict
+
+                if not tide_name in ['M2','O1'] and up_short_period and (j==2 or j==5):
+                    inv_sigma[k,k] = inf_restrict
+                    #print(tide_name, j)
+
+        #print(stop)
 
         invCm = np.square(inv_sigma)
 
@@ -969,6 +1010,7 @@ class fourdvel(basics):
 
         # Check the singularity of the matrix.
         if np.linalg.cond(invCm_p) < 1/sys.float_info.epsilon:
+        #if np.linalg.cond(invCm_p) < 10**8:
             Cm_p = np.linalg.pinv(invCm_p)
         else:
             Cm_p = np.zeros(shape=invCm_p.shape) + np.nan
@@ -1155,6 +1197,10 @@ class fourdvel(basics):
                 quant = (0, 0)
 
             return quant
+
+        elif quant_name == 'secular_horizontal_velocity_EN':
+
+            return np.asarray([t_vec[0], t_vec[1]])
         
         # Secular up.
         elif quant_name == 'secular_up_velocity':
@@ -1179,6 +1225,16 @@ class fourdvel(basics):
                     ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
                     ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
                     quant = np.sqrt(ampE**2 + ampN**2)
+                else:
+                    k=k+1
+
+        # Msf crude displacement amplitude.
+        elif quant_name == 'Msf_up_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Msf':
+                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    quant = ampU
                 else:
                     k=k+1
 

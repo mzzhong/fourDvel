@@ -240,11 +240,34 @@ class analysis(fourdvel):
 
         return 0
 
+    def load_master_model(self,num,prefix='est'):
 
-    def output_estimations(self):
+        this_result_folder = self.this_result_folder
+        # Load all the results.
+        if prefix == 'true':
+            filename = '/home/mzzhong/insarRoutines/estimations/'+str(num)+'/'+str(num)+'_grid_set_true_tide_vec.pkl'
+        else:
+            filename = '/home/mzzhong/insarRoutines/estimations/'+str(num)+'/'+str(num)+'_grid_set_tide_vec.pkl'
+           
+        with open(filename,'rb') as f:
+            self.grid_set_master_model_tide_vec = pickle.load(f)
+        return 0
 
-        modeling_tides = self.modeling_tides
-        n_modeling_tide = self.n_modeling_tides
+    def load_slave_model(self,num,prefix='est'):
+
+        this_result_folder = self.this_result_folder
+        # Load all the results.
+
+        if prefix == 'true':
+            filename = '/home/mzzhong/insarRoutines/estimations/'+str(num)+'/'+str(num)+'_grid_set_true_tide_vec.pkl'
+        else:
+            filename = '/home/mzzhong/insarRoutines/estimations/'+str(num)+'/'+str(num)+'_grid_set_tide_vec.pkl'
+ 
+        with open(filename,'rb') as f:
+            self.grid_set_slave_model_tide_vec = pickle.load(f)
+        return 0
+
+    def load_true_est_uq(self):
 
         this_result_folder = self.this_result_folder
         test_id = self.test_id
@@ -254,6 +277,7 @@ class analysis(fourdvel):
                     + str(test_id) + '_' + 'grid_set_true_tide_vec.pkl','rb') as f:
             self.grid_set_true_tide_vec = pickle.load(f)
 
+
         with open(this_result_folder + '/' 
                     + str(test_id) + '_' + 'grid_set_tide_vec.pkl','rb') as f:
             self.grid_set_tide_vec = pickle.load(f)
@@ -261,6 +285,53 @@ class analysis(fourdvel):
         with open(this_result_folder + '/' 
                     + str(test_id) + '_' + 'grid_set_tide_vec_uq.pkl','rb') as f:
             self.grid_set_tide_vec_uq = pickle.load(f)
+
+        return 0
+
+    def output_differences(self, compare_id, compare_prefix):
+
+        this_result_folder = self.this_result_folder
+        test_id = self.test_id
+
+        self.load_master_model(test_id)
+        self.load_slave_model(num=compare_id,prefix=compare_prefix)
+
+        self.load_true_est_uq()
+
+        quant_list = [ 'secular_horizontal_velocity_difference' ]
+
+        for quant_name in quant_list:
+            
+            print('Output quantity nane: ', quant_name)
+            grid_set_quant = {}
+
+            if quant_name == 'secular_horizontal_velocity_difference':
+                grid_set_slave = self.grid_set_slave_model_tide_vec
+                grid_set_master = self.grid_set_master_model_tide_vec
+
+                for point in grid_set_master.keys():
+                    if not np.isnan(grid_set_master[point][0,0]):
+                        quant_master = self.tide_vec_to_quantity(tide_vec = grid_set_master[point],quant_name = "secular_horizontal_velocity_EN")
+                        quant_slave = self.tide_vec_to_quantity(tide_vec = grid_set_slave[point], quant_name = 'secular_horizontal_velocity_EN')
+                        grid_set_quant[point] = np.linalg.norm(quant_master - quant_slave, 2)
+
+                # Write to xyz file.
+                state = 'est'
+
+                xyz_name = os.path.join(this_result_folder, '_'.join([str(test_id), state, quant_name, str(compare_id), compare_prefix]) + '.xyz')
+                self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
+
+        return 0
+
+    def output_estimations(self):
+
+        modeling_tides = self.modeling_tides
+        n_modeling_tide = self.n_modeling_tides
+
+        this_result_folder = self.this_result_folder
+        test_id = self.test_id
+
+        self.load_true_est_uq()
 
 
 #        quant_list = [  'secular_horizontal_speed',
@@ -275,8 +346,10 @@ class analysis(fourdvel):
         quant_list = [  'secular_horizontal_speed',
                         'secular_east_velocity',
                         'secular_north_velocity',
+                        'secular_up_velocity',
                         'secular_horizontal_velocity',
                         'Msf_horizontal_displacement_amplitude',
+                        'Msf_up_displacement_amplitude',
                         'M2_up_displacement_amplitude',
                         'O1_up_displacement_amplitude']
 
@@ -290,7 +363,9 @@ class analysis(fourdvel):
 
         # Look through the sets
         for state in states.keys():
-
+            
+            print(state)
+            
             this_grid_set = states[state]
 
             # Loop through the quantities.
@@ -336,7 +411,9 @@ def main():
     runAna = analysis()
 
     # Analysis the results. 
-    #runAna.output_estimations()
+    runAna.output_estimations()
+    runAna.output_differences(compare_id=535, compare_prefix='true')
+    
     runAna.residual()
 
     #run_ana.parallel_driver()

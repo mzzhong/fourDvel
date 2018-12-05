@@ -272,14 +272,14 @@ class inversion(fourdvel):
                 velo_model = self.grid_set_velo[point]
                 (t_axis, secular_v, velocity, tide_amp, tide_phase) = fourD_sim.syn_velocity(velo_model = velo_model)
 
-                # Obtain SAR data.
-                noise_sigma = (0.02, 0.02)
-
+                # Data prior.
                 ## Use external noise model.
-                data_uncert = self.grid_set_data_uncert[point]
-                noise_sigma = (data_uncert[1], data_uncert[3])
-                #print(noise_sigma)
-                #print(stop) 
+                if self.grid_set_data_uncert is not None:
+                    data_uncert = self.grid_set_data_uncert[point]
+                    noise_sigma = (data_uncert[1], data_uncert[3])
+                else:
+                    noise_sigma = (0.02, 0.02)
+
 
                 data_vec = fourD_sim.syn_offsets_data_vec(point=point, t_axis = t_axis, secular_v = secular_v, v = velocity, tide_amp = tide_amp, modeling_tides = self.modeling_tides, tide_phase = tide_phase, offsetfields = offsetfields, noise_sigma = noise_sigma)
 
@@ -295,8 +295,17 @@ class inversion(fourdvel):
                 data_vec = self.offsets_to_data_vec(offsets)
     
                 # Data prior.
-                noise_sigma = (0.02, 0.02)
+                # Pre-assigned.
 
+                ## Use external noise model.
+                if self.grid_set_data_uncert is not None:
+                    data_uncert = self.grid_set_data_uncert[point]
+                    noise_sigma = (data_uncert[1], data_uncert[3])
+                else:
+                    noise_sigma = (0.02, 0.02)
+
+                #print(noise_sigma)
+                #print(stop)
 
                 invCd = self.real_data_uncertainty(data_vec, noise_sigma)
 
@@ -391,18 +400,21 @@ class inversion(fourdvel):
                                                                 point_set = point_set, 
                                                                 velo_model_set = velo_model_set)
 
-                # Obtain data.
+                # Data prior.
                 noise_sigma_set = {}
-                
-                #noise_sigma = (0.02,0.02)
-                #for point in point_set:
-                #    noise_sigma_set[point] = noise_sigma
+                if self.grid_set_data_uncert is not None:
+                    for point in point_set:
+                        data_uncert = self.grid_set_data_uncert[point]
+                        noise_sigma_set[point] = (data_uncert[1], data_uncert[3])
+                else:
+                    noise_sigma = (0.02, 0.02)
+                    for point in point_set:
+                        noise_sigma_set[point] = noise_sigma
 
-                ## Use external noise model.
-                for point in point_set:
-                    data_uncert = self.grid_set_data_uncert[point]
-                    noise_sigma_set[point] = (data_uncert[1], data_uncert[3])
+                #print(noise_sigma_set[test_point])
+                #print(stop)
 
+ 
                 data_vec_set = fourD_sim.syn_offsets_data_vec_set(
                                     point_set = point_set,
                                     secular_v_set = secular_v_set, 
@@ -423,13 +435,20 @@ class inversion(fourdvel):
                 # Real data
                 data_vec_set = self.offsets_set_to_data_vec_set(point_set, offsets_set)
 
-                # Predefined sigma
-                noise_sigma_set = {}
-                noise_sigma = 0.02
-                for point in point_set:
-                    noise_sigma_set[point] = noise_sigma
-
                 # Data prior.
+                noise_sigma_set = {}
+                if self.grid_set_data_uncert is not None:
+                    for point in point_set:
+                        data_uncert = self.grid_set_data_uncert[point]
+                        noise_sigma_set[point] = (data_uncert[1], data_uncert[3])
+                else:
+                    noise_sigma = (0.02, 0.02)
+                    for point in point_set:
+                        noise_sigma_set[point] = noise_sigma
+
+                #print(noise_sigma_set[test_point])
+                #print(stop)
+                    
                 invCd_set = self.real_data_uncertainty_set(point_set, data_vec_set, 
                                                                 noise_sigma_set)
                 true_tide_vec_set = None
@@ -458,6 +477,10 @@ class inversion(fourdvel):
 
         # Model posterior.
         Cm_p = self.model_posterior(design_mat, invCd, invCm)
+        #print(Cm_p[0,0])
+        #print(design_mat[0,0])
+        #print(stop)
+
         #print('Model posterior: ',Cm_p)
 
         # Show the model posterior.
@@ -482,6 +505,9 @@ class inversion(fourdvel):
         # Convert model posterior to uncertainty of params.
         # Require: tide_vec and Cm_p
         tide_vec_uq = self.model_posterior_to_uncertainty(tide_vec, Cm_p)
+
+        #print(tide_vec_uq)
+        #print(stop)
 
         print('Inversion Done')
         
@@ -546,7 +572,10 @@ class inversion(fourdvel):
         #self.display.show_model_mat(Cm_p_set[self.test_point])
         #print(stop)
 
-        #self.model_analysis(design_mat = design_mat, model_prior = invCm)
+        # Analysis of the model_posterior
+        #others_set = self.model_analysis(point_set, Cm_p_set)
+        others_set = {}
+        print('Model posterior set analysis Done')
 
         ### Inversion ###
         # Estimate model params.
@@ -588,7 +617,7 @@ class inversion(fourdvel):
 
             self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
         
-        return (true_tide_vec_set, tide_vec_set, tide_vec_uq_set, resid_of_secular_set, resid_of_tides_set)
+        return (true_tide_vec_set, tide_vec_set, tide_vec_uq_set, resid_of_secular_set, resid_of_tides_set, others_set)
 
     def chop_into_threads(self, total_number, nthreads):
 
@@ -637,7 +666,8 @@ class inversion(fourdvel):
                                                     grid_set_tide_vec=None,
                                                     grid_set_tide_vec_uq=None,
                                                     grid_set_resid_of_secular=None,
-                                                    grid_set_resid_of_tides=None):
+                                                    grid_set_resid_of_tides=None,
+                                                    grid_set_others=None):
         # Input information.
         tile_set = self.tile_set
         grid_set = self.grid_set 
@@ -651,6 +681,8 @@ class inversion(fourdvel):
             grid_set_tide_vec_uq = {}
             grid_set_resid_of_secular = {}
             grid_set_resid_of_tides = {}
+            grid_set_others = {}
+
             start_tile = 0
             stop_tile = 10**5
             self.show_vecs = True
@@ -688,7 +720,8 @@ class inversion(fourdvel):
                 tide_vec_set, 
                 tide_vec_uq_set,
                 resid_of_secular_set,
-                resid_of_tides_set)  = self.point_set_tides(point_set = point_set, tracks_set = tracks_set)
+                resid_of_tides_set,
+                others_set)  = self.point_set_tides(point_set = point_set, tracks_set = tracks_set)
 
                 # Update.
                 if true_tide_vec_set is not None:
@@ -698,6 +731,7 @@ class inversion(fourdvel):
                 grid_set_tide_vec_uq.update(tide_vec_uq_set)
                 grid_set_resid_of_secular.update(resid_of_secular_set)
                 grid_set_resid_of_tides.update(resid_of_tides_set)
+                grid_set_others.update(others_set)
 
 
                 count_run = count_run + 1
@@ -748,6 +782,8 @@ class inversion(fourdvel):
         self.grid_set_resid_of_secular = {}
         self.grid_set_resid_of_tides = {}
 
+        self.grid_set_others = {}
+
         # Count the total number of tiles
         n_tiles = len(tile_set.keys())
         print('Total number of tiles: ', n_tiles)
@@ -770,6 +806,8 @@ class inversion(fourdvel):
         grid_set_resid_of_secular = manager.dict()
         grid_set_resid_of_tides = manager.dict()
 
+        grid_set_others = manager.dict()
+
 
         jobs=[]
         for ip in range(nthreads):
@@ -780,7 +818,8 @@ class inversion(fourdvel):
                                                     grid_set_tide_vec,
                                                     grid_set_tide_vec_uq, 
                                                     grid_set_resid_of_secular,
-                                                    grid_set_resid_of_tides))
+                                                    grid_set_resid_of_tides,
+                                                    grid_set_others))
             jobs.append(p)
             p.start()
 
@@ -793,7 +832,9 @@ class inversion(fourdvel):
         self.grid_set_tide_vec_uq = dict(grid_set_tide_vec_uq)
 
         self.grid_set_resid_of_secular = dict(grid_set_resid_of_secular)
-        self.grid_set_resid_of_tides = dict(grid_set_resid_of_tides) 
+        self.grid_set_resid_of_tides = dict(grid_set_resid_of_tides)
+        self.grid_set_others = dict(grid_set_others) 
+
             ## end of dict.
 
         test_id = self.test_id
@@ -824,6 +865,10 @@ class inversion(fourdvel):
         with open(this_result_folder + '/' 
                     + str(test_id) + '_' + 'grid_set_resid_of_tides.pkl','wb') as f:
             pickle.dump(self.grid_set_resid_of_tides, f)
+
+        with open(this_result_folder + '/' 
+                    + str(test_id) + '_' + 'grid_set_others.pkl','wb') as f:
+            pickle.dump(self.grid_set_others, f)
 
         return 0
 

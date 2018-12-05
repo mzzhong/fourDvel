@@ -183,12 +183,13 @@ class grouping(fourdvel):
         doub_diff_map[np.isnan(doub_diff_map)] = 0
         #doub_diff_map[doub_diff_map==0]=np.nan
 
+        # Set the maxvalue, and do normalization.
         maxval = 0.4
         doub_diff_map[doub_diff_map<0] = 0
         doub_diff_map[doub_diff_map>maxval] = maxval
         doub_diff_map = doub_diff_map/maxval
 
-        # Remove noise.
+        # Remove noise manually.
         p1 = (160,0)
         p2 = (550,800)
         k = (p2[1]-p1[1])/(p2[0]-p1[0])
@@ -296,8 +297,6 @@ class grouping(fourdvel):
 
         # 3D
         self.add_verti()
-
-
     ##############################################
 
     def coloring_bfs(self, point_set, x, y):
