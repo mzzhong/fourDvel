@@ -16,16 +16,16 @@ class basics():
 
         self.tide_periods = {}
         tide_periods = self.tide_periods
-        tide_periods['K2'] = 0.498
-        tide_periods['S2'] = 0.5
-        tide_periods['M2'] = 0.52
-        tide_periods['K1'] = 1
+        tide_periods['K2'] = 0.4986
+        tide_periods['S2'] = 0.5000
+        tide_periods['M2'] = 0.5175
+        tide_periods['K1'] = 0.9973
         tide_periods['P1'] = 1.003
-        tide_periods['O1'] = 1.08
-        tide_periods['Mf'] = 13.66
-        tide_periods['Msf'] = 14.77
+        tide_periods['O1'] = 1.0758
+        tide_periods['Mf'] = 13.6608
+        tide_periods['Msf'] = 14.7653
         tide_periods['Mm'] = 27.55
-        tide_periods['Ssa'] = 182.62
+        tide_periods['Ssa'] = 182.6282
         tide_periods['Sa'] = 365.27
 
         self.tide_omegas = {}

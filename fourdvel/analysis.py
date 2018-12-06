@@ -290,6 +290,8 @@ class analysis(fourdvel):
 
     def output_differences(self, compare_id, compare_prefix):
 
+        print('Ouput difference...')
+
         this_result_folder = self.this_result_folder
         test_id = self.test_id
 
@@ -391,11 +393,14 @@ class analysis(fourdvel):
                 else:
                     output_keys = this_grid_set.keys()
 
+                # For "true", there is no output_keys in test_mode 3.
+
                 # For all available points in grid_set.
                 for point in output_keys:
                 
                     # Only record valid points.
                     if not np.isnan(this_grid_set[point][0,0]):
+                        # It is possible that some tides are not in the model. This is taken care of in the called method.
                         quant = self.tide_vec_to_quantity(tide_vec = this_grid_set[point],quant_name = quant_name)
 
                         # Record everything, including nan.

@@ -34,49 +34,6 @@ class inversion(fourdvel):
 
         self.preparation()
 
-    def model_analysis(self,point=None,tracks=None,offsetfields=None,design_mat=None):
-
-        if design_mat is None:
-            G = self.build_G(point=point, tracks=tracks, offsetfields=offsetfields)
-        else:
-            G = design_mat
-
-        n_row, n_cols = G.shape
-        
-        # model resolution matrix
-        invG = np.linalg.pinv(G)
-        model_res = np.matmul(invG, G)
-        res_est = np.trace(model_res)/n_cols
-        output1 = res_est
-
-        # noise sensitivity matrix
-        sensMat = np.linalg.pinv(np.matmul(np.transpose(G),G))
-        
-        # lumped_error
-        error_lumped = np.sqrt(max(np.trace(sensMat),0))
-        output2 = error_lumped
-        
-        # M2, O1, Msf, Mf, etc.
-        # Msf cosine north error
-        
-        tide_num = 3
-        E_off_cos = 1
-        N_off_cos = 2
-        U_off_cos = 3
-        E_off_sin = 4
-        N_off_sin = 5
-        U_off_sin = 6
-
-        #ind = 2+6*(tide_num-1)+N_off_cos
-        #error_Msf_cos_N = sensMat[ind,ind]
-        #output3 = error_Msf_cos_N
-        
-
-        #self.display.show_model_mat(model_res)
-        self.display.show_model_mat(sensMat)
-
-        return 0
-
 
 
 
@@ -406,6 +363,7 @@ class inversion(fourdvel):
                     for point in point_set:
                         data_uncert = self.grid_set_data_uncert[point]
                         noise_sigma_set[point] = (data_uncert[1], data_uncert[3])
+
                 else:
                     noise_sigma = (0.02, 0.02)
                     for point in point_set:

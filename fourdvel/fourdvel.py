@@ -1017,6 +1017,27 @@ class fourdvel(basics):
 
         return Cm_p
 
+
+    def model_posterior_analysis_set(self,point_set=None, Cm_p_set=None):
+
+        others_set = {}
+        for point in point_set:
+            others_set[point] = []
+            others_set[point].append(self.model_posterior_analysis(Cm_p = Cm_p[point]))
+
+        return others_set
+
+    def model_posterior_analysis(self,Cm_p):
+
+        # noise sensitivity matrix
+        #sensMat = np.linalg.pinv(np.matmul(np.transpose(G),G))
+        #error_lumped = np.sqrt(max(np.trace(sensMat),0))
+
+        error_lumped = np.mean(np.sqrt(max(np.trace(Cm_p))))
+        out = error_lumped
+
+        return quant
+
     # Simple version.
     def param_estimation_simple(self, design_mat, data):
 
@@ -1168,6 +1189,13 @@ class fourdvel(basics):
         tide_omegas = self.tide_omegas
 
         t_vec = tide_vec[:,0]
+
+
+        # Output nan, if not exist.
+        item_name = quant_name.split('_')[0]
+        if (not item_name == 'secular') and (not item_name in modeling_tides):
+            quant = np.nan
+            return quant
 
         # Secular horizontal speed.
         if quant_name == 'secular_horizontal_speed':
