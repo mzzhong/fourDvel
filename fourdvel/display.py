@@ -137,7 +137,6 @@ class display(fourdvel):
             lon, lat = key
             value = show_dict[key]
 
-
             # More then one value (velocity vector).
             if isinstance(value,tuple):
                 if not np.isnan(value[0]):
@@ -146,7 +145,6 @@ class display(fourdvel):
                         record = record + ' ' + str(value[irec])
                     record = record + '\n'
                     f.write(record)
-
             else:
 
                 # Only output valid values.
@@ -159,6 +157,21 @@ class display(fourdvel):
  
     def tide_symbols(self,tide_name):
         pass
+
+
+    def display_fitting(self,point_set, data_info_set, design_mat_set, data_vec_set, model_vec_set):
+
+        for point in point_set:
+            if point == self.test_point:
+                G = design_mat_set[point]
+                m = model_vec_set[point]
+                pred = np.matmul(G,m)
+
+                obs = data_vec_set[point]
+
+                # Need continuous simulated signal for comparison
+
+                
 
     def display_vecs(self, stacked_vecs, row_names, column_names, label):
 

@@ -15,6 +15,7 @@ import pickle
 
 from Ant_data import Ant_data
 
+# Preparing references for synthetic tests and inversion
 
 class grouping(fourdvel):
 
@@ -35,8 +36,8 @@ class grouping(fourdvel):
         redo = 0
 
         if redo == 1:
-            velo_dir = '/net/jokull/nobak/mzzhong/Ant_Plot/Data/velocity_models'
-            npz_filebasename = 'AntVelo_v1.npz'
+            velo_dir = '/net/jokull/nobak/mzzhong/Ant_Data/velocity_models'
+            npz_filebasename = 'AntVelo.npz'
 
             npzfile = np.load(os.path.join(velo_dir, npz_filebasename))
 
@@ -82,34 +83,124 @@ class grouping(fourdvel):
 
         return 0
 
+    def match_velo_v2_to_grid_set(self):
+
+        grid_set = self.grid_set
+
+        # Generate matched_velo.
+        print('Matching velocity model (v2) to grids set')
+        redo = 0
+
+        if redo == 1:
+            velo_dir = '/net/jokull/nobak/mzzhong/Ant_Data/velocity_models'
+            npz_filebasename = 'AntVelo_v2.npz'
+
+            npzfile = np.load(os.path.join(velo_dir, npz_filebasename))
+
+            vel_lon = npzfile['vel_lon']
+            vel_lat = npzfile['vel_lat']
+            ve = npzfile['ve']
+            vn = npzfile['vn']
+            v_comb = npzfile['v_comb']
+
+
+            # Convert lon to (-180,180)
+            inds = vel_lon > 180
+            vel_lon[inds] = vel_lon[inds] - 360
+
+            print(vel_lon)
+
+            # Rounding latlon to grid points.
+            vel_lon = np.round(vel_lon * self.lon_re)/self.lon_re
+            vel_lat = np.round(vel_lat * self.lat_re)/self.lat_re
+
+            #unique_lons = np.unique(vel_lon[(vel_lon>-80) & (vel_lon<-70) & (vel_lat>-77.5) & (vel_lat<-74)])
+            #print(unique_lons)
+            #print(unique_lons.shape)
+
+            #unique_lats = np.unique(vel_lat[(vel_lon>-80) & (vel_lon<-70) & (vel_lat>-77.5) & (vel_lat<-74)])
+            #print(unique_lats)
+            #print(unique_lats.shape)
+
+            #print(vel_lon)
+            #print(vel_lon.shape)
+            #print(vel_lat.shape)
+
+            # Match velo to grid_set
+            matched_velo = {}
+            count = 0
+            for i in range(vel_lon.shape[0]):
+                
+                for j in range(vel_lon.shape[0]):
+
+                    #print((vel_lon[i,j],vel_lat[i,j]))
+                   
+                    if (vel_lon[i,j],vel_lat[i,j]) in grid_set.keys():
+
+                        count = count + 1
+
+                        valid = True
+
+                        # Remove all zero value
+                        if ve[i,j] == 0 and vn[i,j] == 0:
+                            valid = False
+
+                        # Save the two-component velocity.
+                        if valid:
+                            matched_velo[(vel_lon[i,j], vel_lat[i,j])] = [ve[i,j],vn[i,j]]
+
+            print('count: ',count)
+ 
+            with open('./pickles/matched_velo_v2.pkl','wb') as f:
+                pickle.dump(matched_velo,f)
+
+        else:
+            with open('./pickles/matched_velo_v2.pkl','rb') as f:
+                matched_velo = pickle.load(f)
+
+        self.matched_velo = matched_velo
+
+        return 0
+
     def create_grid_set_velo_2d(self):
 
         print('Interpolating grid set velocity model...')
 
         grid_set_velo_name = self.grid_set_velo_name
-        redo = 0
+        redo = 1
         if redo == 1:
 
             grid_set = self.grid_set
             matched_velo = self.matched_velo
-    
+
+            print('Number of points in grid set: ', len(grid_set))
+            
+            print('Number of points matched: ', len(matched_velo))
+   
             # Create the velocity value for each grid point.
             grid_set_velo_2d = {}
+
             # Available.
+            count = 0
             for key in grid_set.keys():
+                count = count + 1
+                if count % 10000 == 0:
+                    print(count, len(grid_set))
+ 
                 if key in matched_velo.keys():
-                    # And the value is valid.
-                    if matched_velo[key] != (0,0):
-                        value = matched_velo[key]
-                    # The value is invalid.
-                    else:
-                        value = (np.nan, np.nan)
+                    grid_set_velo_2d[key] = matched_velo[key]
+
+            print('Number of matched valid points being put into grid_set_velo_2d before interpolation: ',len(grid_set_velo_2d))
     
-                    grid_set_velo_2d[key] = value
-    
-            # Not Available.
+            # Interpolation for points not being matched.
+            count = 0
             for key in grid_set.keys():
+                count = count + 1
+                if count % 10000 == 0:
+                    print(count, len(grid_set))
+
                 if not (key in matched_velo.keys()):
+                    print(key)
                     # Seach for the nearest.
                     lon, lat = key
                     dist = 0
@@ -121,16 +212,16 @@ class grouping(fourdvel):
                                 new_lon = self.rounding(lon + self.lon_step * ix)
                                 new_lat = self.rounding(lat + self.lat_step * iy)
     
-                                if (new_lon, new_lat) in matched_velo.keys():
+                                if (new_lon, new_lat) in matched_velo.keys() and found == False:
                                     grid_set_velo_2d[key] = matched_velo[(new_lon, new_lat)]
                                     found = True
+                                    print(matched_velo[(new_lon, new_lat)])
     
-            print('Number of points matched: ', len(matched_velo))
-            print('Number of points in grid set: ', len(grid_set))
-            print('Number of points in grid velo set: ',len(grid_set_velo_2d))
-    
-            print(grid_set_velo_2d[(-77,-76.7)])
-    
+            
+ 
+            print('velocity at (-77, -76.7): ',grid_set_velo_2d[(-77,-76.7)])
+   
+            # Save it! 
             with open(grid_set_velo_name + '_2d'+'.pkl','wb') as f:
                 pickle.dump(grid_set_velo_2d,f)
 
@@ -138,18 +229,30 @@ class grouping(fourdvel):
             with open(grid_set_velo_name + '_2d' + '.pkl','rb') as f:
                 grid_set_velo_2d = pickle.load(f)
 
-
         self.grid_set_velo_2d = grid_set_velo_2d
+
+        print('Number of points in grid_set_velo_2d (after interpolation): ',len(grid_set_velo_2d))
 
         write_to_file = True
         if write_to_file:
             xyz_file = '/home/mzzhong/insarRoutines/estimations/grid_set_velo_2d_speed.xyz'
             f = open(xyz_file,'w')
+
+            count = 0
             for key in sorted(grid_set_velo_2d.keys()):
+                count = count + 1
+
                 lon, lat = key
+
+                # Only output the speed.
                 value = np.sqrt(grid_set_velo_2d[key][0]**2 + grid_set_velo_2d[key][1]**2)
                 if not np.isnan(value) and value>0:
                     f.write(str(lon)+' '+str(lat)+' '+str(value)+'\n')
+                else:
+                    pass
+                    #print(key, grid_set_velo_2d[key], value)
+
+        print(count)
 
         f.close()
         return 0
@@ -282,6 +385,8 @@ class grouping(fourdvel):
             for key in sorted(grid_set_velo_3d.keys()):
                 lon, lat = key
                 value = np.sqrt(grid_set_velo_3d[key][2]**2)
+
+                # Only save values larger than zero.
                 if not np.isnan(value) and value>0:
                     f.write(str(lon)+' '+str(lat)+' '+str(value)+'\n')
 
@@ -292,11 +397,14 @@ class grouping(fourdvel):
     def velo_model(self):
 
         # 2D
-        self.match_velo_to_grid_set()
+        self.match_velo_v2_to_grid_set()
         self.create_grid_set_velo_2d()
 
         # 3D
         self.add_verti()
+
+
+
     ##############################################
 
     def coloring_bfs(self, point_set, x, y):
@@ -538,8 +646,7 @@ def main():
     
     group = grouping()
 
-    # Generate constant velocity.
-    # First two component.
+    # Generate secular velocity model.
     group.velo_model()
     
     # Find tiles.

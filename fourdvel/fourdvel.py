@@ -37,7 +37,7 @@ class fourdvel(basics):
         # Constants.
         self.satellite_constants()
 
-        # data
+        # Data.
         self.csk_data = {}
         self.csk_tracks = range(22)
 
@@ -50,11 +50,12 @@ class fourdvel(basics):
         for i in self.s1_tracks:
             self.s1_data[i] = []
 
-        # grounding line file
-        self.glfile = '/home/mzzhong/links/jokull-nobak-net/Ant_Plot/Data/GL_Points_Evans.txt'
+        # Grounding line file.
+        self.glfile = '/home/mzzhong/links/jokull-nobak-net/Ant_Data/GL_Points_Evans.txt'
         self.design_mat_folder = './design_mat'
 
         self.read_parameters()
+
 
 
     def read_parameters(self):
@@ -64,6 +65,10 @@ class fourdvel(basics):
         fmt = '%Y%m%d'
 
         params = f.readlines()
+
+
+        # Quick and dirty:
+        self.data_uncert_const = None
 
         for param in params:
             
@@ -97,6 +102,10 @@ class fourdvel(basics):
             if name == 'grid_set_data_uncert_name':
                 self.grid_set_data_uncert_name = value
                 print('grid_set_data_uncert_name: ',value)
+
+            if name == 'data_uncert_const':
+                self.data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
+                print('data_uncert_const: ',self.data_uncert_const)
 
             if name == 'est_dict_name':
                 self.est_dict_name = value
@@ -163,6 +172,12 @@ class fourdvel(basics):
                     self.up_short_period = True
                 else:
                     self.up_short_period = False
+
+            if name == 'horizontal_long_period':
+                if value == 'True':
+                    self.horizontal_long_period = True
+                else:
+                    self.horizontal_long_period = False
 
         return 0
             
@@ -614,6 +629,9 @@ class fourdvel(basics):
                         #print(d1,d2)
                         offsetfields.append([d1,d2,vec1,vec2,t_frac])
 
+            #print(len(offsetfields))
+            #print(stop)
+
         return offsetfields
 
     def build_G_set(self, point_set, offsetfields_set):
@@ -659,6 +677,12 @@ class fourdvel(basics):
 
         # Control the number of offsetfields
         n_offsets = len(offsetfields)
+
+        # No offsetfield in available.
+        if n_offsets ==0:
+            G = np.zeros(shape=(1,1)) + np.nan
+            return G 
+
         #print('total number of offsetfield:', n_offsets)
         #n_offsets = 10
 
@@ -962,13 +986,19 @@ class fourdvel(basics):
                 inv_sigma[2,2] = inf_restrict
 
         if hasattr(self,'up_short_period'):
-            if self.up_short_period:
-                up_short_period = True
+            up_short_period = self.up_short_period
 
         else:
             up_short_period = False
 
-        #print(up_short_period)
+
+        if hasattr(self,'horizontal_long_period'):
+            horizontal_long_period = self.horizontal_long_period
+        else:
+            horizontal_long_period = False
+
+
+        #print(horizontal_long_period)
         #print(stop)
 
         # Tides.
@@ -985,6 +1015,9 @@ class fourdvel(basics):
                     inv_sigma[k,k] = inf_restrict
                     #print(tide_name, j)
 
+                if not tide_name in ['Mf','Msf','Mm'] and horizontal_long_period and (j==0 or j==1 or j==3 or j==4):
+                    inv_sigma[k,k] = inf_restrict
+ 
         #print(stop)
 
         invCm = np.square(inv_sigma)
@@ -994,6 +1027,8 @@ class fourdvel(basics):
     def model_posterior_set(self, point_set, design_mat_set, data_prior_set, model_prior_set):
         Cm_p_set = {}
         for point in point_set:
+
+            #print(point)
             Cm_p_set[point] = self.model_posterior(design_mat_set[point], 
                                                     data_prior_set[point], 
                                                     model_prior_set[point])
@@ -1006,9 +1041,21 @@ class fourdvel(basics):
         invCd = data_prior
         invCm = model_prior
 
+        # No valid G
+        if np.isnan(G[0,0]):
+            Cm_p = np.zeros(shape=(1,1))+np.nan
+            return Cm_p
+
+        # G is valid.
+        #print('G: ', G.shape)
+        #print('invCd: ',invCd.shape)
+
+        if G.shape[0] != invCd.shape[0]:
+            raise Exception('G and invCd shapes are unmatched')
+
         invCm_p = np.matmul(np.matmul(np.transpose(G), invCd),G) + invCm
 
-        # Check the singularity of the matrix.
+        # If G is singular.
         if np.linalg.cond(invCm_p) < 1/sys.float_info.epsilon:
         #if np.linalg.cond(invCm_p) < 10**8:
             Cm_p = np.linalg.pinv(invCm_p)
@@ -1049,6 +1096,7 @@ class fourdvel(basics):
 
         return model_vec
 
+    # Bayesian inversion. (set)
     def param_estimation_set(self, point_set, design_mat_set, data_vec_set,
                         data_prior_set, model_prior_set, model_posterior_set):
 
@@ -1118,7 +1166,14 @@ class fourdvel(basics):
             # tides.
             resid_of_tides = self.resid_of_tides(design_mat_set[point],
                                                 data_vec_set[point], model_vec_set[point])
+
+            if point == self.test_point:
+                print(resid_of_tides)
+                print(len(resid_of_tides))
+                print(stop)
+
             if not np.isnan(resid_of_tides[0,0]):
+                # range and azimuth
                 resid_of_tides_set[point] = ( np.mean(resid_of_tides[0:-1:2]),
                                                 np.std (resid_of_tides[0:-1:2]),
                                                 np.mean(resid_of_tides[1:-1:2]),
@@ -1181,7 +1236,7 @@ class fourdvel(basics):
         
         return resid_of_tides
 
-    def tide_vec_to_quantity(self, tide_vec, quant_name):
+    def tide_vec_to_quantity(self, tide_vec, quant_name, point=None, state=None):
 
         # modeling tides.
         modeling_tides = self.modeling_tides
@@ -1245,7 +1300,7 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
-        # Msf crude displacement amplitude.
+        # Msf lumped horizontal displacement amplitude.
         elif quant_name == 'Msf_horizontal_displacement_amplitude':
             k = 0
             for tide_name in modeling_tides:
@@ -1256,7 +1311,7 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
-        # Msf crude displacement amplitude.
+        # Msf up displacement amplitude.
         elif quant_name == 'Msf_up_displacement_amplitude':
             k = 0
             for tide_name in modeling_tides:
@@ -1295,6 +1350,7 @@ class fourdvel(basics):
                     k=k+1
 
 
+        ############################################
         # Msf East amp.
         elif quant_name == 'Msf_east_displacement_amplitude':
             k = 0
@@ -1304,13 +1360,17 @@ class fourdvel(basics):
                     quant = ampE
                 else:
                     k=k+1
+
         # Msf East phase.
         elif quant_name == 'Msf_east_displacement_phase':
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
-                    phaseE = self.velo_phase_to_dis_phase(t_vec[3+k*6+3],tide_name)
-                    quant = phaseE
+                    phaseE=self.velo_phase_to_dis_phase(t_vec[3+k*6+3],tide_name)
+
+                    quant = self.rad2deg(phaseE)
+                    quant = quant.wrapped_deg(quant)
+
                 else:
                     k=k+1
 
@@ -1329,10 +1389,188 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
-                    phaseN = self.velo_phase_to_dis_phase(t_vec[3+k*6+4],tide_name)
-                    quant = phaseN
+                    phaseN = self.velo_amp_to_dis_amp(t_vec[3+k*6+4],tide_name)
+                    quant = self.rad2deg(phaseN)
+                    quant = self.wrapped_deg(quant)
+
                 else:
                     k=k+1
+
+        # Mf lumped horizontal displacement amplitude.
+        elif quant_name == 'Mf_horizontal_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Mf':
+                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
+                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    quant = np.sqrt(ampE**2 + ampN**2)
+                else:
+                    k=k+1
+
+        # Mf East amp.
+        elif quant_name == 'Mf_east_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Mf':
+                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
+                    quant = ampE
+                else:
+                    k=k+1
+
+
+        # Mf East phase.
+        elif quant_name == 'Mf_east_displacement_phase':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Mf':
+                    phaseE=self.velo_phase_to_dis_phase(t_vec[3+k*6+3],tide_name)
+
+                    quant = self.rad2deg(phaseE)
+                    quant = quant.wrapped_deg(quant)
+
+                else:
+                    k=k+1
+
+        # Mf North amp.
+        elif quant_name == 'Mf_north_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Mf':
+                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    quant = ampN
+                else:
+                    k=k+1
+
+        # Mf North phase.
+        elif quant_name == 'Mf_north_displacement_phase':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Mf':
+                    phaseN = self.velo_amp_to_dis_amp(t_vec[3+k*6+4],tide_name)
+                    quant = self.rad2deg(phaseN)
+                    quant = self.wrapped_deg(quant)
+
+                else:
+                    k=k+1
+
+
+        # M2 lumped horizontal displacement amplitude.
+        elif quant_name == 'M2_horizontal_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'M2':
+                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
+                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    quant = np.sqrt(ampE**2 + ampN**2)
+                else:
+                    k=k+1
+
+        # M2 East amp.
+        elif quant_name == 'M2_east_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'M2':
+                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
+                    quant = ampE
+                else:
+                    k=k+1
+
+
+        # M2 East phase.
+        elif quant_name == 'M2_east_displacement_phase':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'M2':
+                    phaseE=self.velo_phase_to_dis_phase(t_vec[3+k*6+3],tide_name)
+
+                    quant = self.rad2deg(phaseE)
+                    quant = quant.wrapped_deg(quant)
+
+                else:
+                    k=k+1
+
+        # M2 North amp.
+        elif quant_name == 'M2_north_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'M2':
+                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    quant = ampN
+                else:
+                    k=k+1
+
+        # M2 North phase.
+        elif quant_name == 'M2_north_displacement_phase':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'M2':
+                    phaseN = self.velo_amp_to_dis_amp(t_vec[3+k*6+4],tide_name)
+                    quant = self.rad2deg(phaseN)
+                    quant = self.wrapped_deg(quant)
+
+                else:
+                    k=k+1
+
+        # O1 lumped horizontal displacement amplitude.
+        elif quant_name == 'O1_horizontal_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'O1':
+                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
+                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    quant = np.sqrt(ampE**2 + ampN**2)
+                else:
+                    k=k+1
+
+        # O1 East amp.
+        elif quant_name == 'O1_east_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'O1':
+                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
+                    quant = ampE
+                else:
+                    k=k+1
+
+
+        # O1 East phase.
+        elif quant_name == 'O1_east_displacement_phase':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'O1':
+                    phaseE=self.velo_phase_to_dis_phase(t_vec[3+k*6+3],tide_name)
+
+                    quant = self.rad2deg(phaseE)
+                    quant = quant.wrapped_deg(quant)
+
+                else:
+                    k=k+1
+
+        # O1 North amp.
+        elif quant_name == 'O1_north_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'O1':
+                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    quant = ampN
+                else:
+                    k=k+1
+
+        # O1 North phase.
+        elif quant_name == 'O1_north_displacement_phase':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'O1':
+                    phaseN = self.velo_amp_to_dis_amp(t_vec[3+k*6+4],tide_name)
+                    quant = self.rad2deg(phaseN)
+                    quant = self.wrapped_deg(quant)
+
+                else:
+                    k=k+1
+
+
+        ##################################################################3
+        # Up component
 
         # O1 Up amp.
         elif quant_name == 'O1_up_displacement_amplitude':
@@ -1343,13 +1581,31 @@ class fourdvel(basics):
                     quant = np.sqrt(ampU**2)
                 else:
                     k=k+1
-        # O1 Up phase.
+        
+        # O1 Up phase. (only on ice shelves)
         elif quant_name == 'O1_up_displacement_phase':
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'O1':
-                    phaseU = self.velo_phase_to_dis_phase(t_vec[3+k*6+5],tide_name)
-                    quant = phaseU
+                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    thres = 0.1
+
+                    if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq') :
+                        value = t_vec[3+k*6+5]
+
+                        if state in [ 'true','est']:
+                            phaseU=self.velo_phase_to_dis_phase(value, tide_name)
+                            quant = self.rad2deg(phaseU)
+                            quant = self.wrapped_deg(quant)
+                            quant = self.deg2minute(quant, tide_name)
+                        elif state in ['uq']:
+                            quant = value
+                            quant = self.rad2deg(quant)
+                            quant = self.deg2minute(quant,tide_name)
+
+
+                    else:
+                        quant = np.nan
                 else:
                     k=k+1
 
@@ -1367,8 +1623,25 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'M2':
-                    phaseU = self.velo_phase_to_dis_phase(t_vec[3+k*6+5],tide_name)
-                    quant = phaseU
+                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    thres = 0.3
+
+                    if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
+                        value = t_vec[3+k*6+5]
+
+                        if state in [ 'true','est']:
+                            phaseU=self.velo_phase_to_dis_phase(value, tide_name)
+                            quant = self.rad2deg(phaseU)
+                            quant = self.wrapped_deg(quant)
+                            quant = self.deg2minute(quant, tide_name)
+                        elif state in ['uq']:
+                            quant = value
+                            quant = self.rad2deg(quant)
+                            quant = self.deg2minute(quant,tide_name)
+                    
+                    else:
+                        quant = np.nan
+
                 else:
                     k=k+1
 

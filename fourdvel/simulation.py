@@ -125,23 +125,16 @@ class simulation(basics):
 
         # Rutford data.
         self.tidesRut = ['K2','S2','M2','K1','P1','O1','Mf','Msf','Mm','Ssa','Sa']
+        tidesRut = self.tidesRut
+
         self.tidesRut_params = {}
         tidesRut_params = self.tidesRut_params
 
-        # Velocity
+        ###############################################
+        # Actual parameters from Murray (2007)
         # First two columns are horizontal responses. (amplitude cm/d)
         # Last two columns are vertical forcings. (amplitude cm)
         
-        tidesRut = ['K2','S2','M2','K1','P1','O1','Mf','Msf','Mm','Ssa','Sa']
-
-        # Original data from paper.
-        # Horizontal: assume this corresponds to 1 meter /day.
-        self.ref_speed = 1
-        # Vertical: assume the vertical scale.
-        self.verti_scale = 1
-
-        ###############################################
-        # Actual parameters from Murray (2007)
         #tidesRut_params['K2'] =    [3.91,   163,    29.1,   99  ]
         #tidesRut_params['S2'] =    [4.56,   184,    101.6,  115 ]
         #tidesRut_params['M2'] =    [3.15,   177,    156.3,  70  ]
@@ -164,47 +157,83 @@ class simulation(basics):
         #    #tidesRut_params[tide_name][3] = tidesRut_params[tide_name][3]
         
         ###############################################
-        # Displacement.        
-        tidesRut_params['K2'] =    [0.31,  163,    29.1,   99]
-        tidesRut_params['S2'] =    [0.363, 184,    101.6,  115]
-
-        tidesRut_params['M2'] =    [0.259, 177,    156.3,  70] # M2
-
-        tidesRut_params['K1'] =    [0.19,  79,     49,     73]
-        tidesRut_params['P1'] =    [0.24,  77.0,   16.6,   64]
-
-        tidesRut_params['O1'] =    [0.264, 81.0,   43,     54]  # O1
-        tidesRut_params['Mf'] =    [2.54,  250.0,  2.9,    163] # Mf
-        tidesRut_params['Msf'] =   [13.28, 18.8,   0.3,    164] # Msf
-
-        tidesRut_params['Mm'] =    [5.04,  253.0,  1.6,    63]
-        tidesRut_params['Ssa'] =   [26.74, 256.0,  1.5,    179]
-        tidesRut_params['Sa'] =    [19.18, 273.0,  0.2,    179]
 
 
-        # New model.
-        # 1. Scale the vertical motion.
-        coe = 2/3
-        # 2. Add horizontal M2 on ice shelves.
+        # Horizontal: assume this corresponds to 1 meter /day.
+        self.ref_speed = 1
+        # Vertical: assume the vertical scale.
+        self.verti_scale = 1
+
+        # Models are represented in displacement.
+
+        model_num = 3
+
+        if model_num == 1:
+
+            # Model 1
+            # Displacement.        
+            tidesRut_params['K2'] =    [0.31,  163,    29.1,   99]
+            tidesRut_params['S2'] =    [0.363, 184,    101.6,  115]
+            tidesRut_params['M2'] =    [0.259, 177,    156.3,  70] # M2
+
+            tidesRut_params['K1'] =    [0.19,  79,     49,     73]
+            tidesRut_params['P1'] =    [0.24,  77.0,   16.6,   64]
+
+            tidesRut_params['O1'] =    [0.264, 81.0,   43,     54]  # O1
+            tidesRut_params['Mf'] =    [2.54,  250.0,  2.9,    163] # Mf
+            tidesRut_params['Msf'] =   [13.28, 18.8,   0.3,    164] # Msf
+
+            tidesRut_params['Mm'] =    [5.04,  253.0,  1.6,    63]
+            tidesRut_params['Ssa'] =   [26.74, 256.0,  1.5,    179]
+            tidesRut_params['Sa'] =    [19.18, 273.0,  0.2,    179]
+
+        if model_num == 2:
+
+            # Model 2.
+            # 1. Scale the vertical motion.
+            coe = 2/3
+            # 2. Add horizontal M2 on ice shelves.
  
-        tidesRut_params['K2'] =    [0.31,  163,    29.1*coe,   99]
-        tidesRut_params['S2'] =    [0.363, 184,    101.6*coe,  115]
+            tidesRut_params['K2'] =    [0.31,  163,    29.1*coe,   99]
+            tidesRut_params['S2'] =    [0.363, 184,    101.6*coe,  115]
 
-        tidesRut_params['M2'] =    [0.259, 177,    156.3*coe,  70] # M2
+            tidesRut_params['M2'] =    [0.259, 177,    156.3*coe,  70] # M2
 
-        tidesRut_params['K1'] =    [0.19,  79,     49*coe,     73]
-        tidesRut_params['P1'] =    [0.24,  77.0,   16.6*coe,   64]
+            tidesRut_params['K1'] =    [0.19,  79,     49*coe,     73]
+            tidesRut_params['P1'] =    [0.24,  77.0,   16.6*coe,   64]
 
-        tidesRut_params['O1'] =    [0.264, 81.0,   43*coe,     54]  # O1
-        tidesRut_params['Mf'] =    [2.54,  250.0,  2.9*coe,    163] # Mf
-        tidesRut_params['Msf'] =   [13.28, 18.8,   0.3*coe,    164] # Msf
+            tidesRut_params['O1'] =    [0.264, 81.0,   43*coe,     54]  # O1
+            tidesRut_params['Mf'] =    [2.54,  250.0,  2.9*coe,    163] # Mf
+            tidesRut_params['Msf'] =   [13.28, 18.8,   0.3*coe,    164] # Msf
 
-        tidesRut_params['Mm'] =    [5.04,  253.0,  1.6*coe,    63]
-        tidesRut_params['Ssa'] =   [26.74, 256.0,  1.5*coe,    179]
-        tidesRut_params['Sa'] =    [19.18, 273.0,  0.2*coe,    179]
+            tidesRut_params['Mm'] =    [5.04,  253.0,  1.6*coe,    63]
+            tidesRut_params['Ssa'] =   [26.74, 256.0,  1.5*coe,    179]
+            tidesRut_params['Sa'] =    [19.18, 273.0,  0.2*coe,    179]
 
+        if model_num == 3:
 
+            # Model 3, increase the horizontal amplitude of M2 and O1
+            # 1. Scale the vertical motion.
+            coe = 2/3
+            # 2. Add horizontal M2 on ice shelves.
+ 
+            tidesRut_params['K2'] =    [0.31,  163,    29.1*coe,   99]
+            tidesRut_params['S2'] =    [0.363, 184,    101.6*coe,  115]
 
+            tidesRut_params['M2'] =    [10.00, 177,    156.3*coe,  70] # M2
+
+            tidesRut_params['K1'] =    [0.19,  79,     49*coe,     73]
+            tidesRut_params['P1'] =    [0.24,  77.0,   16.6*coe,   64]
+
+            tidesRut_params['O1'] =    [4.00, 81.0,   43*coe,     54]  # O1
+            tidesRut_params['Mf'] =    [2.54,  250.0,  2.9*coe,    163] # Mf
+            tidesRut_params['Msf'] =   [13.28, 18.8,   0.3*coe,    164] # Msf
+
+            tidesRut_params['Mm'] =    [5.04,  253.0,  1.6*coe,    63]
+            tidesRut_params['Ssa'] =   [26.74, 256.0,  1.5*coe,    179]
+            tidesRut_params['Sa'] =    [19.18, 273.0,  0.2*coe,    179]
+
+        ###############################################################      
         # Convert displacement to velocity.
         for tide_name in tidesRut_params.keys():
             tidesRut_params[tide_name][0] = self.dis_amp_to_velo_amp(
@@ -227,10 +256,15 @@ class simulation(basics):
  
         #print(tidesRut_params)
 
+        ##################################################################
+
         # Included constituents in synthetic data.
+        #self.syn_tidesRut = []
         #self.syn_tidesRut = ['M2','O1','Msf']
         #self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Mf','Msf']
         self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Msf','Mf','Mm','Ssa','Sa']
+
+
 
     def true_tide_vec_set(self, point_set, secular_v_set, modeling_tides, tide_amp_set, tide_phase_set):
         

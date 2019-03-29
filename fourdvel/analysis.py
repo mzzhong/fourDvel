@@ -18,6 +18,8 @@ class analysis(fourdvel):
 
         super(analysis,self).__init__()
 
+        self.get_grid_set_velo()
+
         test_id = self.test_id
         result_folder = '/home/mzzhong/insarRoutines/estimations'
         self.this_result_folder = os.path.join(result_folder,str(test_id))
@@ -336,14 +338,14 @@ class analysis(fourdvel):
         self.load_true_est_uq()
 
 
-#        quant_list = [  'secular_horizontal_speed',
-#                        'secular_east_velocity',
-#                        'secular_north_velocity',
-#                        'Msf_horizontal_displacement_amplitude',
-#                        'Msf_east_displacement_amplitude',
-#                        'Msf_north_displacement_amplitude',
-#                        'M2_up_displacement_amplitude',
-#                        'O1_up_displacement_amplitude']
+        quant_list = [  'secular_horizontal_speed',
+                        'secular_east_velocity',
+                        'secular_north_velocity',
+                        'Msf_horizontal_displacement_amplitude',
+                        'Msf_east_displacement_amplitude',
+                        'Msf_north_displacement_amplitude',
+                        'M2_up_displacement_amplitude',
+                        'O1_up_displacement_amplitude']
 
         quant_list = [  'secular_horizontal_speed',
                         'secular_east_velocity',
@@ -351,9 +353,58 @@ class analysis(fourdvel):
                         'secular_up_velocity',
                         'secular_horizontal_velocity',
                         'Msf_horizontal_displacement_amplitude',
-                        'Msf_up_displacement_amplitude',
+                        'Msf_north_displacement_amplitude',
+                        'Msf_north_displacement_phase',
                         'M2_up_displacement_amplitude',
-                        'O1_up_displacement_amplitude']
+                        'M2_up_displacement_phase',
+                        'O1_up_displacement_amplitude',
+                        'O1_up_displacement_phase']
+
+        quant_list = [  'secular_horizontal_speed',
+                        'secular_east_velocity',
+                        'secular_north_velocity',
+                        'secular_up_velocity',
+                        'secular_horizontal_velocity',
+
+                        'Msf_horizontal_displacement_amplitude',
+                        'Msf_north_displacement_amplitude',
+                        'Msf_north_displacement_phase',
+
+                        'Mf_horizontal_displacement_amplitude',
+                        'Mf_north_displacement_amplitude',
+                        'Mf_north_displacement_phase',
+
+                        'M2_up_displacement_amplitude',
+                        'M2_up_displacement_phase',
+                        'O1_up_displacement_amplitude',
+                        'O1_up_displacement_phase']
+
+
+        quant_list = [  'secular_horizontal_speed',
+                        'secular_up_velocity',
+                        'secular_horizontal_velocity',
+
+                        'Msf_horizontal_displacement_amplitude',
+
+                        'Mf_horizontal_displacement_amplitude',
+
+                        'M2_horizontal_displacement_amplitude',
+
+                        'O1_horizontal_displacement_amplitude',
+
+                        'M2_up_displacement_amplitude',
+                        'M2_up_displacement_phase',
+                        'O1_up_displacement_amplitude',
+                        'O1_up_displacement_phase']
+
+
+
+#        quant_list = [
+#                        'M2_up_displacement_amplitude',
+#                        'M2_up_displacement_phase',
+#                        'O1_up_displacement_amplitude',
+#                        'O1_up_displacement_phase']
+#
 
         #quant_list = ['secular_horizontal_velocity']
 
@@ -362,6 +413,7 @@ class analysis(fourdvel):
         states['true'] = self.grid_set_true_tide_vec
         states['est'] = self.grid_set_tide_vec
         states['uq'] = self.grid_set_tide_vec_uq
+
 
         # Look through the sets
         for state in states.keys():
@@ -396,29 +448,42 @@ class analysis(fourdvel):
                 # For "true", there is no output_keys in test_mode 3.
 
                 # For all available points in grid_set.
+                center = 0
+                count = 0
                 for point in output_keys:
                 
-                    # Only record valid points.
+                    # Only record points where inverse problem can be done, Cm_p exists.
                     if not np.isnan(this_grid_set[point][0,0]):
                         # It is possible that some tides are not in the model. This is taken care of in the called method.
-                        quant = self.tide_vec_to_quantity(tide_vec = this_grid_set[point],quant_name = quant_name)
+                        quant = self.tide_vec_to_quantity(tide_vec = this_grid_set[point],quant_name = quant_name, point=point, state=state)
 
-                        # Record everything, including nan.
+                        # Record everything, if Cm_p exists, including nan futher filtered by tide_vec_to_quantity.
                         grid_set_quant[point] = quant
+
+                        if (state=='true' or state=='est') and 'phase' in quant_name and not np.isnan(quant):
+                            count = count + 1
+                            center = center + quant
+
+                # Correction for mean phase.
+                if (state == 'true' or state=='est') and 'phase' in quant_name and count > 0:
+                    center = center/count
+                    for point in grid_set_quant.keys():
+                        grid_set_quant[point] = grid_set_quant[point] - center
+
 
                 # Write to xyz file.
                 xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + quant_name + '.xyz')
                 self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
 
-        return 0
+        return 0                
 
 def main():
     runAna = analysis()
 
     # Analysis the results. 
     runAna.output_estimations()
-    runAna.output_differences(compare_id=535, compare_prefix='true')
-    
+
+    runAna.output_differences(compare_id=620, compare_prefix='true')
     runAna.residual()
 
     #run_ana.parallel_driver()
