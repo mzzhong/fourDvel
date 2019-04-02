@@ -56,8 +56,6 @@ class fourdvel(basics):
 
         self.read_parameters()
 
-
-
     def read_parameters(self):
         
         f = open('params.in')
@@ -560,7 +558,6 @@ class fourdvel(basics):
 
         return 0
 
-
     def preparation(self):
 
         # Get pre-defined grid points and the corresponding tracks and vectors.
@@ -709,7 +706,6 @@ class fourdvel(basics):
 
             delta_td[i] = (offsetfields[i][1] - offsetfields[i][0]).days
 
-           
             for j in range(n_modeling_tides):
 
                 tide_name = modeling_tides[j]
@@ -900,7 +896,6 @@ class fourdvel(basics):
         # From variance to standard deviation (Important!).
         param_uq = np.sqrt(param_uq)
         return param_uq
-
 
     def simple_data_uncertainty_set(self, point_set, data_vec_set, noise_sigma_set):
         
@@ -1170,7 +1165,6 @@ class fourdvel(basics):
             if point == self.test_point:
                 print(resid_of_tides)
                 print(len(resid_of_tides))
-                print(stop)
 
             if not np.isnan(resid_of_tides[0,0]):
                 # range and azimuth

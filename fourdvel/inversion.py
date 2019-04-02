@@ -632,9 +632,6 @@ class inversion(fourdvel):
         resid_of_secular_set, resid_of_tides_set = self.resids_set(point_set, design_mat_set, data_vec_set, model_vec_set)
         print('Residual calculation Done')
 
-        # Display the residual
-        self.display.display_fitting(point_set, data_info_set, design_mat_set, data_vec_set, model_vec_set)
-
         # Convert to tidal params.
         tide_vec_set = self.model_vec_set_to_tide_vec_set(point_set, model_vec_set)
         print('Tide vec set Done')
@@ -645,6 +642,14 @@ class inversion(fourdvel):
         print('Uncertainty set estimation Done')
 
         print('Point set inversion Done')
+
+        print('Start to display...')
+        # Get continous displacement time series
+        #self.continous_signal(self.test_point, tide_vec_set[self.test_point])
+
+        # Display the residual
+        self.display.display_fitting(self.test_point, data_info_set[self.test_point], offsetfields_set[self.test_point], design_mat_set[self.test_point], data_vec_set[self.test_point], model_vec_set[self.test_point], tide_vec_set[self.test_point])
+
 
         ##### Show the results ####
         # Stack the true and inverted models.

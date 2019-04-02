@@ -159,18 +159,109 @@ class display(fourdvel):
         pass
 
 
-    def display_fitting(self,point_set, data_info_set, design_mat_set, data_vec_set, model_vec_set):
+    def display_fitting(self, point, data_info, offsetfields, design_mat, data_vec, model_vec, tide_vec):
 
-        for point in point_set:
-            if point == self.test_point:
-                G = design_mat_set[point]
-                m = model_vec_set[point]
-                pred = np.matmul(G,m)
+        G = design_mat
+        m = model_vec
+        pred = np.matmul(G,m)
+        obs = data_vec
 
-                obs = data_vec_set[point]
+        print(offsetfields)
+        print(tide_vec)
+        print(self.modeling_tides)
+        print(self.n_modeling_tides)
 
-                # Need continuous simulated signal for comparison
+        print('continous prediction')
+        t_axis = np.arange(-600,600,0.0005)
 
+        con_pred = np.zeros(shape=t_axis.shape)
+
+        for k, tide_name in enumerate(self.modeling_tides):
+            for t in range(3):
+                if t==2:
+                    ampU = tide_vec[3+k*6+t]
+                    phaseU = tide_vec[3+k*6+t+3]
+                    omega = 2*np.pi / self.tide_periods[tide_name]
+
+                    dis_ampU = self.velo_amp_to_dis_amp(ampU, tide_name)
+                    dis_phaseU = self.velo_phase_to_dis_phase(phaseU, tide_name)
+
+                    print(tide_name, dis_ampU)
+
+                    con_pred = con_pred + dis_ampU * np.sin(omega*t_axis + dis_phaseU)
+
+        print(stop)
+
+        #################
+        N = len(pred)
+        print(data_info, N)
+        print(offsetfields, len(offsetfields))
+
+        # Get number of tracks.
+        Nt = 0
+        valid_tracks = []
+        for i, info in enumerate(data_info):
+            # Not empty:
+            if info[1]>0:
+                Nt += 1
+                valid_tracks.append(info)
+
+
+        print('valid_tracks: ',valid_tracks)
+        j=0
+        k=0
+        for i, info in enumerate(valid_tracks):
+            k += info[1]
+
+            # Only range offset
+            N = k-j
+
+            #ax = fig.add_subplot(Nt,1,i+1)
+
+            fig = plt.figure(1,figsize=(15,10))
+            # Continous data.
+            ax = fig.add_subplot(211)
+            ax.plot(t_axis, con_pred,color='k')
+            ax.set_xlim([0,self.tide_periods['Msf']])
+            ax.set_xlim([0,60])
+
+            ax = fig.add_subplot(212)
+            for i, offsetfield in enumerate(offsetfields[j:k]):
+
+                t_a = (offsetfield[0] - self.t_origin.date()).days + offsetfields[i][4]
+                t_b = (offsetfield[1] - self.t_origin.date()).days + offsetfields[i][4]
+
+                pred_offset = pred[(j+i)*2]
+                obs_offset = obs[(j+i)*2]
+
+                misfit = abs(pred_offset - obs_offset)
+
+                t_a = t_a % self.tide_periods['Msf']
+                t_b = t_b % self.tide_periods['Msf']
+
+                if t_a < t_b:
+                    ax.plot([t_a,t_b],[misfit,misfit],'k')
+                else:
+                    ax.plot([t_a,self.tide_periods['Msf']],[misfit,misfit],'k')
+                    ax.plot([0,t_b],[misfit,misfit],'k')
+            
+            ax.set_xlim([0,self.tide_periods['Msf']])
+
+            # Show the dates.
+            # Show the data
+            #ax.plot(range(N), pred[2*j:2*k:2], color='r', marker='.', markersize=5, linestyle='', label='pred')
+            #ax.plot(range(N),obs[2*j:2*k:2],color='k',marker='.', markersize=5, linestyle='', label='obs')
+            #ax.legend(loc=1)
+
+            title = str(info[0][0])+'_'+str(info[0][1])
+            ax.set_title(title)
+
+            j+= info[1]
+
+            fig.savefig(title + '.png')
+            plt.close()
+
+        print(stop)
                 
 
     def display_vecs(self, stacked_vecs, row_names, column_names, label):
