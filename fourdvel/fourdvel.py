@@ -30,7 +30,7 @@ from basics import basics
 
 class fourdvel(basics):
 
-    def __init__(self):
+    def __init__(self, param_file='params.in'):
 
         super(fourdvel,self).__init__()
 
@@ -54,11 +54,11 @@ class fourdvel(basics):
         self.glfile = '/home/mzzhong/links/jokull-nobak-net/Ant_Data/GL_Points_Evans.txt'
         self.design_mat_folder = './design_mat'
 
-        self.read_parameters()
+        self.read_parameters(param_file)
 
-    def read_parameters(self):
+    def read_parameters(self, param_file):
         
-        f = open('params.in')
+        f = open(param_file)
 
         fmt = '%Y%m%d'
 
@@ -210,6 +210,17 @@ class fourdvel(basics):
 
         t7 = datetime.time(5,6,30)
         track_timefraction[('s1',7)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+
+
+        # new tracks
+        t50 = datetime.time(3,53,40)
+        track_timefraction[('s1',50)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+
+        t64 = datetime.time(2,57,0)
+        track_timefraction[('s1',64)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+
+        t49 = datetime.time(2,16,0)
+        track_timefraction[('s1',49)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
 
         #print(track_timefraction)
 
@@ -394,7 +405,10 @@ class fourdvel(basics):
             offset_id['csk'] = 20180712
 
             directory['s1'] = '/net/jokull/nobak/mzzhong/S1-Evans'
-            tracklist['s1'] = [37, 52, 169, 65, 7]
+
+            # update 20190702
+            tracklist['s1'] = [37, 52, 169, 65, 7, 50, 64, 49]
+
             offset_id['s1'] = 20180703
 
             for sate in satellites:
@@ -717,7 +731,6 @@ class fourdvel(basics):
 
         n_rows = n_offsets * 2 # Each offset corresponds to a vector.
 
-        
         if horizontal == False:
             # E, N, U components.
             n_cols = 3 + n_modeling_tides * 6 # cosE, cosN, cosU and sinE, sinN, sinU.
@@ -741,7 +754,7 @@ class fourdvel(basics):
                 # Secular component.
                 row[0:3] = vector * delta_td[i]
                 
-                # Tidal components.
+                # Tidal components. (Projection)
                 for k in range(n_modeling_tides):
                     row[3*(2*k+1):3*(2*k+2)] = vector * delta_cos[i,k]
                     row[3*(2*k+2):3*(2*k+3)] = vector * delta_sin[i,k]
@@ -751,6 +764,113 @@ class fourdvel(basics):
 
         return G
         # End of building.
+
+
+    def build_G_ENU_set(self, point_set, offsetfields_set):
+        
+        design_mat_set = {}
+        for point in point_set:
+            offsetfields = offsetfields_set[point]
+            design_mat_set[point] = self.build_G_ENU(offsetfields=offsetfields)
+
+        return design_mat_set
+
+    def build_G_ENU(self, point=None, tracks=None, offsetfields=None, horizontal = False):
+
+        if point is not None:
+            
+            lon,lat = point
+
+        if tracks is None and offsetfields is None:
+            print('Please provide data info on this grid point')
+            return
+
+        elif tracks is not None:
+            # Only track info is provided. Using data catalog.
+            offsetfields = self.tracks_to_full_offsetfields(tracks)
+        
+        elif offsetfields is not None:
+            # real offsetfields are provided.
+            pass
+
+        # Control the number of offsetfields
+        n_offsets = len(offsetfields)
+
+        # No offsetfield in available.
+        if n_offsets ==0:
+            G = np.zeros(shape=(1,1)) + np.nan
+            return G 
+
+        ###############################################################
+
+        ## Build the G matrix
+        modeling_tides = self.modeling_tides
+        n_modeling_tides = self.n_modeling_tides
+        tide_periods = self.tide_periods
+
+        t_origin = self.t_origin.date()
+
+        # Build up delta_td, delta_cos and delta_sin.
+        delta_td = np.zeros(shape=(n_offsets,))
+        delta_cos = np.zeros(shape=(n_offsets,n_modeling_tides))
+        delta_sin = np.zeros(shape=(n_offsets,n_modeling_tides))
+        
+        for i in range(n_offsets):
+
+            #print(offsetfields[i][4])
+
+            t_a = (offsetfields[i][0] - t_origin).days + offsetfields[i][4]
+            t_b = (offsetfields[i][1] - t_origin).days + offsetfields[i][4]
+
+            delta_td[i] = (offsetfields[i][1] - offsetfields[i][0]).days
+
+            for j in range(n_modeling_tides):
+
+                tide_name = modeling_tides[j]
+
+                omega = 2 * np.pi / tide_periods[tide_name]
+            
+                delta_cos[i,j] = np.cos(omega*t_b) - np.cos(omega*t_a)
+                delta_sin[i,j] = np.sin(omega*t_b) - np.sin(omega*t_a)
+
+        n_rows = n_offsets * 3 # Three components
+
+        if horizontal == False:
+            # E, N, U components.
+            n_cols = 3 + n_modeling_tides * 6 # cosE, cosN, cosU and sinE, sinN, sinU.
+        else:
+            # Only the E, N components.
+            n_cols = 3 + n_modeling_tides * 4 # cosE, cosN, sinE, sinN, Not finished below.
+        
+        ## G formation.
+        G = np.zeros(shape=(n_rows,n_cols))
+
+        # E, N, U Three components
+        for i in range(n_offsets):
+            vecs = [(1,0,0),(0,1,0),(0,0,1)]
+
+            # The observation vectors.
+            for j in range(3):
+                vector = np.asarray(vecs[j])
+
+                # Row entries of the observation.
+                row = np.zeros(shape=(n_cols,))
+
+                # Secular component.
+                row[0:3] = vector * delta_td[i]
+                
+                # Tidal components. (Projection)
+                for k in range(n_modeling_tides):
+                    row[3*(2*k+1):3*(2*k+2)] = vector * delta_cos[i,k]
+                    row[3*(2*k+2):3*(2*k+3)] = vector * delta_sin[i,k]
+
+                # Put them in into G.
+                G[i*3+j,:] = row
+
+        return G
+        # End of building.
+
+
 
     def model_vec_set_to_tide_vec_set(self, point_set, model_vec_set):
         tide_vec_set = {}

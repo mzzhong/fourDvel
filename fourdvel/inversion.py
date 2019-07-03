@@ -603,7 +603,12 @@ class inversion(fourdvel):
         design_mat_set = self.build_G_set(point_set, offsetfields_set=offsetfields_set)
 
         #print("Design matrix set (G)\n:", design_mat_set[self.test_point])
-        print("Design matrix set Done")
+        print("Design matrix (obs) set Done")
+
+        design_mat_enu_set = self.build_G_ENU_set(point_set, offsetfields_set=offsetfields_set)
+
+        #print("Design matrix set (G)\n:", design_mat_set[self.test_point])
+        print("Design matrix (enu) set Done")
  
         # Model prior.
         invCm_set = self.model_prior_set(point_set, horizontal = self.horizontal_prior)
@@ -616,12 +621,6 @@ class inversion(fourdvel):
 
         # Show the model posterior.
         #self.display.show_model_mat(Cm_p_set[self.test_point])
-        #print(stop)
-
-        # Analysis of the model_posterior
-        #others_set = self.model_analysis(point_set, Cm_p_set)
-        others_set = {}
-        print('Model posterior set analysis Done')
 
         ### Inversion ###
         # Estimate model params.
@@ -647,8 +646,13 @@ class inversion(fourdvel):
         # Get continous displacement time series
         #self.continous_signal(self.test_point, tide_vec_set[self.test_point])
 
-        # Display the residual
-        self.display.display_fitting(self.test_point, data_info_set[self.test_point], offsetfields_set[self.test_point], design_mat_set[self.test_point], data_vec_set[self.test_point], model_vec_set[self.test_point], tide_vec_set[self.test_point])
+        # Display the misfit
+        self.analysis = analysis()
+        self.analysis.test_point = self.test_point
+
+        # Close other_set_1
+        other_set_1 = {} 
+        #other_set_1 = self.analysis.check_fitting_set(point_set, data_info_set, offsetfields_set, design_mat_set, design_mat_enu_set, data_vec_set, model_vec_set, tide_vec_set)
 
 
         ##### Show the results ####
@@ -670,8 +674,17 @@ class inversion(fourdvel):
                 column_names = ['Secular'] + self.modeling_tides
 
             self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
-        
-        return (true_tide_vec_set, tide_vec_set, tide_vec_uq_set, resid_of_secular_set, resid_of_tides_set, others_set)
+
+        # Record and return
+        all_sets = {}
+        all_sets['true_tide_vec_set'] =  true_tide_vec_set
+        all_sets['tide_vec_set'] = tide_vec_set
+        all_sets['tide_vec_uq_set'] = tide_vec_uq_set
+        all_sets['resid_of_secular_set'] = resid_of_secular_set
+        all_sets['resid_of_tides_set'] = resid_of_tides_set
+        all_sets['other_set_1'] = other_set_1
+
+        return all_sets
 
     def chop_into_threads(self, total_number, nthreads):
 
@@ -715,13 +728,8 @@ class inversion(fourdvel):
 
                     break
         
-    def driver_serial_tile(self, start_tile=None, stop_tile=None, use_threading = False,
-                                                    grid_set_true_tide_vec=None,
-                                                    grid_set_tide_vec=None,
-                                                    grid_set_tide_vec_uq=None,
-                                                    grid_set_resid_of_secular=None,
-                                                    grid_set_resid_of_tides=None,
-                                                    grid_set_others=None):
+    def driver_serial_tile(self, start_tile=None, stop_tile=None, use_threading = False, all_grid_sets=None):
+        
         # Input information.
         tile_set = self.tile_set
         grid_set = self.grid_set 
@@ -735,7 +743,7 @@ class inversion(fourdvel):
             grid_set_tide_vec_uq = {}
             grid_set_resid_of_secular = {}
             grid_set_resid_of_tides = {}
-            grid_set_others = {}
+            grid_set_other_1 = {}
 
             start_tile = 0
             stop_tile = 10**5
@@ -750,13 +758,13 @@ class inversion(fourdvel):
             lon, lat = tile
             
             # Run all in serial.
-            #if (count_tile >= start_tile and count_tile < stop_tile): 
+            if (count_tile >= start_tile and count_tile < stop_tile): 
             
             #if (count_tile >= start_tile and count_tile < stop_tile and 
             #                                            count_tile % 2 == 1):
 
             # Only run this example tile.
-            if count_tile >= start_tile and count_tile < stop_tile and tile == (-77, -76.6):
+            #if count_tile >= start_tile and count_tile < stop_tile and tile == (-77, -76.6):
 
             # Debug this tile.
             #if count_tile >= start_tile and count_tile < stop_tile and tile == (-84.0, -76.2):
@@ -780,23 +788,19 @@ class inversion(fourdvel):
                 self.test_point = point_set[0] 
                 
                 # Obtain the real data.
-                (true_tide_vec_set, 
-                tide_vec_set, 
-                tide_vec_uq_set,
-                resid_of_secular_set,
-                resid_of_tides_set,
-                others_set)  = self.point_set_tides(point_set = point_set, tracks_set = tracks_set)
+                all_sets  = self.point_set_tides(point_set = point_set, tracks_set = tracks_set)
 
                 # Update.
-                if true_tide_vec_set is not None:
-                    grid_set_true_tide_vec.update(true_tide_vec_set)
+                if all_sets['true_tide_vec_set'] is not None:
+                    all_grid_sets['grid_set_true_tide_vec'].update(all_sets['true_tide_vec_set'])
 
-                grid_set_tide_vec.update(tide_vec_set)
-                grid_set_tide_vec_uq.update(tide_vec_uq_set)
-                grid_set_resid_of_secular.update(resid_of_secular_set)
-                grid_set_resid_of_tides.update(resid_of_tides_set)
-                grid_set_others.update(others_set)
+                all_grid_sets['grid_set_tide_vec'].update(all_sets['tide_vec_set'])
+                all_grid_sets['grid_set_tide_vec_uq'].update(all_sets['tide_vec_uq_set'])
+                all_grid_sets['grid_set_resid_of_secular'].update(all_sets['resid_of_secular_set'])
+                all_grid_sets['grid_set_resid_of_tides'].update(all_sets['resid_of_tides_set'])
+                all_grid_sets['grid_set_other_1'].update(all_sets['other_set_1'])
 
+                #print('other_set_1: ', all_sets['other_set_1'])
 
                 count_run = count_run + 1
 
@@ -862,28 +866,31 @@ class inversion(fourdvel):
         # The function to run every chunk.
         func = self.driver_serial_tile
 
+        # Setup the array.
         manager = multiprocessing.Manager()
-        grid_set_true_tide_vec = manager.dict()
-        grid_set_tide_vec = manager.dict()
-        grid_set_tide_vec_uq = manager.dict()
+        
+        #grid_set_true_tide_vec = manager.dict()
+        #grid_set_tide_vec = manager.dict()
+        #grid_set_tide_vec_uq = manager.dict()
+        #grid_set_resid_of_secular = manager.dict()
+        #grid_set_resid_of_tides = manager.dict()
+        #grid_set_other_1 = manager.dict()
 
-        grid_set_resid_of_secular = manager.dict()
-        grid_set_resid_of_tides = manager.dict()
+        all_grid_sets = {}
+        all_grid_sets['grid_set_true_tide_vec'] = manager.dict()
+        all_grid_sets['grid_set_tide_vec'] = manager.dict()
+        all_grid_sets['grid_set_tide_vec_uq'] = manager.dict()
+        all_grid_sets['grid_set_resid_of_secular'] = manager.dict()
+        all_grid_sets['grid_set_resid_of_tides'] = manager.dict()
+        all_grid_sets['grid_set_other_1'] = manager.dict()
 
-        grid_set_others = manager.dict()
-
-
+        
         jobs=[]
         for ip in range(nthreads):
             start_tile = divide[ip]
             stop_tile = divide[ip+1]
             p=multiprocessing.Process(target=func, args=(start_tile, stop_tile, True,
-                                                    grid_set_true_tide_vec,
-                                                    grid_set_tide_vec,
-                                                    grid_set_tide_vec_uq, 
-                                                    grid_set_resid_of_secular,
-                                                    grid_set_resid_of_tides,
-                                                    grid_set_others))
+                                                    all_grid_sets))
             jobs.append(p)
             p.start()
 
@@ -891,15 +898,15 @@ class inversion(fourdvel):
             jobs[ip].join()
 
         # Save the results.
-        self.grid_set_true_tide_vec = dict(grid_set_true_tide_vec)
-        self.grid_set_tide_vec = dict(grid_set_tide_vec)
-        self.grid_set_tide_vec_uq = dict(grid_set_tide_vec_uq)
+        self.grid_set_true_tide_vec = dict(all_grid_sets['grid_set_true_tide_vec'])
+        self.grid_set_tide_vec = dict(all_grid_sets['grid_set_tide_vec'])
+        self.grid_set_tide_vec_uq = dict(all_grid_sets['grid_set_tide_vec_uq'])
 
-        self.grid_set_resid_of_secular = dict(grid_set_resid_of_secular)
-        self.grid_set_resid_of_tides = dict(grid_set_resid_of_tides)
-        self.grid_set_others = dict(grid_set_others) 
+        self.grid_set_resid_of_secular = dict(all_grid_sets['grid_set_resid_of_secular'])
+        self.grid_set_resid_of_tides = dict(all_grid_sets['grid_set_resid_of_tides'])
+        self.grid_set_other_1 = dict(all_grid_sets['grid_set_other_1'])
 
-            ## end of dict.
+        ## end of dict.
 
         test_id = self.test_id
         result_folder = '/home/mzzhong/insarRoutines/estimations'
@@ -931,8 +938,8 @@ class inversion(fourdvel):
             pickle.dump(self.grid_set_resid_of_tides, f)
 
         with open(this_result_folder + '/' 
-                    + str(test_id) + '_' + 'grid_set_others.pkl','wb') as f:
-            pickle.dump(self.grid_set_others, f)
+                    + str(test_id) + '_' + 'grid_set_other_1.pkl','wb') as f:
+            pickle.dump(self.grid_set_other_1, f)
 
         return 0
 
@@ -1029,8 +1036,8 @@ def main():
     #fourd_inv.driver_serial()
     
     # Tile set.
-    fourd_inv.driver_serial_tile()
-    #fourd_inv.driver_parallel_tile()
+    #fourd_inv.driver_serial_tile()
+    fourd_inv.driver_parallel_tile()
 
     print('All finished!')
 

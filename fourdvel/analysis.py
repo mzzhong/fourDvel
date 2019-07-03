@@ -12,23 +12,13 @@ from display import display
 
 import utm
 
+import matplotlib.pyplot as plt
+
 class analysis(fourdvel):
 
     def __init__(self):
 
         super(analysis,self).__init__()
-
-        self.get_grid_set_velo()
-
-        test_id = self.test_id
-        result_folder = '/home/mzzhong/insarRoutines/estimations'
-        self.this_result_folder = os.path.join(result_folder,str(test_id))
-
-        self.display = display() 
-
-        with open(self.this_result_folder + '/' 
-                    + str(test_id) + '_' + 'grid_set_tide_vec.pkl','rb') as f:
-            self.grid_set_tide_vec = pickle.load(f)
 
     def chop_into_threads(self, total_number, nthreads):
 
@@ -194,300 +184,173 @@ class analysis(fourdvel):
 
         self.display.write_dict_to_xyz(grid_set_I2, xyz_name = xyz_name)
 
-    def residual(self):
 
-        this_result_folder = self.this_result_folder
-        test_id = self.test_id
+######################
 
-        with open(this_result_folder + '/' 
-                    + str(test_id) + '_' + 'grid_set_resid_of_secular.pkl','rb') as f:
-            self.grid_set_resid_of_secular = pickle.load(f)
+    def check_fitting_set(self, point_set, data_info_set, offsetfields_set, design_mat_set, design_mat_enu_set, data_vec_set, model_vec_set, tide_vec_set):
 
-        with open(this_result_folder + '/' 
-                    + str(test_id) + '_' + 'grid_set_resid_of_tides.pkl','rb') as f:
-            self.grid_set_resid_of_tides = pickle.load(f)
+        fitting_set={}
+        
+        for i, point in enumerate(point_set):
+            #G = design_mat_set[point]
+            m = model_vec_set[point]
+            # G is valid
+            if not np.isnan(m[0,0]):
+                fitting_set[point] = self.check_fitting(point, data_info_set[point], offsetfields_set[point], design_mat_set[point], design_mat_enu_set[point], data_vec_set[point], model_vec_set[point], tide_vec_set[point])
+            else:
+                fitting_set[point] = np.nan
+
+        return fitting_set
+
+    def check_fitting(self, point, data_info, offsetfields, design_mat, design_mat_enu, data_vec, model_vec, tide_vec):
+
+        G = design_mat
+        G_enu = design_mat_enu
+        
+        m = model_vec
+        pred = np.matmul(G,m)
+        pred_enu = np.matmul(G_enu,m)
+        obs = data_vec
+
+        #print(offsetfields)
+        #print(tide_vec)
+        #print(self.modeling_tides)
+        #print(self.n_modeling_tides)
+
+        # switch
+        plot = 0
+
+        if plot:
+            #print('continous prediction')
+            t_axis = np.arange(-600,600,0.0005)
+            con_pred = np.zeros(shape=t_axis.shape)
+
+            for k, tide_name in enumerate(self.modeling_tides):
+                for t in range(3):
+                    if t==2:
+                        ampU = tide_vec[3+k*6+t]
+                        phaseU = tide_vec[3+k*6+t+3]
+                        omega = 2*np.pi / self.tide_periods[tide_name]
+    
+                        dis_ampU = self.velo_amp_to_dis_amp(ampU, tide_name)
+                        dis_phaseU = self.velo_phase_to_dis_phase(phaseU, tide_name)
+    
+                        #print(tide_name, dis_ampU)
+    
+                        con_pred = con_pred + dis_ampU * np.sin(omega*t_axis + dis_phaseU)
+
+        #################
+        N = len(pred)
+        #print(data_info, N)
+        #print(offsetfields, len(offsetfields))
+
+        # Get number of tracks.
+        Nt = 0
+        valid_tracks = []
+        for i, info in enumerate(data_info):
+            # Not empty:
+            if info[1]>0:
+                Nt += 1
+                valid_tracks.append(info)
 
 
-        grid_sets = {}
-        grid_sets['resid_of_secular'] = self.grid_set_resid_of_secular
-        grid_sets['resid_of_tides'] = self.grid_set_resid_of_tides
+        #print('valid_tracks: ',valid_tracks)
+        j=0
+        k=0
+        val_container = []
 
-        state = 'est'
-        comps = ['range','azimuth']
+        for i, info in enumerate(valid_tracks):
+            k += info[1]
 
-        for misfit_name in grid_sets.keys():
-            for comp in comps:
+            # Only range offset
+            N = k-j
 
-                quant_name = '_'.join([misfit_name, comp])
-
-                print('Output quantity name: ', quant_name)
-                grid_set_quant = {}
-
-                this_grid_set = grid_sets[misfit_name]
-                output_keys = this_grid_set.keys()
-
-                # For all available points in grid_set.
-                for point in output_keys:
+            if plot:
+                #ax = fig.add_subplot(Nt,1,i+1)
+                fig = plt.figure(1,figsize=(15,10))
+                # Continous data.
+                ax = fig.add_subplot(211)
+                ax.plot(t_axis, con_pred,color='k')
                 
-                    quant = this_grid_set[point]
+                max_len = self.tide_periods['Msf'] 
+                ax.set_xlim([0, max_len])
+                ax = fig.add_subplot(212)
 
-                    if comp == 'range':
-                        grid_set_quant[point] = quant[1] # mean and std
-                    elif comp == 'azimuth':
-                        grid_set_quant[point] = quant[3]
+            for i, offsetfield in enumerate(offsetfields[j:k]):
 
-                # Write to xyz file.
-                xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + quant_name + '.xyz')
-                self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
+                t_a = (offsetfield[0] - self.t_origin.date()).days + offsetfields[i][4]
+                t_b = (offsetfield[1] - self.t_origin.date()).days + offsetfields[i][4]
 
-        return 0
+                ## Vectors.
+                vec_range = offsetfield[2]
+                vec_azimuth = offsetfield[3]
 
-    def load_master_model(self,num,prefix='est'):
+                # horiz of range vec
+                norm = np.sqrt(vec_range[0]**2 + vec_range[1]**2)
+                vec_range_horiz = np.asarray((vec_range[0]/norm, vec_range[1]/norm, 0))
 
-        this_result_folder = self.this_result_folder
-        # Load all the results.
-        if prefix == 'true':
-            filename = '/home/mzzhong/insarRoutines/estimations/'+str(num)+'/'+str(num)+'_grid_set_true_tide_vec.pkl'
-        else:
-            filename = '/home/mzzhong/insarRoutines/estimations/'+str(num)+'/'+str(num)+'_grid_set_tide_vec.pkl'
-           
-        with open(filename,'rb') as f:
-            self.grid_set_master_model_tide_vec = pickle.load(f)
-        return 0
+                #print(vec_range, vec_azimuth, vec_range_horiz)
 
-    def load_slave_model(self,num,prefix='est'):
+                pred_range_offset = pred[(j+i)*2,0]
+                obs_range_offset = obs[(j+i)*2,0]
 
-        this_result_folder = self.this_result_folder
-        # Load all the results.
+                pred_azimuth_offset = pred[(j+i)*2+1,0]
+                obs_azimuth_offset = obs[(j+i)*2+1,0]
 
-        if prefix == 'true':
-            filename = '/home/mzzhong/insarRoutines/estimations/'+str(num)+'/'+str(num)+'_grid_set_true_tide_vec.pkl'
-        else:
-            filename = '/home/mzzhong/insarRoutines/estimations/'+str(num)+'/'+str(num)+'_grid_set_tide_vec.pkl'
- 
-        with open(filename,'rb') as f:
-            self.grid_set_slave_model_tide_vec = pickle.load(f)
-        return 0
+                # Offset projected in (E, N, U) components.
+                pred_e = pred_enu[(j+i)*3,0]
+                pred_n = pred_enu[(j+i)*3+1,0]
+                pred_u = pred_enu[(j+i)*3+2,0]
 
-    def load_true_est_uq(self):
+                offset_enu = np.asarray((pred_e,pred_n,pred_u))
+                #print('offset_enu: ', offset_enu)
 
-        this_result_folder = self.this_result_folder
-        test_id = self.test_id
+                # Offset along the range_horizontal component
+                offset_range_horiz = np.dot(offset_enu,vec_range_horiz)
+                #print('offset_range_horiz: ',offset_range_horiz)
 
-        # Load all the results.
-        with open(this_result_folder + '/' 
-                    + str(test_id) + '_' + 'grid_set_true_tide_vec.pkl','rb') as f:
-            self.grid_set_true_tide_vec = pickle.load(f)
+                # Calculate vertical offset
+                inc_ang = np.arccos(vec_range[2])
+                #print(inc_ang/np.pi*180)
+                offset_vertical_obs = ( obs_range_offset - np.sin(inc_ang) * offset_range_horiz) / np.cos(inc_ang)
 
+                offset_vertical_pred = ( pred_range_offset - np.sin(inc_ang) * offset_range_horiz) / np.cos(inc_ang)
 
-        with open(this_result_folder + '/' 
-                    + str(test_id) + '_' + 'grid_set_tide_vec.pkl','rb') as f:
-            self.grid_set_tide_vec = pickle.load(f)
+                #print('############# offset_vertical_obs: ', offset_vertical_obs)
 
-        with open(this_result_folder + '/' 
-                    + str(test_id) + '_' + 'grid_set_tide_vec_uq.pkl','rb') as f:
-            self.grid_set_tide_vec_uq = pickle.load(f)
+                ###############
+                # Pick the value to plot.
+                misfit = abs(pred_range_offset - obs_range_offset)
+                offset_vertical_diff = offset_vertical_obs - offset_vertical_pred
 
-        return 0
+                show_val = offset_vertical_diff
 
-    def output_differences(self, compare_id, compare_prefix):
+                val_container.append(show_val)
 
-        print('Ouput difference...')
-
-        this_result_folder = self.this_result_folder
-        test_id = self.test_id
-
-        self.load_master_model(test_id)
-        self.load_slave_model(num=compare_id,prefix=compare_prefix)
-
-        self.load_true_est_uq()
-
-        quant_list = [ 'secular_horizontal_velocity_difference' ]
-
-        for quant_name in quant_list:
+                ###############
+                if plot:
+                    t_a = t_a % max_len
+                    t_b = t_b % max_len
+    
+                    if t_a < t_b:
+                        ax.plot([t_a,t_b],[show_val,show_val],'k')
+                    else:
+                        ax.plot([t_a, max_len],[show_val,show_val],'k')
+                        ax.plot([0,t_b],[show_val,show_val],'k')
             
-            print('Output quantity nane: ', quant_name)
-            grid_set_quant = {}
+            if plot:
+                ax.set_xlim([0, max_len])
+                #title = str(info[0][0])+'_'+str(info[0][1])
+                #ax.set_title(title)
+                #fig.savefig(title + '_dif.png')
+                #plt.close()
 
-            if quant_name == 'secular_horizontal_velocity_difference':
-                grid_set_slave = self.grid_set_slave_model_tide_vec
-                grid_set_master = self.grid_set_master_model_tide_vec
+            j+= info[1]
 
-                for point in grid_set_master.keys():
-                    if not np.isnan(grid_set_master[point][0,0]):
-                        quant_master = self.tide_vec_to_quantity(tide_vec = grid_set_master[point],quant_name = "secular_horizontal_velocity_EN")
-                        quant_slave = self.tide_vec_to_quantity(tide_vec = grid_set_slave[point], quant_name = 'secular_horizontal_velocity_EN')
-                        grid_set_quant[point] = np.linalg.norm(quant_master - quant_slave, 2)
+        if plot:
+            fig.savefig('dif_all.png')
 
-                # Write to xyz file.
-                state = 'est'
+        #return np.mean(val_container)
+        return np.std(val_container)
 
-                xyz_name = os.path.join(this_result_folder, '_'.join([str(test_id), state, quant_name, str(compare_id), compare_prefix]) + '.xyz')
-                self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
-
-        return 0
-
-    def output_estimations(self):
-
-        modeling_tides = self.modeling_tides
-        n_modeling_tide = self.n_modeling_tides
-
-        this_result_folder = self.this_result_folder
-        test_id = self.test_id
-
-        self.load_true_est_uq()
-
-
-        quant_list = [  'secular_horizontal_speed',
-                        'secular_east_velocity',
-                        'secular_north_velocity',
-                        'Msf_horizontal_displacement_amplitude',
-                        'Msf_east_displacement_amplitude',
-                        'Msf_north_displacement_amplitude',
-                        'M2_up_displacement_amplitude',
-                        'O1_up_displacement_amplitude']
-
-        quant_list = [  'secular_horizontal_speed',
-                        'secular_east_velocity',
-                        'secular_north_velocity',
-                        'secular_up_velocity',
-                        'secular_horizontal_velocity',
-                        'Msf_horizontal_displacement_amplitude',
-                        'Msf_north_displacement_amplitude',
-                        'Msf_north_displacement_phase',
-                        'M2_up_displacement_amplitude',
-                        'M2_up_displacement_phase',
-                        'O1_up_displacement_amplitude',
-                        'O1_up_displacement_phase']
-
-        quant_list = [  'secular_horizontal_speed',
-                        'secular_east_velocity',
-                        'secular_north_velocity',
-                        'secular_up_velocity',
-                        'secular_horizontal_velocity',
-
-                        'Msf_horizontal_displacement_amplitude',
-                        'Msf_north_displacement_amplitude',
-                        'Msf_north_displacement_phase',
-
-                        'Mf_horizontal_displacement_amplitude',
-                        'Mf_north_displacement_amplitude',
-                        'Mf_north_displacement_phase',
-
-                        'M2_up_displacement_amplitude',
-                        'M2_up_displacement_phase',
-                        'O1_up_displacement_amplitude',
-                        'O1_up_displacement_phase']
-
-
-        quant_list = [  'secular_horizontal_speed',
-                        'secular_up_velocity',
-                        'secular_horizontal_velocity',
-
-                        'Msf_horizontal_displacement_amplitude',
-
-                        'Mf_horizontal_displacement_amplitude',
-
-                        'M2_horizontal_displacement_amplitude',
-
-                        'O1_horizontal_displacement_amplitude',
-
-                        'M2_up_displacement_amplitude',
-                        'M2_up_displacement_phase',
-                        'O1_up_displacement_amplitude',
-                        'O1_up_displacement_phase']
-
-
-
-#        quant_list = [
-#                        'M2_up_displacement_amplitude',
-#                        'M2_up_displacement_phase',
-#                        'O1_up_displacement_amplitude',
-#                        'O1_up_displacement_phase']
-#
-
-        #quant_list = ['secular_horizontal_velocity']
-
-
-        states = {}
-        states['true'] = self.grid_set_true_tide_vec
-        states['est'] = self.grid_set_tide_vec
-        states['uq'] = self.grid_set_tide_vec_uq
-
-
-        # Look through the sets
-        for state in states.keys():
-            
-            print(state)
-            
-            this_grid_set = states[state]
-
-            # Loop through the quantities.
-            for quant_name in quant_list:
-
-                print('Output quantity name: ', quant_name)
-                grid_set_quant = {}
-
-                # Down-sample for velocity vector.
-                if quant_name == 'secular_horizontal_velocity':
-                    output_keys = []
-                    for point in this_grid_set.keys():
-
-                        lon, lat = point
-                        lon_ind = np.round(lon/self.lon_step)
-                        lat_ind = np.round(lat/self.lat_step) 
-
-                        if lon_ind % 10==0 and lat_ind % 10==0:
-                            output_keys.append((lon,lat))
-
-                    output_keys = set(output_keys)
-
-                else:
-                    output_keys = this_grid_set.keys()
-
-                # For "true", there is no output_keys in test_mode 3.
-
-                # For all available points in grid_set.
-                center = 0
-                count = 0
-                for point in output_keys:
-                
-                    # Only record points where inverse problem can be done, Cm_p exists.
-                    if not np.isnan(this_grid_set[point][0,0]):
-                        # It is possible that some tides are not in the model. This is taken care of in the called method.
-                        quant = self.tide_vec_to_quantity(tide_vec = this_grid_set[point],quant_name = quant_name, point=point, state=state)
-
-                        # Record everything, if Cm_p exists, including nan futher filtered by tide_vec_to_quantity.
-                        grid_set_quant[point] = quant
-
-                        if (state=='true' or state=='est') and 'phase' in quant_name and not np.isnan(quant):
-                            count = count + 1
-                            center = center + quant
-
-                # Correction for mean phase.
-                if (state == 'true' or state=='est') and 'phase' in quant_name and count > 0:
-                    center = center/count
-                    for point in grid_set_quant.keys():
-                        grid_set_quant[point] = grid_set_quant[point] - center
-
-
-                # Write to xyz file.
-                xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + quant_name + '.xyz')
-                self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
-
-        return 0                
-
-def main():
-    runAna = analysis()
-
-    # Analysis the results. 
-    runAna.output_estimations()
-
-    runAna.output_differences(compare_id=620, compare_prefix='true')
-    runAna.residual()
-
-    #run_ana.parallel_driver()
-
-if __name__=='__main__':
-    main()
 
