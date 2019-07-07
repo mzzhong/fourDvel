@@ -35,8 +35,6 @@ class inversion(fourdvel):
         self.preparation()
 
 
-
-
     def find_track_data(self, point, track):
 
         from dense_offset import dense_offset
@@ -219,7 +217,7 @@ class inversion(fourdvel):
             fourD_sim = simulation()
             velo_model = self.grid_set_velo[point]
             # Obtain the synthetic ice flow.
-            (t_axis, secular_v, velocity, tide_amp, tide_phase) = fourD_sim.syn_velocity(velo_model=velo_model)
+            (secular_v, tide_amp, tide_phase) = fourD_sim.syn_velocity(velo_model=velo_model)
 
             # Obtain SAR data.
             # Data prior.
@@ -227,7 +225,7 @@ class inversion(fourdvel):
             noise_sigma = self.load_noise_sigma(point)
 
 
-            data_vec = fourD_sim.syn_offsets_data_vec(point=point, t_axis = t_axis, secular_v = secular_v, v = velocity, tide_amp = tide_amp, tide_phase = tide_phase, modeling_tides = self.modeling_tides, offsetfields = offsetfields, noise_sigma = noise_sigma)
+            data_vec = fourD_sim.syn_offsets_data_vec(point=point, secular_v = secular_v, tide_amp = tide_amp, tide_phase = tide_phase, modeling_tides = self.modeling_tides, offsetfields = offsetfields, noise_sigma = noise_sigma)
                 
             #print("Data vector (G)\n", data_vec)
 
@@ -262,14 +260,14 @@ class inversion(fourdvel):
                 fourD_sim = simulation()
                 # Obtain the synthetic ice flow.
                 velo_model = self.grid_set_velo[point]
-                (t_axis, secular_v, velocity, tide_amp, tide_phase) = fourD_sim.syn_velocity(velo_model = velo_model)
+                (secular_v, tide_amp, tide_phase) = fourD_sim.syn_velocity(velo_model = velo_model)
 
                 # Data prior.
                 ## Use external noise model.
                 noise_sigma = self.load_noise_sigma(point)
 
 
-                data_vec = fourD_sim.syn_offsets_data_vec(point=point, t_axis = t_axis, secular_v = secular_v, v = velocity, tide_amp = tide_amp, tide_phase = tide_phase, modeling_tides = self.modeling_tides, offsetfields = offsetfields, noise_sigma = noise_sigma)
+                data_vec = fourD_sim.syn_offsets_data_vec(point=point, secular_v = secular_v, tide_amp = tide_amp, tide_phase = tide_phase, modeling_tides = self.modeling_tides, offsetfields = offsetfields, noise_sigma = noise_sigma)
 
                  # Data prior.
                 invCd = self.real_data_uncertainty(data_vec, noise_sigma)
@@ -324,15 +322,31 @@ class inversion(fourdvel):
         print('Number of tracks in this point set: ', len(indep_tracks))
         print(indep_tracks)
 
+        #print(stop)
+
         if test_mode == 1:
             
-            #test_point = self.test_point
+            test_point = self.test_point
 
-            # Find offsetfields.
+            # Get catalog of all offsetfields.
+            data_info_set = {}
             offsetfields_set = {}
+            offsets_set = {}
+            for point in point_set:
+                offsetfields_set[point] = []
+                offsets_set[point] = []
+                data_info_set[point] = []
+
             for point in point_set:
                 tracks = tracks_set[point]
+
+                # Create all offsetfields
                 offsetfields_set[point] = self.tracks_to_full_offsetfields(tracks)
+                # Not available
+                offsets_set[point] = "test_mode is 1"
+
+                # Not avaiable, because all tracks are derived at once
+                data_info_set[point] = "test_mode is 1"
 
             # Synthetic data.
             fourD_sim = simulation()
@@ -352,9 +366,10 @@ class inversion(fourdvel):
             for point in point_set:
                 noise_sigma_set[point] = self.load_noise_sigma(point)
 
-            #print(noise_sigma_set[test_point])
+            #print(noise_sigma_set[self.test_point])
+            #print(self.modeling_tides)
+            #print(offsetfields_set[self.test_point])
             #print(stop)
-
 
             data_vec_set = fourD_sim.syn_offsets_data_vec_set(
                                 point_set = point_set,
@@ -679,6 +694,7 @@ class inversion(fourdvel):
         all_sets = {}
         all_sets['true_tide_vec_set'] =  true_tide_vec_set
         all_sets['tide_vec_set'] = tide_vec_set
+
         all_sets['tide_vec_uq_set'] = tide_vec_uq_set
         all_sets['resid_of_secular_set'] = resid_of_secular_set
         all_sets['resid_of_tides_set'] = resid_of_tides_set
@@ -746,25 +762,29 @@ class inversion(fourdvel):
             grid_set_other_1 = {}
 
             start_tile = 0
-            stop_tile = 10**5
+            stop_tile = 10**10
             self.show_vecs = True
 
-        print(start_tile, stop_tile)
+        print("start tile: ", start_tile, "stop tile: ",stop_tile)
 
         count_tile = 0
         count_run = 0
+
+        #print(len(tile_set))
+        #print(stop)
+
         for tile in sorted(tile_set.keys()):
             # Work on a particular tile.
             lon, lat = tile
             
             # Run all in serial.
-            if (count_tile >= start_tile and count_tile < stop_tile): 
+            #if (count_tile >= start_tile and count_tile < stop_tile): 
             
             #if (count_tile >= start_tile and count_tile < stop_tile and 
             #                                            count_tile % 2 == 1):
 
             # Only run this example tile.
-            #if count_tile >= start_tile and count_tile < stop_tile and tile == (-77, -76.6):
+            if count_tile >= start_tile and count_tile < stop_tile and tile == (-77, -76.6):
 
             # Debug this tile.
             #if count_tile >= start_tile and count_tile < stop_tile and tile == (-84.0, -76.2):
@@ -790,12 +810,18 @@ class inversion(fourdvel):
                 # Obtain the real data.
                 all_sets  = self.point_set_tides(point_set = point_set, tracks_set = tracks_set)
 
-                # Update.
+                #print("all_sets: ",all_sets)
+
+                # Update (only for parallel).
                 if all_sets['true_tide_vec_set'] is not None:
                     all_grid_sets['grid_set_true_tide_vec'].update(all_sets['true_tide_vec_set'])
+                #print(all_sets['tide_vec_set'])
+
 
                 all_grid_sets['grid_set_tide_vec'].update(all_sets['tide_vec_set'])
+
                 all_grid_sets['grid_set_tide_vec_uq'].update(all_sets['tide_vec_uq_set'])
+               
                 all_grid_sets['grid_set_resid_of_secular'].update(all_sets['resid_of_secular_set'])
                 all_grid_sets['grid_set_resid_of_tides'].update(all_sets['resid_of_tides_set'])
                 all_grid_sets['grid_set_other_1'].update(all_sets['other_set_1'])
@@ -859,6 +885,9 @@ class inversion(fourdvel):
         # Chop into multiple threads. 
         nthreads = 10
         total_number = n_tiles
+        print(total_number)
+        print(stop)
+
         divide = self.chop_into_threads(total_number, nthreads)
         print(divide)
 
@@ -1036,8 +1065,8 @@ def main():
     #fourd_inv.driver_serial()
     
     # Tile set.
-    #fourd_inv.driver_serial_tile()
-    fourd_inv.driver_parallel_tile()
+    fourd_inv.driver_serial_tile()
+    #fourd_inv.driver_parallel_tile()
 
     print('All finished!')
 

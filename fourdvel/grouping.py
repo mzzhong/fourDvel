@@ -588,8 +588,8 @@ class grouping(fourdvel):
         north = self.round1000(-74.2)
         south = self.round1000(-77.6)
 
-        tile_lon_size = 1
-        tile_lat_size = 0.2
+        tile_lon_size = 0.02
+        tile_lat_size = 0.005
 
         looks = 1
         tile_lon_num = np.round(self.lon_re * tile_lon_size)
@@ -647,10 +647,10 @@ def main():
     group = grouping()
 
     # Generate secular velocity model.
-    group.velo_model()
+    #group.velo_model()
     
     # Find tiles.
-    #group.grid_tiles()
+    group.grid_tiles()
 
  
 if __name__=='__main__':

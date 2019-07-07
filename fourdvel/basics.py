@@ -12,7 +12,7 @@ class basics():
         self.t_origin = datetime.datetime(2018,1,1,0,0,0,0)
 
         # Tides
-        self.tides = ['K2','S2','M2','K1','P1','O1','Mf','Msf','Mm','Ssa','Sa']
+        self.tides = ['K2','S2','M2','K1','P1','O1','Mf','Msf','Mm','Ssa','Sa', 'M4', 'S4', 'MS4']
 
         self.tide_periods = {}
         tide_periods = self.tide_periods
@@ -27,6 +27,10 @@ class basics():
         tide_periods['Mm'] = 27.55463190
         tide_periods['Ssa'] = 182.62818021
         tide_periods['Sa'] = 365.25636042
+
+        tide_periods['M4'] = tide_periods['M2']/2 
+        tide_periods['S4'] = tide_periods['S2']/2
+        tide_periods['MS4'] = 1/(1/tide_periods['M2'] + 1/tide_periods['S2'])
 
         self.tide_omegas = {}
         for tide_name in self.tides:

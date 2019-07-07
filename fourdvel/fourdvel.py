@@ -45,7 +45,7 @@ class fourdvel(basics):
             self.csk_data[i] = []
 
         self.s1_data = {}
-        self.s1_tracks = [37,52,169,65,7]
+        self.s1_tracks = [37,52,169,65,7,50,64]
         
         for i in self.s1_tracks:
             self.s1_data[i] = []
@@ -219,8 +219,8 @@ class fourdvel(basics):
         t64 = datetime.time(2,57,0)
         track_timefraction[('s1',64)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
 
-        t49 = datetime.time(2,16,0)
-        track_timefraction[('s1',49)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+        #t49 = datetime.time(2,16,0)
+        #track_timefraction[('s1',49)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
 
         #print(track_timefraction)
 
@@ -293,9 +293,9 @@ class fourdvel(basics):
         # Sort the tracks.
         for track_num in sorted(csk_data.keys()):
             csk_data[track_num].sort()
-            #print(track_num)
-            #print(csk_data[track_num])
-
+            print(track_num)
+            print(csk_data[track_num])
+        
         return 0
 
     def get_S1_trackDates(self):
@@ -307,28 +307,58 @@ class fourdvel(basics):
         s1_start = self.s1_start
         s1_end = self.s1_end
 
-        # Currently only track_37 and track_52 are available.
+        
         s1 = S1_Utils()
 
         tracklist = self.s1_tracks
 
-        for track_num in tracklist: 
-        
-            filefolder = '/home/mzzhong/links/jokull-nobak-net/S1-Evans/data_' + str(track_num) + '/*zip'
-            filelist = glob.glob(filefolder)
-            s1_data[track_num] = []
+        option = "fake"
 
-            for zipfile in filelist:
-                datestr = zipfile.split('_')[6][0:8]
-                theDate = date(int(datestr[0:4]), int(datestr[4:6]), int(datestr[6:8]))
+        if option=="data_based":
 
-                if theDate >= s1_start and theDate < s1_end:
-                    s1_data[track_num].append(theDate)
+            for track_num in tracklist: 
+            
+                filefolder = '/home/mzzhong/links/jokull-nobak-net/S1-Evans/data_' + str(track_num) + '/*zip'
+                filelist = glob.glob(filefolder)
+                s1_data[track_num] = []
+    
+                for zipfile in filelist:
+                    datestr = zipfile.split('_')[6][0:8]
+                    theDate = date(int(datestr[0:4]), int(datestr[4:6]), int(datestr[6:8]))
+    
+                    if theDate >= s1_start and theDate < s1_end:
+                        s1_data[track_num].append(theDate)
+    
+                s1_data[track_num] = list(set(s1_data[track_num]))
+                s1_data[track_num].sort()
 
-            s1_data[track_num] = list(set(s1_data[track_num]))
-            s1_data[track_num].sort()
+                print("track_num: ",track_num)
+                print(s1_data[track_num])
 
-        #print(s1_data)
+        elif option == "fake":
+
+            for track_num in tracklist:
+    
+                s1_data[track_num] = []
+    
+                ref_date = s1.ref_date[track_num]
+
+               
+                day = s1_start
+                while day < s1_end:
+                    if ((day - ref_date).days % 6==0 and track_num!=7) or \
+                        ((day - ref_date).days % 12==0 and track_num==7) :
+                        s1_data[track_num].append(day)
+                    day = day + datetime.timedelta(days=1)
+
+                print("track_num: ",track_num)
+                print(s1_data[track_num])
+ 
+
+            #print(stop)
+        else:
+            
+            raise Exception("dates are not available")
 
         return 0
 
@@ -407,7 +437,7 @@ class fourdvel(basics):
             directory['s1'] = '/net/jokull/nobak/mzzhong/S1-Evans'
 
             # update 20190702
-            tracklist['s1'] = [37, 52, 169, 65, 7, 50, 64, 49]
+            tracklist['s1'] = [37, 52, 169, 65, 7, 50, 64]
 
             offset_id['s1'] = 20180703
 
@@ -590,9 +620,11 @@ class fourdvel(basics):
         # Get the available dates according to settings.
         if self.use_csk and self.use_s1:
             self.get_CSK_trackDates()
-            self.get_S1_trackDates() 
+            self.get_S1_trackDates()
+        
         elif self.use_csk:
             self.get_CSK_trackDates()
+        
         elif self.use_s1:
             self.get_S1_trackDates()
 
@@ -627,7 +659,7 @@ class fourdvel(basics):
 
             elif sate=='s1':
                 dates = s1_data[track_num]
-                max_delta=16
+                max_delta=12
                 t_frac = track_timefraction[('s1',track_num)]
 
             else:
@@ -728,6 +760,8 @@ class fourdvel(basics):
             
                 delta_cos[i,j] = np.cos(omega*t_b) - np.cos(omega*t_a)
                 delta_sin[i,j] = np.sin(omega*t_b) - np.sin(omega*t_a)
+
+            print(stop)
 
         n_rows = n_offsets * 2 # Each offset corresponds to a vector.
 
@@ -1122,14 +1156,17 @@ class fourdvel(basics):
             #print(tide_name)
             for j in range(6):
                 k = 3 + i*6 + j
-                
+               
+                # only horizontal motion 
                 if horizontal==True and (j==2 or j==5):
                     inv_sigma[k,k] = inf_restrict
 
-                if not tide_name in ['M2','O1'] and up_short_period and (j==2 or j==5):
+                # Control the up on be only short period
+                if not tide_name in ['M2','S2','O1'] and up_short_period and (j==2 or j==5):
                     inv_sigma[k,k] = inf_restrict
                     #print(tide_name, j)
 
+                # Control the horizontal to be only long period
                 if not tide_name in ['Mf','Msf','Mm'] and horizontal_long_period and (j==0 or j==1 or j==3 or j==4):
                     inv_sigma[k,k] = inf_restrict
  
@@ -1172,10 +1209,15 @@ class fourdvel(basics):
 
         # If G is singular.
         if np.linalg.cond(invCm_p) < 1/sys.float_info.epsilon:
+
+            print('normal')
         #if np.linalg.cond(invCm_p) < 10**8:
             Cm_p = np.linalg.pinv(invCm_p)
         else:
+            print('singular')
             Cm_p = np.zeros(shape=invCm_p.shape) + np.nan
+
+        print(stop)
 
         return Cm_p
 

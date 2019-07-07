@@ -165,8 +165,7 @@ class simulation(basics):
         self.verti_scale = 1
 
         # Models are represented in displacement.
-
-        model_num = 3
+        model_num = 4
 
         if model_num == 1:
 
@@ -192,7 +191,6 @@ class simulation(basics):
             # Model 2.
             # 1. Scale the vertical motion.
             coe = 2/3
-            # 2. Add horizontal M2 on ice shelves.
  
             tidesRut_params['K2'] =    [0.31,  163,    29.1*coe,   99]
             tidesRut_params['S2'] =    [0.363, 184,    101.6*coe,  115]
@@ -215,15 +213,15 @@ class simulation(basics):
             # Model 3, increase the horizontal amplitude of M2 and O1
             # 1. Scale the vertical motion.
             coe = 2/3
-            # 2. Add horizontal M2 on ice shelves.
+            # 2. Add horizontal short_period on ice shelves.
  
-            tidesRut_params['K2'] =    [0.31,  163,    29.1*coe,   99]
-            tidesRut_params['S2'] =    [0.363, 184,    101.6*coe,  115]
+            tidesRut_params['K2'] =    [5.00,  163,    29.1*coe,   99]
+            tidesRut_params['S2'] =    [5.00, 184,    101.6*coe,  115]
 
             tidesRut_params['M2'] =    [10.00, 177,    156.3*coe,  70] # M2
 
-            tidesRut_params['K1'] =    [0.19,  79,     49*coe,     73]
-            tidesRut_params['P1'] =    [0.24,  77.0,   16.6*coe,   64]
+            tidesRut_params['K1'] =    [4.00,  79,     49*coe,     73]
+            tidesRut_params['P1'] =    [4.00,  77.0,   16.6*coe,   64]
 
             tidesRut_params['O1'] =    [4.00, 81.0,   43*coe,     54]  # O1
             tidesRut_params['Mf'] =    [2.54,  250.0,  2.9*coe,    163] # Mf
@@ -232,6 +230,32 @@ class simulation(basics):
             tidesRut_params['Mm'] =    [5.04,  253.0,  1.6*coe,    63]
             tidesRut_params['Ssa'] =   [26.74, 256.0,  1.5*coe,    179]
             tidesRut_params['Sa'] =    [19.18, 273.0,  0.2*coe,    179]
+
+        if model_num == 4:
+
+            # Model 4, increase the horizontal amplitude of M2 and O1
+            # 1. Scale the vertical motion.
+            coe = 2/3
+            # 2. Add horizontal short_period on ice shelves.
+            # 3. Use appropriate numbers for periodic grounding
+ 
+            tidesRut_params['K2'] =    [5.00,  163,    0*coe,   99]
+            tidesRut_params['S2'] =    [5.00, 184,     150.0*coe,  115]
+
+            tidesRut_params['M2'] =    [10.00, 177,    150.0*coe,  70] # M2
+
+            tidesRut_params['K1'] =    [4.00,  79,     0*coe,     73]
+            tidesRut_params['P1'] =    [4.00,  77.0,   0*coe,   64]
+
+            tidesRut_params['O1'] =    [4.00, 81.0,    0*coe,     54]  # O1
+            tidesRut_params['Mf'] =    [2.54,  250.0,  0*coe,    163] # Mf
+            tidesRut_params['Msf'] =   [13.28, 18.8,   0*coe,    164] # Msf
+
+            tidesRut_params['Mm'] =    [5.04,  253.0,  0*coe,    63]
+            tidesRut_params['Ssa'] =   [26.74, 256.0,  0*coe,    179]
+            tidesRut_params['Sa'] =    [19.18, 273.0,  0*coe,    179]
+
+
 
         ###############################################################      
         # Convert displacement to velocity.
@@ -325,6 +349,7 @@ class simulation(basics):
         
         # Initilization
         secular_v_set = {}
+        v_set = {}
         tide_amp_set = {}
         tide_phase_set = {}
         
@@ -335,10 +360,16 @@ class simulation(basics):
             (t_axis, secular_v, v, tide_amp, tide_phase) = self.syn_velocity(
                                                             velo_model = velo_model)
 
-            secular_v_set[point] = secular_v           
+            secular_v_set[point] = secular_v
+            v_set[point] = v         
             tide_amp_set[point] = tide_amp
             tide_phase_set[point] = tide_phase
        
+
+        # Saved to class
+        self.t_axis = t_axis
+        self.v_set = v_set
+
         # Return parameters.
         return (secular_v_set, tide_amp_set, tide_phase_set)
 
@@ -383,7 +414,7 @@ class simulation(basics):
             horiz_amp = self.cm2m(tidesRut_params[tide_name][0]) # m/d velocity
             horiz_phase = np.deg2rad(tidesRut_params[tide_name][1])
 
-            verti_amp = self.cm2m(tidesRut_params[tide_name][2]) # velocity
+            verti_amp = self.cm2m(tidesRut_params[tide_name][2]) # m/d velocity
             verti_phase = np.deg2rad(tidesRut_params[tide_name][3])
 
             # East component. (Amp always positive)
@@ -417,11 +448,19 @@ class simulation(basics):
             tide_phase[(tide_name,'n')] = phi_n
             tide_phase[(tide_name,'u')] = phi_u
 
-        method = 'analytical'
-        if method == 'numerical' or method == 'both':
+        # If "numerical" and "both", simulate the real time series
+        # Be careful about the length of time series
+        # If "analytical", this part is skipped. tide_amp and tide_phase 
+        # are used to derive offset directly.
+
+        #self.method = 'analytical'
+        self.method = 'numerical'
+
+        if self.method == 'numerical' or self.method == 'both':
             sim = {}
             for tide_name in syn_tidesRut:
-            
+
+                # the identifier of using method numerical 
                 t_axis = np.arange(-600,600,0.0005) # unit: day
      
                 omega = 2*np.pi / tide_periods[tide_name] 
@@ -443,8 +482,8 @@ class simulation(basics):
     
 
             # Find time series ve, vn, vu by addition.
-            fig = plt.figure(1,figsize=(16,8))
-            ax = fig.add_subplot(211)
+            #fig = plt.figure(1,figsize=(16,8))
+            #ax = fig.add_subplot(211)
     
             p_e = np.zeros(shape=t_axis.shape)
             p_n = np.zeros(shape=t_axis.shape)
@@ -455,9 +494,9 @@ class simulation(basics):
                 p_u = p_u + sim[(tide_name,'u')]
     
                 #ax.plot(t_axis,sim[(tide_name,'n')],label=tide_name + '_N')
-                ax.plot(t_axis,sim[(tide_name,'u')],label=tide_name + '_U')
+                #ax.plot(t_axis,sim[(tide_name,'u')],label=tide_name + '_U')
     
-            ax.legend()
+            #ax.legend()
     
             # Add secular velocity.
             v_e = secular_v_e + p_e
@@ -472,7 +511,11 @@ class simulation(basics):
             #ax.plot(t_axis, v_n)
             #ax.plot(t_axis, v_u)
             #ax.plot(t_axis,sim[('Msf','n')])
-            #fig.savefig('1.png',format='png')
+            #ax.plot(t_axis, v_u)
+            #ax.set_xlim([-50,50])
+
+            #fig.savefig('fig_sim/1.png',format='png')
+
         else:
             t_axis = None
             v = None
@@ -480,6 +523,7 @@ class simulation(basics):
         # Return synthetic velocity time series.
         return (t_axis, secular_v, v, tide_amp, tide_phase)
 
+    
     def syn_offsets_data_vec_set(self, point_set, secular_v_set, modeling_tides, 
                             tide_amp_set, tide_phase_set, offsetfields_set, noise_sigma_set):
 
@@ -506,7 +550,7 @@ class simulation(basics):
 
         return data_vec_set
 
-    def syn_offsets_data_vec(self, point=None, t_axis=None, secular_v=None, v=None, modeling_tides=None, tide_amp=None, tide_phase=None, offsetfields=None, noise_sigma = None):
+    def syn_offsets_data_vec(self, point=None, secular_v=None, modeling_tides=None, tide_amp=None, tide_phase=None, offsetfields=None, noise_sigma = None):
 
         # Obtain offsets from synthetics.
         n_offsets = len(offsetfields)
@@ -516,12 +560,42 @@ class simulation(basics):
         t_origin = self.t_origin.date()
 
         # Three components.
-        if t_axis is not None and v is not None:
+        if self.t_axis is not None:
+
+            #print('numerical')
+            t_axis = self.t_axis
+            v = self.v_set[point]
             v_e, v_n, v_u = v
             method = 'numerical'
+
+            # Find the d_e, d_n, d_u
+            #t_axis, v_e, v_n, v_u
+            delta = t_axis[1] - t_axis[0]
+            d_e = np.cumsum(np.copy(v_e) * delta)
+            d_n = np.cumsum(np.copy(v_n) * delta)
+            d_u = np.cumsum(np.copy(v_u) * delta)
+
+            d_e = d_e - np.mean(d_e)
+            d_n = d_n - np.mean(d_n)
+            d_u = d_u - np.mean(d_u)
+
+            # periodic grounding
+            grounding_level = -0
+            d_u[d_u<grounding_level] = grounding_level
+            
+            # Plot the velocity time series.
+            fig = plt.figure(1, figsize=(10,5))
+            ax = fig.add_subplot(111)
+            #ax.plot(t_axis, v_u/np.max(v_u), 'r')
+            ax.plot(t_axis, d_u, 'b')
+            ax.set_xlim([-12,12])
+            fig.savefig('fig_sim/2.png',format='png')
+            print(np.max(d_u))
+
         else:
             method = 'analytical'
 
+        # Generate offsets
         for i in range(n_offsets):
 
             #print('offsetfield: ',i,'/',n_offsets,'\n')
@@ -532,7 +606,7 @@ class simulation(basics):
             t_a = (offsetfields[i][0] - t_origin).days + offsetfields[i][4]
             t_b = (offsetfields[i][1] - t_origin).days + offsetfields[i][4]
 
-            if method == 'numerical':
+            if method == 'numerical_old_version':
 
                 ## Numerical way.
                 # Cut the time series.
@@ -561,10 +635,26 @@ class simulation(basics):
                 offset_u = np.trapz(v_u_interval, t_interval)
 
                 # Velocity vector.
-                offset_vec_1 = np.zeros(shape=(3,1))
-                offset_vec_1[:,0] = [offset_e,offset_n,offset_u]
+                offset_vec = np.zeros(shape=(3,1))
+                offset_vec[:,0] = [offset_e,offset_n,offset_u]
 
-                print(offset_vec_1)
+                #print(offset_vec)
+            
+            elif method == "numerical":
+
+                if t_a >= t_axis[0] and t_b <= t_axis[-1]:
+                    inds = np.argmin(np.abs(t_axis-t_a))
+                    inde = np.argmin(np.abs(t_axis-t_b))
+                else:
+                    raise Exception('Time axis too short!')
+
+                offset_e = d_e[inde] - d_e[inds]
+                offset_n = d_n[inde] - d_n[inds]
+                offset_u = d_u[inde] - d_u[inds]
+
+                # Velocity vector.
+                offset_vec = np.zeros(shape=(3,1))
+                offset_vec[:,0] = [offset_e,offset_n,offset_u]
 
             elif method == 'analytical':
 
@@ -574,20 +664,32 @@ class simulation(basics):
                 offset['n'] = 0
                 offset['u'] = 0
 
-                n_modelng_tides = len(modeling_tides) # Three components.
+                # Three components.
                 comps = ['e','n','u']
+
+                #print(tide_amp)
+                #print(tide_phase)
 
                 ii = 0
                 for comp in comps:
                     offset[comp] = offset[comp] + secular_v[ii] * (t_b - t_a)
                     ii = ii + 1
-                    for tide_name in modeling_tides:
+
+                    # changed to Rutford tides instead of modeling tides
+                    # 2019.07.05
+                    for tide_name in self.syn_tidesRut:
+                    #for tide_name in modeling_tides:
+
+                        #print(tide_name)
+
                         omega = 2*np.pi / self.tide_periods[tide_name] 
                         dis_amp = tide_amp[(tide_name,comp)] / omega
                         dis_phase = tide_phase[(tide_name,comp)] + np.pi
 
                         tide_dis = dis_amp*np.cos(omega*t_b + dis_phase) - dis_amp * np.cos(omega*t_a + dis_phase)
                         offset[comp] = offset[comp] + tide_dis
+
+                    #print(stop)
                 
                 # Velocity vector.
                 offset_vec = np.zeros(shape=(3,1))
