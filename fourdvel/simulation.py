@@ -29,94 +29,6 @@ from basics import basics
 
 class simulation(basics):
 
-    def flow_model(self):
-
-        # Constants for ice flow model.
-        A = 2.4e-24
-        alpha = 0.04
-        g = 9.81
-        h = 1000
-        n_g = 3
-        rho = 900
-        s_v = 0.6
-
-        # Gravitional driving stress.
-        tau_d = rho*g*h*alpha
-
-        # Basal drag.
-        tau_b = 0.8 * tau_d
-
-        w = 50*1000 #m
-        L = 150*1000 #m
-
-        # End of constants.
-
-        # Beginning of simulations.
-        x = np.linspace(0,L,num=np.round(L/500))
-        y = np.linspace(0,2*w,num=np.round(2*w/500))
-
-        yy,xx = np.meshgrid(y,x)
-        #print(xx.shape)
-        #print(tau_d)
-        #print(tau_d * w/h)
-        #print(tau_d * w/h * 0.2)
-
-        #print(2*A*w/(n_g+1))
-
-        v_ideal_center = 2*A*w/(n_g+1) * (tau_d * w / h * 0.2)**n_g
-        print(v_ideal_center)
-
-        v_ideal = v_ideal_center * (1 - (1-yy/w)**(n_g+1))
-
-        k_h=10**(-1*np.abs(np.log10(L)-0.8))
-        gamma = (1 + np.tanh(k_h * (x-0.6*L)))/2
-
-        Gamma = {}
-
-        Gamma_const = v_ideal/v_ideal_center
-
-
-        # Add all tide signals together.
-        p_e = np.zeros(shape=t_axis.shape)
-        p_n = np.zeros(shape=t_axis.shape)
-        p_u = np.zeros(shape=t_axis.shape)
-
-        for key in syn_tidesRut:
-            p_e = p_e + sim[(key,'e')]
-            p_n = p_n + sim[(key,'n')]
-            p_u = p_u + sim[(key,'u')]
-
-        # Full velocity signals.
-        # Constant velocity + tidal signals.
-        # Consider the transition from ice stream to ice shelf.
-        v_e = np.zeros(shape=t_axis.shape)
-
-        v_n = s_v * x_loc/L * (-v_ideal[ind_x,ind_y]*t_axis + p_n)
-        v_n_tides = s_v * x_loc/L * p_n
-
-        v_u = s_v * (x_loc-L)/(10*L) * v_ideal[ind_x,ind_y] + p_u
-        v_u_tides = p_u
-
-        # Plotting.
-        fig = plt.figure(2,figsize=(7,7))
-        ax = fig.add_subplot(111)
-        
-        # Choice 1.
-        #p1 = ax.imshow(v_ideal/v_ideal_center,cmap=plt.cm.coolwarm)
-        #p1 = ax.imshow(v_ideal,cmap=plt.cm.coolwarm)
-        #fig.colorbar(p1)
-
-        # Choice 2. Summed tidal signals.
-        ax.plot(t_axis, v_u)
-
-        # velocity
-        #v_e = np.zeros(shape=xx.shape)
-        #v_n = np.z
-
-        plt.show()
-
-        return
-
     def __init__(self):
 
         super(simulation, self).__init__()
@@ -157,7 +69,6 @@ class simulation(basics):
         #    #tidesRut_params[tide_name][3] = tidesRut_params[tide_name][3]
         
         ###############################################
-
 
         # Horizontal: assume this corresponds to 1 meter /day.
         self.ref_speed = 1
@@ -287,7 +198,6 @@ class simulation(basics):
         #self.syn_tidesRut = ['M2','O1','Msf']
         #self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Mf','Msf']
         self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Msf','Mf','Mm','Ssa','Sa']
-
 
 
     def true_tide_vec_set(self, point_set, secular_v_set, modeling_tides, tide_amp_set, tide_phase_set):
@@ -454,7 +364,7 @@ class simulation(basics):
         # are used to derive offset directly.
 
         #self.method = 'analytical'
-        self.method = 'numerical'
+        self.method = 'analytical'
 
         if self.method == 'numerical' or self.method == 'both':
             sim = {}
@@ -550,6 +460,8 @@ class simulation(basics):
 
         return data_vec_set
 
+
+
     def syn_offsets_data_vec(self, point=None, secular_v=None, modeling_tides=None, tide_amp=None, tide_phase=None, offsetfields=None, noise_sigma = None):
 
         # Obtain offsets from synthetics.
@@ -580,7 +492,7 @@ class simulation(basics):
             d_u = d_u - np.mean(d_u)
 
             # periodic grounding
-            grounding_level = -0
+            grounding_level = -2
             d_u[d_u<grounding_level] = grounding_level
             
             # Plot the velocity time series.
@@ -593,8 +505,20 @@ class simulation(basics):
             print(np.max(d_u))
 
         else:
-            method = 'analytical'
+            method = 'analytical_grounding'
 
+        if method == "analytical_grounding":
+
+            from forward import forward
+
+            fwd = forward()
+
+            # For grounding: Construct forward model design matrix
+            # First derive all the timings
+
+
+            self.syn_design_mat_set = fwd.design_mat_set(timings, self.syn_tidesRut)
+            
         # Generate offsets
         for i in range(n_offsets):
 
@@ -675,18 +599,25 @@ class simulation(basics):
                     offset[comp] = offset[comp] + secular_v[ii] * (t_b - t_a)
                     ii = ii + 1
 
-                    # changed to Rutford tides instead of modeling tides
+                    # Changed to Rutford tides instead of modeling tides
                     # 2019.07.05
+
+                    # Iterative over all tidal components
                     for tide_name in self.syn_tidesRut:
                     #for tide_name in modeling_tides:
 
                         #print(tide_name)
 
-                        omega = 2*np.pi / self.tide_periods[tide_name] 
+                        omega = 2*np.pi / self.tide_periods[tide_name]
+                        # Convert to amplitude of displacement
                         dis_amp = tide_amp[(tide_name,comp)] / omega
+
+                        # Convert to amplitude of velocity
                         dis_phase = tide_phase[(tide_name,comp)] + np.pi
 
+                        # Difference
                         tide_dis = dis_amp*np.cos(omega*t_b + dis_phase) - dis_amp * np.cos(omega*t_a + dis_phase)
+
                         offset[comp] = offset[comp] + tide_dis
 
                     #print(stop)
@@ -695,7 +626,28 @@ class simulation(basics):
                 offset_vec = np.zeros(shape=(3,1))
                 offset_vec[:,0] = [offset['e'],offset['n'],offset['u']]
 
-            # Final offset_vec
+            elif method == "analytical_grounding":
+
+                cos_terms = {}
+                sin_terms = {}
+
+                # Convert from velocity to displacement
+                for tide_name = in self.syn_tidesRut:
+                
+
+                # Convert from amplitude and phase to cos and sin terms
+
+                # Construct matrix for tb
+
+                # Construct matrix for ta
+
+                # 3d displacement = clipping(Tb * x) - clipping(Tb * x)
+
+                pass
+
+
+
+            # Project 3d displacement onto observational vectors
             #offset_vec = offset_vec_2
 
             # Two observation vectors.
@@ -710,6 +662,8 @@ class simulation(basics):
                 
                 # Record the data.
                 data_vector[2*i+j] = obs_offset
+
+
 
         # Add noise.
         lon, lat = point
@@ -885,5 +839,93 @@ if __name__=='__main__':
 #        # Return parameters.
 #        return (secular_v_set, tide_amp_set, tide_phase_set)
 
+
+#    def flow_model(self):
+#
+#        # Constants for ice flow model.
+#        A = 2.4e-24
+#        alpha = 0.04
+#        g = 9.81
+#        h = 1000
+#        n_g = 3
+#        rho = 900
+#        s_v = 0.6
+#
+#        # Gravitional driving stress.
+#        tau_d = rho*g*h*alpha
+#
+#        # Basal drag.
+#        tau_b = 0.8 * tau_d
+#
+#        w = 50*1000 #m
+#        L = 150*1000 #m
+#
+#        # End of constants.
+#
+#        # Beginning of simulations.
+#        x = np.linspace(0,L,num=np.round(L/500))
+#        y = np.linspace(0,2*w,num=np.round(2*w/500))
+#
+#        yy,xx = np.meshgrid(y,x)
+#        #print(xx.shape)
+#        #print(tau_d)
+#        #print(tau_d * w/h)
+#        #print(tau_d * w/h * 0.2)
+#
+#        #print(2*A*w/(n_g+1))
+#
+#        v_ideal_center = 2*A*w/(n_g+1) * (tau_d * w / h * 0.2)**n_g
+#        print(v_ideal_center)
+#
+#        v_ideal = v_ideal_center * (1 - (1-yy/w)**(n_g+1))
+#
+#        k_h=10**(-1*np.abs(np.log10(L)-0.8))
+#        gamma = (1 + np.tanh(k_h * (x-0.6*L)))/2
+#
+#        Gamma = {}
+#
+#        Gamma_const = v_ideal/v_ideal_center
+#
+#
+#        # Add all tide signals together.
+#        p_e = np.zeros(shape=t_axis.shape)
+#        p_n = np.zeros(shape=t_axis.shape)
+#        p_u = np.zeros(shape=t_axis.shape)
+#
+#        for key in syn_tidesRut:
+#            p_e = p_e + sim[(key,'e')]
+#            p_n = p_n + sim[(key,'n')]
+#            p_u = p_u + sim[(key,'u')]
+#
+#        # Full velocity signals.
+#        # Constant velocity + tidal signals.
+#        # Consider the transition from ice stream to ice shelf.
+#        v_e = np.zeros(shape=t_axis.shape)
+#
+#        v_n = s_v * x_loc/L * (-v_ideal[ind_x,ind_y]*t_axis + p_n)
+#        v_n_tides = s_v * x_loc/L * p_n
+#
+#        v_u = s_v * (x_loc-L)/(10*L) * v_ideal[ind_x,ind_y] + p_u
+#        v_u_tides = p_u
+#
+#        # Plotting.
+#        fig = plt.figure(2,figsize=(7,7))
+#        ax = fig.add_subplot(111)
+#        
+#        # Choice 1.
+#        #p1 = ax.imshow(v_ideal/v_ideal_center,cmap=plt.cm.coolwarm)
+#        #p1 = ax.imshow(v_ideal,cmap=plt.cm.coolwarm)
+#        #fig.colorbar(p1)
+#
+#        # Choice 2. Summed tidal signals.
+#        ax.plot(t_axis, v_u)
+#
+#        # velocity
+#        #v_e = np.zeros(shape=xx.shape)
+#        #v_n = np.z
+#
+#        plt.show()
+#
+#        return
 
 

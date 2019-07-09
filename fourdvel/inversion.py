@@ -789,7 +789,6 @@ class inversion(fourdvel):
             # Debug this tile.
             #if count_tile >= start_tile and count_tile < stop_tile and tile == (-84.0, -76.2):
 
-
                 print('***  Start a new tile ***')
                 
                 point_set = tile_set[tile] # List of tuples

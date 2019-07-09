@@ -101,6 +101,10 @@ class fourdvel(basics):
                 self.grid_set_data_uncert_name = value
                 print('grid_set_data_uncert_name: ',value)
 
+            if name == 'design_mat_set_name':
+                self.design_mat_set_name = value
+                print('design_mat_set_name: ',value)
+
             if name == 'data_uncert_const':
                 self.data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
                 print('data_uncert_const: ',self.data_uncert_const)
@@ -602,6 +606,50 @@ class fourdvel(basics):
 
         return 0
 
+    def get_timings(self):
+
+        fmt = "%Y%m%d"
+        timings_pkl = './pickles/'+ '_'.join(['timings', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)]) + '.pkl'
+
+        print(timings_pkl)
+        print(stop)
+
+
+
+    def get_design_mat_set(self):
+
+        fmt = "%Y%m%d"
+        design_mat_set_pkl = './pickles/'+ '_'.join(['design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)] + self.modeling_tides ) + '.pkl'
+
+        print('design_mat_set file:', design_mat_set_pkl)
+
+        if os.path.exists(design_mat_set_pkl):
+            with open(design_mat_set_pkl,'rb') as f:
+                self.design_mat_set = pickle.load(f)
+        else:
+            from forward import forward
+            fwd = forward()
+            
+            #print(self.csk_data)
+            #print(self.s1_data)
+            #print(self.track_timefraction)
+
+            # Derive all timings
+            timings = []
+            for key in self.csk_data.keys():
+                tfrac = self.track_timefraction['csk',key]
+                for the_date in self.csk_data[key]:
+                    timings.append((the_date, round(tfrac,4)))
+
+            print(len(timings))
+            self.design_mat_set = fwd.design_mat_set(timings, self.modeling_tides)
+            print(len(self.design_mat_set))
+
+            with open(design_mat_set_pkl,'wb') as f:
+                pickle.dump(self.design_mat_set,f)
+
+        return 0
+
     def preparation(self):
 
         # Get pre-defined grid points and the corresponding tracks and vectors.
@@ -610,6 +658,7 @@ class fourdvel(basics):
         self.get_grid_set_velo()
         self.get_tile_set()
         self.get_data_uncert()
+
 
         # Show the counts.
         print('Number of total grid points: ', len(self.grid_set.keys()))
@@ -627,6 +676,9 @@ class fourdvel(basics):
         
         elif self.use_s1:
             self.get_S1_trackDates()
+
+        self.get_timings()
+        self.get_design_mat_set()
 
         return 0
 
@@ -761,25 +813,27 @@ class fourdvel(basics):
                 delta_cos[i,j] = np.cos(omega*t_b) - np.cos(omega*t_a)
                 delta_sin[i,j] = np.sin(omega*t_b) - np.sin(omega*t_a)
 
-            print(stop)
+            #print(stop)
 
         n_rows = n_offsets * 2 # Each offset corresponds to a vector.
 
-        if horizontal == False:
-            # E, N, U components.
-            n_cols = 3 + n_modeling_tides * 6 # cosE, cosN, cosU and sinE, sinN, sinU.
-        else:
-            # Only the E, N components.
-            n_cols = 3 + n_modeling_tides * 4 # cosE, cosN, sinE, sinN, Not finished below.
+        # E, N, U components.
+        n_cols = 3 + n_modeling_tides * 6 # cosE, cosN, cosU and sinE, sinN, sinU.
+        
+        # Only the E, N components.
+        #n_cols = 3 + n_modeling_tides * 4 # cosE, cosN, sinE, sinN, Not finished below.
         
         ## G formation.
         G = np.zeros(shape=(n_rows,n_cols))
 
+        # Iterate over offsetfields
         for i in range(n_offsets):
             vecs = [offsetfields[i][2],offsetfields[i][3]]
 
-            # The observation vectors.
+            # Two observation vectors
             for j in range(2):
+
+                # Get the vector (represent E,N,U)
                 vector = np.asarray(vecs[j])
 
                 # Row entries of the observation.
@@ -1217,7 +1271,7 @@ class fourdvel(basics):
             print('singular')
             Cm_p = np.zeros(shape=invCm_p.shape) + np.nan
 
-        print(stop)
+        #print(stop)
 
         return Cm_p
 
