@@ -612,11 +612,25 @@ class fourdvel(basics):
         timings_pkl = './pickles/'+ '_'.join(['timings', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)]) + '.pkl'
 
         print(timings_pkl)
-        print(stop)
 
+        if os.path.exists(timings_pkl)
 
+        # Derive all timings
+        timings = []
+        for key in self.csk_data.keys():
+            tfrac = self.track_timefraction['csk',key]
+            for the_date in self.csk_data[key]:
+                timings.append((the_date, round(tfrac,4)))
+
+            print(len(timings))
+ 
+
+        return 0
 
     def get_design_mat_set(self):
+
+        from forward import forward
+        fwd = forward()
 
         fmt = "%Y%m%d"
         design_mat_set_pkl = './pickles/'+ '_'.join(['design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)] + self.modeling_tides ) + '.pkl'
@@ -627,8 +641,17 @@ class fourdvel(basics):
             with open(design_mat_set_pkl,'rb') as f:
                 self.design_mat_set = pickle.load(f)
         else:
-            from forward import forward
-            fwd = forward()
+            
+           self.design_mat_set = fwd.design_mat_set(timings, self.modeling_tides)
+            print(len(self.design_mat_set))
+
+            with open(design_mat_set_pkl,'wb') as f:
+                pickle.dump(self.design_mat_set,f)
+
+        # Ad hoc for rutford
+         design_mat_set_pkl = './pickles/'+ '_'.join(['design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)] + 'Rutford_full' ) + '.pkl'
+
+        if not os.path.exists(design_mat_set_pkl):
             
             #print(self.csk_data)
             #print(self.s1_data)

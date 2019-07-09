@@ -35,7 +35,7 @@ class simulation(basics):
 
         tide_periods = self.tide_periods
 
-        # Rutford data.
+        # Rutford data from from Murray (2007) 
         self.tidesRut = ['K2','S2','M2','K1','P1','O1','Mf','Msf','Mm','Ssa','Sa']
         tidesRut = self.tidesRut
 
@@ -197,6 +197,8 @@ class simulation(basics):
         #self.syn_tidesRut = []
         #self.syn_tidesRut = ['M2','O1','Msf']
         #self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Mf','Msf']
+
+        # all constituents are included
         self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Msf','Mf','Mm','Ssa','Sa']
 
 
