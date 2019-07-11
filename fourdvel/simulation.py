@@ -202,16 +202,33 @@ class simulation(basics):
         self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Msf','Mf','Mm','Ssa','Sa']
 
 
+        # Load timings and design matrix (currently hardcoded)
+        timings_pkl = os.path.join(self.pickle_dir, 'timings_csk_20171116_20200701_s1_20170601_20180601.pkl')
+
+        if os.path.exists(timings_pkl):
+            with open(timings_pkl,'rb') as f:
+                self.timings = pickle.load(f)
+        else:
+            raise Exception('timing file is missing')
+
+        design_mat_set_pkl = os.path.join(self.pickle_dir, 'design_mat_set_csk_20171116_20200701_s1_20170601_20180601_Rutford_full.pkl')
+
+        if os.path.exists(design_mat_set_pkl):
+            with open(design_mat_set_pkl, 'rb') as f:
+                self.design_mat_set = pickle.load(f)
+        else:
+            raise Exception('design matrix file is missing')
+
+
     def true_tide_vec_set(self, point_set, secular_v_set, modeling_tides, tide_amp_set, tide_phase_set):
         
         true_tide_vec_set = {}
-        
-        for point in point_set:
-            true_tide_vec_set[point] = self.true_tide_vec(secular_v_set[point],
-                                            modeling_tides,
-                                            tide_amp_set[point],
-                                            tide_phase_set[point])
 
+        for point in point_set:
+                true_tide_vec_set[point] = self.true_tide_vec(secular_v_set[point],
+                                                modeling_tides,
+                                                tide_amp_set[point],
+                                                tide_phase_set[point])
         return true_tide_vec_set
 
     def true_tide_vec(self, secular_v, modeling_tides, tide_amp, tide_phase):
@@ -507,19 +524,47 @@ class simulation(basics):
             print(np.max(d_u))
 
         else:
-            method = 'analytical_grounding'
+            method = 'analytical_with_grounding'
 
-        if method == "analytical_grounding":
+            # For a single point
 
-            from forward import forward
+            timings = self.timings
+            design_mat_set = self.design_mat_set
 
-            fwd = forward()
+            # Convert parameters from velocity to displacement
+            tide_dis_amp = {}
+            tide_dis_phase = {}
 
-            # For grounding: Construct forward model design matrix
-            # First derive all the timings
+            for comp in ['e','n','u']:
+                for tide_name in self.syn_tidesRut:            
+                    omega = 2*np.pi / self.tide_periods[tide_name]
+                    # amplitude
+                    tide_dis_amp[(tide_name,comp)] = tide_amp[(tide_name,comp)] / omega
+                    # phase
+                    tide_dis_phase[(tide_name,comp)] = tide_phase[(tide_name,comp)]+ np.pi
 
+            # Derive amplitudes for cos and sin terms
+            cos_coef = {}
+            sin_coef = {}
 
-            self.syn_design_mat_set = fwd.design_mat_set(timings, self.syn_tidesRut)
+            for comp in ['e','n','u']:
+                for tide_name in self.syn_tidesRut:
+                    cos_coef[(tide_name,comp)] = tide_dis_amp[(tide_name, comp)] * np.cos(tide_dis_phase[tide_name,comp])
+                    sin_coef[(tide_name, comp)] = (-1) * tide_dis_amp[(tide_name, comp)] * np.sin(tide_dis_phase[tide_name,comp])
+
+            # Construct model vec
+            model_vec = []
+            for tide_name in self.syn_tidesRut:
+                for comp in ['e','n','u']:
+                    model_vec.append(cos_coef[(tide_name, comp)])
+                for comp in ['e','n','u']:
+                    model_vec.append(sin_coef[(tide_name, comp)])
+
+            model_vec = np.asarray(model_vec)[:,None]
+            #print(model_vec)
+            #print(model_vec.shape)
+            #print(stop)
+
             
         # Generate offsets
         for i in range(n_offsets):
@@ -531,6 +576,9 @@ class simulation(basics):
             
             t_a = (offsetfields[i][0] - t_origin).days + offsetfields[i][4]
             t_b = (offsetfields[i][1] - t_origin).days + offsetfields[i][4]
+
+            timing_a = (offsetfields[i][0], round(offsetfields[i][4],4))
+            timing_b = (offsetfields[i][1], round(offsetfields[i][4],4))
 
             if method == 'numerical_old_version':
 
@@ -606,18 +654,12 @@ class simulation(basics):
 
                     # Iterative over all tidal components
                     for tide_name in self.syn_tidesRut:
-                    #for tide_name in modeling_tides:
-
-                        #print(tide_name)
 
                         omega = 2*np.pi / self.tide_periods[tide_name]
-                        # Convert to amplitude of displacement
-                        dis_amp = tide_amp[(tide_name,comp)] / omega
-
-                        # Convert to amplitude of velocity
-                        dis_phase = tide_phase[(tide_name,comp)] + np.pi
-
-                        # Difference
+                        dis_amp = tide_dis_amp[(tide_name, comp)]
+                        dis_phase = tide_dis_phase[(tide_name, comp)]
+                        
+                        # Displacement difference
                         tide_dis = dis_amp*np.cos(omega*t_b + dis_phase) - dis_amp * np.cos(omega*t_a + dis_phase)
 
                         offset[comp] = offset[comp] + tide_dis
@@ -628,26 +670,32 @@ class simulation(basics):
                 offset_vec = np.zeros(shape=(3,1))
                 offset_vec[:,0] = [offset['e'],offset['n'],offset['u']]
 
-            elif method == "analytical_grounding":
+            elif method == "analytical_with_grounding":
 
-                cos_terms = {}
-                sin_terms = {}
+                # secular offset
+                secular_off = np.asarray(secular_v)[:,None] * (t_b - t_a)
+                print(secular_off)
 
-                # Convert from velocity to displacement
-                for tide_name = in self.syn_tidesRut:
-                
+                # Tidal displacement
+                G_a = self.design_mat_set[timing_a]
+                G_b = self.design_mat_set[timing_b]
 
-                # Convert from amplitude and phase to cos and sin terms
+                dis_timing_a = np.matmul(G_a, model_vec)
+                dis_timing_b = np.matmul(G_b, model_vec)
 
-                # Construct matrix for tb
+                # Grounding
+                grounding = -2
+                if dis_timing_b[2] < grounding:
+                    dis_timing_b[2] = grounding
+                if dis_timing_a[2] < grounding:
+                    dis_timing_a[2] = grounding
 
-                # Construct matrix for ta
+                # Tidal offset
+                tide_off = dis_timing_b - dis_timing_a
 
-                # 3d displacement = clipping(Tb * x) - clipping(Tb * x)
-
-                pass
-
-
+                # Total offset
+                offset_vec = secular_off + tide_off
+ 
 
             # Project 3d displacement onto observational vectors
             #offset_vec = offset_vec_2
@@ -664,8 +712,6 @@ class simulation(basics):
                 
                 # Record the data.
                 data_vector[2*i+j] = obs_offset
-
-
 
         # Add noise.
         lon, lat = point
@@ -690,7 +736,7 @@ if __name__=='__main__':
 
     main()
 
-## Obsoleted:
+## Deprecated:
 #    def syn_offsets_data_vec_set(self, point_set, secular_v_set, modeling_tides, 
 #                            tide_amp_set, tide_phase_set, offsetfields_set, noise_sigma_set):
 #

@@ -34,9 +34,6 @@ class fourdvel(basics):
 
         super(fourdvel,self).__init__()
 
-        # Constants.
-        self.satellite_constants()
-
         # Data.
         self.csk_data = {}
         self.csk_tracks = range(22)
@@ -183,53 +180,6 @@ class fourdvel(basics):
 
         return 0
             
-    def satellite_constants(self):
-
-        self.track_timefraction = {}
-        track_timefraction = self.track_timefraction
-
-        # CSK.
-        fid = open('/net/kamb/ssd-tmp1/mzzhong/insarRoutines/csk_times.txt')
-        csk_times = fid.readlines()
-        fid.close()
-
-        # 22 tracks.
-        tracks = range(22) 
-        for track_num in tracks:
-            track_timefraction[('csk',track_num)] = float(csk_times[track_num])
-
-        # S1AB.
-        # Time of scene.
-        t37 = datetime.time(6,26,45)
-        track_timefraction[('s1',37)] = (t37.hour * 3600 + t37.minute*60 + t37.second)/(24*3600)
-        
-        t52 = datetime.time(7,7,30)
-        track_timefraction[('s1',52)] = (t52.hour * 3600 + t52.minute*60 + t52.second)/(24*3600)
-
-        t169 = datetime.time(7,40,30)
-        track_timefraction[('s1',169)] = (t169.hour * 3600 + t169.minute*60 + t169.second)/(24*3600)
-
-        t65 = datetime.time(4,34,10)
-        track_timefraction[('s1',65)] = (t65.hour * 3600 + t65.minute*60 + t65.second)/(24*3600)
-
-        t7 = datetime.time(5,6,30)
-        track_timefraction[('s1',7)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
-
-
-        # new tracks
-        t50 = datetime.time(3,53,40)
-        track_timefraction[('s1',50)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
-
-        t64 = datetime.time(2,57,0)
-        track_timefraction[('s1',64)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
-
-        #t49 = datetime.time(2,16,0)
-        #track_timefraction[('s1',49)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
-
-        #print(track_timefraction)
-
-        return 0
-
     def get_CSK_trackDates(self):
 
         import csv
@@ -609,22 +559,43 @@ class fourdvel(basics):
     def get_timings(self):
 
         fmt = "%Y%m%d"
-        timings_pkl = './pickles/'+ '_'.join(['timings', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)]) + '.pkl'
+        timings_pkl = self.pickle_dir + '/' + '_'.join(['timings', 'csk', self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)]) + '.pkl'
 
-        print(timings_pkl)
+        print('timing file: ', timings_pkl)
 
-        if os.path.exists(timings_pkl)
+        redo = 1
 
-        # Derive all timings
-        timings = []
-        for key in self.csk_data.keys():
-            tfrac = self.track_timefraction['csk',key]
-            for the_date in self.csk_data[key]:
-                timings.append((the_date, round(tfrac,4)))
+        if os.path.exists(timings_pkl) and redo == 0:
+            with open(timings_pkl, 'rb') as f:
+                self.timings = pickle.load(f)
+        else:
+            # Derive all timings
+            self.timings = []
 
-            print(len(timings))
+            # CSK
+            for key in self.csk_data.keys():
+                tfrac = self.track_timefraction['csk',key]
+                for the_date in self.csk_data[key]:
+                    self.timings.append((the_date, round(tfrac,4)))
+            # S1
+            for key in self.s1_data.keys():
+                tfrac = self.track_timefraction['s1',key]
+                for the_date in self.s1_data[key]:
+                    self.timings.append((the_date, round(tfrac,4)))
+
+            self.timings = sorted(self.timings)
+            
+            #print(self.timings)
+            #print(len(self.timings))
+
+            with open(timings_pkl,'wb') as f:
+                pickle.dump(self.timings, f)
+
+            #print(len(self.timings))
+
+        #print(self.timings)
+        #print(stop)
  
-
         return 0
 
     def get_design_mat_set(self):
@@ -632,44 +603,40 @@ class fourdvel(basics):
         from forward import forward
         fwd = forward()
 
+        redo = 1
+
         fmt = "%Y%m%d"
-        design_mat_set_pkl = './pickles/'+ '_'.join(['design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)] + self.modeling_tides ) + '.pkl'
+        design_mat_set_pkl = self.pickle_dir +'/' + '_'.join(['design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)] + self.modeling_tides ) + '.pkl'
 
         print('design_mat_set file:', design_mat_set_pkl)
 
-        if os.path.exists(design_mat_set_pkl):
+        if os.path.exists(design_mat_set_pkl) and redo==0:
             with open(design_mat_set_pkl,'rb') as f:
                 self.design_mat_set = pickle.load(f)
         else:
             
-           self.design_mat_set = fwd.design_mat_set(timings, self.modeling_tides)
+            self.design_mat_set = fwd.design_mat_set(self.timings, self.modeling_tides)
             print(len(self.design_mat_set))
 
             with open(design_mat_set_pkl,'wb') as f:
                 pickle.dump(self.design_mat_set,f)
 
-        # Ad hoc for rutford
-         design_mat_set_pkl = './pickles/'+ '_'.join(['design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)] + 'Rutford_full' ) + '.pkl'
+        # For simulation
+        if self.test_mode==1:
 
-        if not os.path.exists(design_mat_set_pkl):
-            
-            #print(self.csk_data)
-            #print(self.s1_data)
-            #print(self.track_timefraction)
-
-            # Derive all timings
-            timings = []
-            for key in self.csk_data.keys():
-                tfrac = self.track_timefraction['csk',key]
-                for the_date in self.csk_data[key]:
-                    timings.append((the_date, round(tfrac,4)))
-
-            print(len(timings))
-            self.design_mat_set = fwd.design_mat_set(timings, self.modeling_tides)
-            print(len(self.design_mat_set))
-
-            with open(design_mat_set_pkl,'wb') as f:
-                pickle.dump(self.design_mat_set,f)
+            rutford_design_mat_set_pkl = self.pickle_dir +'/'+ '_'.join(['design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt), 'Rutford_full'] ) + '.pkl'
+    
+            if os.path.exists(rutford_design_mat_set_pkl) and redo==0:
+                with open(rutford_design_mat_set_pkl, 'rb') as f:
+                    self.rutford_design_mat_set = pickle.load(f)
+    
+            else:
+                rutford_tides = ['K2','S2','M2','K1','P1','O1','Msf','Mf','Mm','Ssa','Sa']
+                self.rutford_design_mat_set = fwd.design_mat_set(self.timings, rutford_tides)
+                print(len(self.rutford_design_mat_set))
+    
+                with open(rutford_design_mat_set_pkl,'wb') as f:
+                    pickle.dump(self.rutford_design_mat_set,f)
 
         return 0
 
@@ -681,7 +648,6 @@ class fourdvel(basics):
         self.get_grid_set_velo()
         self.get_tile_set()
         self.get_data_uncert()
-
 
         # Show the counts.
         print('Number of total grid points: ', len(self.grid_set.keys()))

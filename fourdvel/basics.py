@@ -8,6 +8,8 @@ class basics():
 
     def __init__(self):
 
+        self.pickle_dir = '/net/kamb/ssd-tmp1/mzzhong/insarRoutines/pickles'
+
         # Time origin
         self.t_origin = datetime.datetime(2018,1,1,0,0,0,0)
 
@@ -42,6 +44,9 @@ class basics():
 
         self.lon_step = 1/self.lon_re
         self.lat_step = 1/self.lat_re
+
+        # Load the satellite constants
+        self.satellite_constants()
 
     def latlon_distance(self, lon1,lat1,lon2,lat2):
         
@@ -130,3 +135,52 @@ class basics():
             return np.asarray([v1,v2,np.sqrt(1-v1**2-v2**2)])
         else:
             return np.asarray([v1,np.sqrt(1-v1**2),0])
+
+    def satellite_constants(self):
+
+        self.track_timefraction = {}
+        track_timefraction = self.track_timefraction
+
+        # CSK.
+        fid = open('/net/kamb/ssd-tmp1/mzzhong/insarRoutines/csk_times.txt')
+        csk_times = fid.readlines()
+        fid.close()
+
+        # 22 tracks.
+        tracks = range(22) 
+        for track_num in tracks:
+            track_timefraction[('csk',track_num)] = float(csk_times[track_num])
+
+        # S1AB.
+        # Time of scene.
+        t37 = datetime.time(6,26,45)
+        track_timefraction[('s1',37)] = (t37.hour * 3600 + t37.minute*60 + t37.second)/(24*3600)
+        
+        t52 = datetime.time(7,7,30)
+        track_timefraction[('s1',52)] = (t52.hour * 3600 + t52.minute*60 + t52.second)/(24*3600)
+
+        t169 = datetime.time(7,40,30)
+        track_timefraction[('s1',169)] = (t169.hour * 3600 + t169.minute*60 + t169.second)/(24*3600)
+
+        t65 = datetime.time(4,34,10)
+        track_timefraction[('s1',65)] = (t65.hour * 3600 + t65.minute*60 + t65.second)/(24*3600)
+
+        t7 = datetime.time(5,6,30)
+        track_timefraction[('s1',7)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+
+
+        # new tracks
+        t50 = datetime.time(3,53,40)
+        track_timefraction[('s1',50)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+
+        t64 = datetime.time(2,57,0)
+        track_timefraction[('s1',64)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+
+        #t49 = datetime.time(2,16,0)
+        #track_timefraction[('s1',49)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+
+        #print(track_timefraction)
+
+        return 0
+
+

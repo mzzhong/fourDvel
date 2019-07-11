@@ -8,7 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 plt.style.use('seaborn-darkgrid')
 
-def main():
+def test1():
 
     np.random.seed(123)
     
@@ -59,8 +59,19 @@ def main():
         pm.traceplot(trace)
         print(pm.summary(trace).round(2))
     
-    
     return 0
 
+def test2():
+
+    gp_model = pm.Model()
+
+    with gp_model:
+
+        cov = np.array([[1., 0.5], [0.5, 2]])
+        mu = np.zeros(2)
+        vals = pm.MvNormal('vals', mu=mu, cov=cov, shape=(5, 2))
+
+        print(vals.size)
+
 if __name__=="__main__":
-    main()
+    test2()
