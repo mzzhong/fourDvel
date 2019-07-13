@@ -98,10 +98,6 @@ class fourdvel(basics):
                 self.grid_set_data_uncert_name = value
                 print('grid_set_data_uncert_name: ',value)
 
-            if name == 'design_mat_set_name':
-                self.design_mat_set_name = value
-                print('design_mat_set_name: ',value)
-
             if name == 'data_uncert_const':
                 self.data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
                 print('data_uncert_const: ',self.data_uncert_const)
@@ -556,6 +552,43 @@ class fourdvel(basics):
 
         return 0
 
+    def stack_design_mat_set(self, point_set, design_mat_set, offsetfields_set):
+
+        stack_design_mat_set = {}
+        for point in point_set:
+            stack_design_mat_set[point] = self.stack_design_mat_for_point(point, design_mat_set, offsetfields_set[point])
+
+        return stack_design_mat_set
+
+    def stack_design_mat_for_point(self, point, design_mat_set, offsetfields):
+
+        # At point level
+        # Stack the design matrix for all pairs
+        stacked_design_mat_EN_ta = []
+        stacked_design_mat_EN_tb = []
+        stacked_design_mat_U_ta = []
+        stacked_design_mat_U_tb = []
+
+        for i in range(len(offsetfields)):
+
+            timing_a = (offsetfields[i][0], round(offsetfields[i][4],4))
+            timing_b = (offsetfields[i][1], round(offsetfields[i][4],4))
+
+            stacked_design_mat_EN_ta.append(design_mat_set[timing_a][:2,:])
+            stacked_design_mat_EN_tb.append(design_mat_set[timing_b][:2,:])
+
+            stacked_design_mat_U_ta.append(design_mat_set[timing_a][2,:])
+            stacked_design_mat_U_tb.append(design_mat_set[timing_b][2,:])
+
+        stacked_design_mat_EN_ta = np.vstack(tuple(stacked_design_mat_EN_ta))
+        stacked_design_mat_EN_tb = np.vstack(tuple(stacked_design_mat_EN_tb))
+        stacked_design_mat_U_ta = np.vstack(tuple(stacked_design_mat_U_ta))
+        stacked_design_mat_U_tb = np.vstack(tuple(stacked_design_mat_U_tb))
+
+
+        return (stacked_design_mat_EN_ta, stacked_design_mat_EN_tb, stacked_design_mat_U_ta, stacked_design_mat_U_tb)
+
+
     def get_timings(self):
 
         fmt = "%Y%m%d"
@@ -614,7 +647,6 @@ class fourdvel(basics):
             with open(design_mat_set_pkl,'rb') as f:
                 self.design_mat_set = pickle.load(f)
         else:
-            
             self.design_mat_set = fwd.design_mat_set(self.timings, self.modeling_tides)
             print(len(self.design_mat_set))
 
@@ -637,7 +669,6 @@ class fourdvel(basics):
     
                 with open(rutford_design_mat_set_pkl,'wb') as f:
                     pickle.dump(self.rutford_design_mat_set,f)
-
         return 0
 
     def preparation(self):
@@ -720,12 +751,12 @@ class fourdvel(basics):
 
     def build_G_set(self, point_set, offsetfields_set):
         
-        design_mat_set = {}
+        linear_design_mat_set = {}
         for point in point_set:
             offsetfields = offsetfields_set[point]
-            design_mat_set[point] = self.build_G(offsetfields=offsetfields)
+            linear_design_mat_set[point] = self.build_G(offsetfields=offsetfields)
 
-        return design_mat_set
+        return linear_design_mat_set
 
     def build_G(self, point=None, tracks=None, offsetfields=None, horizontal = False):
 
@@ -845,12 +876,12 @@ class fourdvel(basics):
 
     def build_G_ENU_set(self, point_set, offsetfields_set):
         
-        design_mat_set = {}
+        linear_design_mat_set = {}
         for point in point_set:
             offsetfields = offsetfields_set[point]
-            design_mat_set[point] = self.build_G_ENU(offsetfields=offsetfields)
+            linear_design_mat_set[point] = self.build_G_ENU(offsetfields=offsetfields)
 
-        return design_mat_set
+        return linear_design_mat_set
 
     def build_G_ENU(self, point=None, tracks=None, offsetfields=None, horizontal = False):
 
@@ -1219,12 +1250,12 @@ class fourdvel(basics):
 
         return invCm
 
-    def model_posterior_set(self, point_set, design_mat_set, data_prior_set, model_prior_set):
+    def model_posterior_set(self, point_set, linear_design_mat_set, data_prior_set, model_prior_set):
         Cm_p_set = {}
         for point in point_set:
 
             #print(point)
-            Cm_p_set[point] = self.model_posterior(design_mat_set[point], 
+            Cm_p_set[point] = self.model_posterior(linear_design_mat_set[point], 
                                                     data_prior_set[point], 
                                                     model_prior_set[point])
 
@@ -1297,12 +1328,12 @@ class fourdvel(basics):
         return model_vec
 
     # Bayesian inversion. (set)
-    def param_estimation_set(self, point_set, design_mat_set, data_vec_set,
+    def param_estimation_set(self, point_set, linear_design_mat_set, data_vec_set,
                         data_prior_set, model_prior_set, model_posterior_set):
 
         model_vec_set = {}
         for point in point_set:
-            model_vec_set[point] = self.param_estimation(design_mat_set[point],
+            model_vec_set[point] = self.param_estimation(linear_design_mat_set[point],
                                             data_vec_set[point], data_prior_set[point],
                                             model_prior_set[point], model_posterior_set[point])
 
@@ -1340,7 +1371,7 @@ class fourdvel(basics):
 
 
     # Calculate residual sets.
-    def resids_set(self, point_set, design_mat_set, data_vec_set, model_vec_set):
+    def resids_set(self, point_set, linear_design_mat_set, data_vec_set, model_vec_set):
 
         resid_of_secular_set = {}
         resid_of_tides_set = {}
@@ -1349,7 +1380,7 @@ class fourdvel(basics):
         for point in point_set:
 
             # secular.
-            resid_of_secular = self.resid_of_secular(design_mat_set[point],
+            resid_of_secular = self.resid_of_secular(linear_design_mat_set[point],
                                                 data_vec_set[point], model_vec_set[point])
 
             if not np.isnan(resid_of_secular[0,0]):
@@ -1364,7 +1395,7 @@ class fourdvel(basics):
                 resid_of_secular_set[point] = (np.nan,np.nan,np.nan,np.nan)
 
             # tides.
-            resid_of_tides = self.resid_of_tides(design_mat_set[point],
+            resid_of_tides = self.resid_of_tides(linear_design_mat_set[point],
                                                 data_vec_set[point], model_vec_set[point])
 
             if point == self.test_point:

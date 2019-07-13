@@ -205,11 +205,17 @@ class inversion(fourdvel):
             for point in point_set:
                 noise_sigma_set[point] = self.load_noise_sigma(point)
 
-            #print(noise_sigma_set[self.test_point])
-            #print(self.modeling_tides)
-            #print(offsetfields_set[self.test_point])
-            #print(stop)
+            # Stack the design matrix for Rutford tides
+            stack_design_mat_set = self.stack_design_mat_set(point_set, self.rutford_design_mat_set, offsetfields_set)
 
+            # Provide the matrix to simulator
+            fourD_sim.set_stack_design_mat_set(stack_design_mat_set)
+
+            # Provide grounding
+            grounding = - 0.5
+            fourD_sim.set_grounding(grounding)
+
+            # Get offsets
             data_vec_set = fourD_sim.syn_offsets_data_vec_set(
                                 point_set = point_set,
                                 secular_v_set = secular_v_set, 
@@ -219,9 +225,6 @@ class inversion(fourdvel):
                                 offsetfields_set = offsetfields_set, 
                                 noise_sigma_set = noise_sigma_set)
 
-            # Data prior.
-            invCd_set = self.real_data_uncertainty_set(point_set, data_vec_set, 
-                                                            noise_sigma_set)
             # True tidal params. (Every point has the value)
             true_tide_vec_set = fourD_sim.true_tide_vec_set(point_set, secular_v_set, 
                                             self.modeling_tides, tide_amp_set, tide_phase_set)
@@ -313,15 +316,11 @@ class inversion(fourdvel):
                                                                 point_set = point_set, 
                                                                 velo_model_set = velo_model_set)
 
-
-
                 # Data prior.
                 noise_sigma_set = {}
                 for point in point_set:
                     noise_sigma_set[point] = self.load_noise_sigma(point)
 
-                #print(noise_sigma_set[test_point])
-                #print(stop)
  
                 data_vec_set = fourD_sim.syn_offsets_data_vec_set(
                                     point_set = point_set,
@@ -332,9 +331,6 @@ class inversion(fourdvel):
                                     offsetfields_set = offsetfields_set, 
                                     noise_sigma_set = noise_sigma_set)
 
-                # Data prior.
-                invCd_set = self.real_data_uncertainty_set(point_set, data_vec_set, 
-                                                                noise_sigma_set)
                 # True tidal params. (Every point has the value)
                 true_tide_vec_set = fourD_sim.true_tide_vec_set(point_set,secular_v_set,                                    self.modeling_tides, tide_amp_set, tide_phase_set)
 
@@ -348,12 +344,6 @@ class inversion(fourdvel):
                 for point in point_set:
                     noise_sigma_set[point] = self.load_noise_sigma(point)
 
-                #print(noise_sigma_set[test_point])
-                #print(stop)
-                    
-                invCd_set = self.real_data_uncertainty_set(point_set, data_vec_set, 
-                                                                noise_sigma_set)
-
                 # Get reference velocity
                 n_params = 3 + len(self.modeling_tides) * 6
                 for point in point_set:
@@ -365,11 +355,12 @@ class inversion(fourdvel):
                     true_tide_vec_set[point][2] = secular_v_set[point][2]
 
 
-        return (data_info_set, data_vec_set, invCd_set, offsetfields_set, true_tide_vec_set)
+        return (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set)
 
     def point_set_tides(self, point_set, tracks_set, inversion_method=None):
 
-        ### Data ###
+        ### Get data either from simulation or real data ###
+
         # Choose the test mode.
         test_id = self.test_id
         test_mode = self.test_mode
@@ -382,8 +373,7 @@ class inversion(fourdvel):
 
         # All variables are dictionary with point_set as the key.
         # Data set formation.
-        (data_info_set, data_vec_set, invCd_set, offsetfields_set, true_tide_vec_set) = \
-                                self.data_set_formation(point_set, tracks_set, test_mode)
+        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set)=                                self.data_set_formation(point_set, tracks_set, test_mode)
 
         #print(data_info_set[self.test_point])
 
@@ -392,20 +382,26 @@ class inversion(fourdvel):
 
         if inversion_method == 'Bayesian_Linear':
 
+            # Data prior.
+            invCd_set = self.real_data_uncertainty_set(point_set, data_vec_set, \
+                                                            noise_sigma_set)
+ 
+
+
             from solvers import Bayesian_Linear
 
             BL = Bayesian_Linear()
 
             ### MODEL ###
             # Design matrix.
-            design_mat_set = self.build_G_set(point_set, offsetfields_set=offsetfields_set)
+            linear_design_mat_set = self.build_G_set(point_set, offsetfields_set=offsetfields_set)
     
-            #print("Design matrix set (G)\n:", design_mat_set[self.test_point])
+            #print("Design matrix set (G)\n:", linear_design_mat_set[self.test_point])
             print("Design matrix (obs) set Done")
     
             #design_mat_enu_set = self.build_G_ENU_set(point_set, offsetfields_set=offsetfields_set)
     
-            #print("Design matrix set (G)\n:", design_mat_set[self.test_point])
+            #print("Design matrix set (G)\n:", linear_design_mat_set[self.test_point])
             print("Design matrix (enu) set Done")
      
             # Model prior.
@@ -413,7 +409,7 @@ class inversion(fourdvel):
             print("Model prior set Done")
     
             # Model posterior (Singular matrix will come back with nan).
-            Cm_p_set = self.model_posterior_set(point_set, design_mat_set, invCd_set, invCm_set)
+            Cm_p_set = self.model_posterior_set(point_set, linear_design_mat_set, invCd_set, invCm_set)
             #print('Model posterior: ',Cm_p_set[self.test_point])
             print("Model posterior set Done")
     
@@ -422,16 +418,19 @@ class inversion(fourdvel):
     
             ### Inversion ###
             # Estimate model params.
-            model_vec_set = self.param_estimation_set(point_set, design_mat_set, data_vec_set, invCd_set, invCm_set, Cm_p_set)
+            model_vec_set = self.param_estimation_set(point_set, linear_design_mat_set, data_vec_set, invCd_set, invCm_set, Cm_p_set)
+            print('model_vec_set: ', model_vec_set)
             print('Model vec set estimation Done')
     
             # Calculale the residual.
-            resid_of_secular_set, resid_of_tides_set = self.resids_set(point_set, design_mat_set, data_vec_set, model_vec_set)
+            resid_of_secular_set, resid_of_tides_set = self.resids_set(point_set, linear_design_mat_set, data_vec_set, model_vec_set)
             print('Residual calculation Done')
     
             # Convert to tidal params.
             tide_vec_set = self.model_vec_set_to_tide_vec_set(point_set, model_vec_set)
+            print('tide_vec_set: ',tide_vec_set)
             print('Tide vec set Done')
+            #print(stop)
     
             # Convert model posterior to uncertainty of params.
             # Require: tide_vec and Cm_p
@@ -450,49 +449,57 @@ class inversion(fourdvel):
 
             # Save additional info from analysis in other_set_1
             other_set_1 = {} 
-            #other_set_1 = self.analysis.check_fitting_set(point_set, data_info_set, offsetfields_set, design_mat_set, design_mat_enu_set, data_vec_set, model_vec_set, tide_vec_set)
+            #other_set_1 = self.analysis.check_fitting_set(point_set, data_info_set, offsetfields_set, linear_design_mat_set, design_mat_enu_set, data_vec_set, model_vec_set, tide_vec_set)
 
         elif inversion_method=='Bayesian_MCMC':
 
             from solvers import Bayesian_MCMC
 
             BMC = Bayesian_MCMC()
-
             # Set the point to work on
             BMC.set_point_set(point_set)
 
+            linear_design_mat_set = self.build_G_set(point_set, offsetfields_set=offsetfields_set)
+
+            # Set linear tides
+            BMC.set_linear_design_mat_set(linear_design_mat_set)
+
+ 
             # Set modeling tides
             BMC.set_modeling_tides(self.modeling_tides)
             
             # Provide model priors
-            BMC.set_model_priors(model_prior=true_tide_vec_set, no_secular_up = self.no_secular_up, up_short_period = self.up_short_period, horizontal_long_period = self.horizontal_long_period)
+            self.up_lower = -10
+            self.up_upper = 10
+            BMC.set_model_priors(model_prior_set=true_tide_vec_set, no_secular_up = self.no_secular_up, up_short_period = self.up_short_period, horizontal_long_period = self.horizontal_long_period, up_lower = self.up_lower, up_upper = self.up_upper)
 
             # Provide data priors
-            BMC.set_data_covariance(invCd_set)
+            BMC.set_noise_sigma_set(noise_sigma_set)
 
             # Provide data
-            BMC.set_data(data_vec_set)
+            BMC.set_data_set(data_vec_set)
 
             # Provide offsetfield info
-            BMC.set_offsetfields(offsetfields_set)
+            BMC.set_offsetfields_set(offsetfields_set)
 
-            # Provide design_mat_set
-            BMC.set_design_mat(self.design_mat_set)
-            
+            # Stack the design matrix modeling tides
+            stack_design_mat_set = self.stack_design_mat_set(point_set, self.design_mat_set, offsetfields_set)
+
+            # Provide the matrix to simulator
+            BMC.set_stack_design_mat_set(stack_design_mat_set)
+
             # Run inversion
-            model_vec_set = BMC.run()
-
-            print(stop)
-
-            # Get the result
-            #all_sets = BMC.get_model_vec_set()
-            
-            #model_vec_set = all_sets['model_vec_set']
-            #grounding_set = all_sets['grouding_set']
+            model_vec_set = BMC.run_optimize()
 
             # Convert to tidal params.
-            #tide_vec_set = self.model_vec_set_to_tide_vec_set(point_set, model_vec_set)
- 
+            tide_vec_set = self.model_vec_set_to_tide_vec_set(point_set, model_vec_set)
+
+            # Other set are not available currently
+            tide_vec_uq_set = {}
+            resid_of_secular_set = {}
+            resid_of_tides_set = {}
+            other_set_1 = {}
+
         else:
             raise Exception('Please choose a inversion method')
 
@@ -610,6 +617,7 @@ class inversion(fourdvel):
                 self.test_point = point_set[0] 
                 
                 # Inversion happens here
+                #self.inversion_method = 'Bayesian_Linear'
                 self.inversion_method = 'Bayesian_MCMC'
                 
                 all_sets  = self.point_set_tides(point_set = point_set, tracks_set = tracks_set, inversion_method=self.inversion_method)
