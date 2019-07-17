@@ -26,7 +26,6 @@ class Bayesian_MCMC(basics):
 
         super(Bayesian_MCMC, self).__init__()
 
-
     def set_point_set(self, point_set):
 
         self.point_set = point_set
@@ -34,7 +33,6 @@ class Bayesian_MCMC(basics):
     def set_modeling_tides(self, modeling_tides):
     
         self.modeling_tides = modeling_tides
-
         self.n_params = 3 + 6 * len(modeling_tides)
 
     def set_model_priors(self, model_prior_set=None, no_secular_up=False, up_short_period=False, horizontal_long_period=False, up_lower=None, up_upper=None):
@@ -72,59 +70,50 @@ class Bayesian_MCMC(basics):
 
     def run_test0(self):
 
-        # Construct model
-        with self.bmc_model as bmc_model:
+        # Create data
+        size = 2000
+        true_intercept = 1
+        true_slope = 2
 
-            # Construct model
-            secular = pm.MvNormal('secular',mu=self.secular, cov=0.5)
+        x = np.linspace(0,10,size)
 
-            # Tidal
-            cov = self.model_covariance
-            mu = self.model_prior
-            theta = pm.MvNormal('theta', mu=mu, cov=cov)
+        G = np.zeros(shape=(size,2))
+        G[:,0] = x
+        G[:,1] = 1
 
-            # Grounding
-            grounding_point = pm.Uniform(lower = self.grounding_lower, upper = self.grounding_upper)
+        true_model = np.asarray([2,1])[:,None]
 
-            # Matrix product
-            dis_ta = pm.math.dot(stack_design_mat_ta, theta)
-            dis_tb = pm.math.dot(stack_design_mat_tb, theta)
+        true_regression_line = np.matmul(G, true_model)
 
-            # Clipping a subset () of dis_ta, dis_tb
+        y = true_regression_line + np.random.normal(scale=0.5, size=size).reshape(size,1)
 
-            pm.math.clip(dis_ta, self.grounding_lower, self.grounding_higher)
+        fig = plt.figure(figsize=(7,7))
+        ax = fig.add_subplot(111, xlabel='x',ylabel='y',title = "Generated data and underlying model")
+        ax.plot(x,y, 'x', label='sampled data')
+        ax.plot(x, true_regression_line, label="true regression line",lw=2)
+        plt.legend(loc=0)
+        plt.savefig('1.png')
 
+        self.linear_model = pm.Model()
+        tt_G = theano.shared(G)
+        with self.linear_model as model:
 
-            clip_dis_ta = pm.math.switch(dis_ta)
-            clip_dis_tb = pm.math.switch(dis_tb)
+            # Non-informative prior
+            intercept = pm.Normal("Intercept", 0, sigma=20, shape=(1,1))
+            x_coeff = pm.Normal('x',0, sigma=20, shape=(1,1))
 
-            # Tidal offset (Expected value of outcome)
-            tidal_offset = clip_dis_ta - clip_dis_tb
+            model_vec = pm.math.concatenate([x_coeff, intercept], axis=0)
 
-            # Secular offset
-            # Timing changes for every point
-            secular_offset = self.timing_difference * secular
+            pred = tt_G.dot(model_vec)
+            
+            likelihood = pm.Normal('y', mu=pred, sigma = 0.5, observed=y)
+            
+            # Inference
+            trace = pm.sample(3000, cores=4)
 
-            # Total offset
-            total_offset = secular_offset + tidal_offset
-
-            # Construct data (using Data container)
-            example_point = point_set[0]
-
-            data = pm.Data('data', self.data_vec_set[example_point])
-
-            # Last step: connecting model to data
-            obs = pm.MvNormal('obs', mu=offset, sigma=self.data_cov, observed=data)
-
-
-        # Using data container variables to fit the same model to several datasets
-        traces = []
-        for point in self.point_set:
-            with bmc_model:
-                pm.set_data({'data': self.data_vec_set[point]})
-                traces.append(pm.sample())
-
-        pass
+        plt.figure()
+        pm.traceplot(trace)
+        plt.savefig('2.png')
 
 
     def run_test(self):
@@ -224,15 +213,15 @@ class Bayesian_MCMC(basics):
 
             # Secular component
             for i, comp in enumerate(comps):
-                rv = pm.Normal('Secular_'+ comp, mu=model_prior[i], sigma=0.2*model_prior[0], shape=(1,1), testval=model_prior[i])
+                rv = pm.Normal('Secular_'+ comp, mu=model_prior[i], sigma=max(0.1*abs(model_prior[i]),0.0001), shape=(1,1), testval=model_prior[i])
                 RVs_secular.append(rv)
 
             self.model_vec_secular = pm.math.concatenate(RVs_secular, axis=0)
 
 
             # Tidal componens
-            sigma_permiss = 100
-            sigma_restrict = 0.01
+            sigma_permiss = 10
+            sigma_restrict = 0.0001
             comp_name = ['cosE','cosN','cosU','sinE','sinN','sinU']
             for i, tide_name in enumerate(self.modeling_tides):
                 for j in range(6):
@@ -252,7 +241,7 @@ class Bayesian_MCMC(basics):
             self.model_vec_tidal = pm.math.concatenate(RVs_tidal, axis=0)
 
             # Grouding component
-            #self.grounding = pm.Uniform('grounding', lower= up_lower, upper = up_upper, testval=-1)
+            self.grounding = pm.Uniform('grounding', lower= up_lower, upper = up_upper, testval=-1)
 
 
         print('secular parameter vector length: ', len(RVs_secular))
@@ -275,9 +264,10 @@ class Bayesian_MCMC(basics):
 
             # Obtain data vector
             data_vec = self.data_vec_set[point]
+            print('data_vec shape',data_vec.shape)
+
             N_data = len(data_vec)
             N_offsets = N_data//2
-            tt_data_vec = theano.shared(data_vec)
 
             # Obtain noise sigma
             noise_sigma = self.noise_sigma_set[point]
@@ -287,17 +277,30 @@ class Bayesian_MCMC(basics):
 
             # Form the vectors
             vecs = np.zeros(shape=(N_data, 3))
-            delta_t = np.zeros(shape=(N_offsets,))
+            delta_t = np.zeros(shape=(N_offsets,1))
             t_origin = self.t_origin.date()
             for i in range(N_offsets):
                 vecs[2*i,:] = np.asarray(offsetfields[i][2])
                 vecs[2*i+1,:] = np.asarray(offsetfields[i][3])
                 t_a = (offsetfields[i][0] - t_origin).days + round(offsetfields[i][4],4)
                 t_b = (offsetfields[i][1] - t_origin).days + round(offsetfields[i][4],4)
-                delta_t[i] = t_b - t_a
+                delta_t[i,0] = t_b - t_a
+
+            delta_t = np.repeat(delta_t, 3, axis=1)
  
             tt_vecs = theano.shared(vecs)
             tt_delta_t = theano.shared(delta_t)
+
+            # Form the observation vector matrix
+            vec_mat = np.zeros(shape=(N_data, N_offsets*3))
+            for i in range(N_offsets):
+                vec1 = np.asarray(offsetfields[i][2])
+                vec2 = np.asarray(offsetfields[i][3])
+                vec_mat[2*i,    3*i:3*(i+1)] = vec1
+                vec_mat[2*i+1,  3*i:3*(i+1)] = vec2
+
+            tt_vec_mat = theano.shared(vec_mat)
+                
             #print('delta_t: ',delta_t)
 
             # Make design matrix shared
@@ -305,6 +308,8 @@ class Bayesian_MCMC(basics):
             tt_d_mat_EN_tb = theano.shared(d_mat_EN_tb)
             tt_d_mat_U_ta = theano.shared(d_mat_U_ta)
             tt_d_mat_U_tb = theano.shared(d_mat_U_tb)
+
+            self.model_vec_secular = self.model_vec_secular.T
 
             with self.bmc_model as model:
                 
@@ -314,38 +319,51 @@ class Bayesian_MCMC(basics):
                 dis_U_ta = tt_d_mat_U_ta.dot(self.model_vec_tidal)
                 dis_U_tb = tt_d_mat_U_tb.dot(self.model_vec_tidal)
 
+                # Clipping here ...
+                #dis_U_ta = tt.clip(dis_U_ta, self.grounding, 100)
+                #dis_U_tb = tt.clip(dis_U_tb, self.grounding, 100)
+
+                # offset
                 offset_EN = dis_EN_tb - dis_EN_ta
                 offset_U = dis_U_tb - dis_U_ta
 
-                offset_EN = offset_EN.reshape(shape=(N_offsets,2)).T
-                offset_U = offset_U.T
+                # Form 2d displacement
+                offset_EN = offset_EN.reshape(shape=(N_offsets,2))
 
-                offset_ENU = pm.math.concatenate([offset_EN, offset_U], axis=0)
+                # Form 3d displacement
+                offset_ENU = pm.math.concatenate([offset_EN, offset_U], axis=1)
 
                 # secular velocity
-                rvs =  [self.model_vec_secular * tt_delta_t[i] for i in range(N_offsets)]
-                offset_secular = pm.math.concatenate(rvs, axis=1)
+                offset_secular = self.model_vec_secular.repeat(N_offsets, axis=0) * tt_delta_t
 
                 # Add secular velocity
                 offset_total = offset_ENU + offset_secular
 
-                # Connect to data
-                for i in range(N_offsets):
-                    for j, obs in enumerate(['rng','az']):
-                        pred = tt_vecs[2*i+j,:].dot(offset_ENU[:,i]) 
-                        pm.Normal(  'data_'+ str(2*i+j), mu=pred, 
-                                sigma=noise_sigma[j], observed=tt_data_vec[2*i+j])
+                # Flatten it to a vector
+                offset_total_flatten = offset_total.reshape(shape=(N_offsets*3,1))
+
+                # Multiply to observation
+
+                pred_vec = tt_vec_mat.dot(offset_total_flatten)
+                
+                # Observation
+                obs = pm.Normal('obs', mu=pred_vec, sigma=0.02, observed=data_vec)
 
                 print('Model is built')
+                
+                MAP_or_sample = "sample"
+                if MAP_or_sample == 'MAP':
+                    map_estimate = pm.find_MAP(model=model)
+                    print(map_estimate)
+                elif MAP_or_sample == 'sample':
+                    #step = pm.Metropolis()
+                    #step = pm.HamiltonianMC()
+                    #step = pm.NUTS()
+                    trace = pm.sample(1000, cores = 4)
 
-                step = pm.Metropolis()
-                trace = pm.sample(500, step=step, cores = 8, discard_tuned_samples=True)
-
-                pm.traceplot(trace)
-                plt.savefig('bayes_2.png')
-
-            with open('./pickles/' + 'bmc_model.pkl','wb') as f:
-                pickle.dump(self.bmc_model, f)
+                    pm.traceplot(trace)
+                    plt.savefig('bayes_2.png')
+                    print(trace)
 
             return 0
 
@@ -424,17 +442,27 @@ class Bayesian_MCMC(basics):
 
             # Form the vectors
             vecs = np.zeros(shape=(N_data, 3))
-            delta_t = np.zeros(shape=(N_offsets,))
+            delta_t = np.zeros(shape=(N_offsets,1))
             t_origin = self.t_origin.date()
             for i in range(N_offsets):
                 vecs[2*i,:] = np.asarray(offsetfields[i][2])
                 vecs[2*i+1,:] = np.asarray(offsetfields[i][3])
                 t_a = (offsetfields[i][0] - t_origin).days + round(offsetfields[i][4],4)
                 t_b = (offsetfields[i][1] - t_origin).days + round(offsetfields[i][4],4)
-                delta_t[i] = t_b - t_a
- 
+                delta_t[i,0] = t_b - t_a
+
+            delta_t = np.repeat(delta_t, 3, axis=1)
+            
+            # Form the observation vector matrix
+            vec_mat = np.zeros(shape=(N_data, N_offsets*3))
+            for i in range(N_offsets):
+                vec1 = np.asarray(offsetfields[i][2])
+                vec2 = np.asarray(offsetfields[i][3])
+                vec_mat[2*i,    3*i:3*(i+1)] = vec1
+                vec_mat[2*i+1,  3*i:3*(i+1)] = vec2
+                
             pred_vec = np.zeros(shape=(N_data,1))
-            args_1 = (d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb, data_vec, N_data, N_offsets, vecs, delta_t, pred_vec) 
+            args_1 = (d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb, data_vec, N_data, N_offsets, vecs, delta_t, vec_mat, pred_vec) 
         
             
             linear_design_mat = self.linear_design_mat_set[point]
@@ -463,6 +491,9 @@ class Bayesian_MCMC(basics):
 
         return model_vec_set
 
+
+# Forward problem calculation used by non-linear optimization
+
 def forward_linear(x, *T):
 
     G,d = T
@@ -481,7 +512,7 @@ def forward_linear(x, *T):
 #def forward(x, A1, A2, A3, A4, B1, B2, B3, B4, C1):
 def forward(x, *T):
 
-    d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb, data_vec, N_data, N_offsets, vecs, delta_t, pred_vec = T
+    d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb, data_vec, N_data, N_offsets, vecs, delta_t, vec_mat, pred_vec = T
 
     print(x)
 
@@ -500,23 +531,23 @@ def forward(x, *T):
     offset_ENU = np.hstack((offset_EN.reshape(N_offsets,2), offset_U))
 
     # Broadcast
-    secular_ENU = np.repeat(x[None,0:3], N_offsets, axis=0) * delta_t[:,None]
-
-    #print(offset_ENU)
-    #print(offset_ENU.shape)
-    #print(secular_ENU)
-    #print(secular_ENU.shape)
-    #print(stop)
+    secular_ENU = np.repeat(x[None,0:3], N_offsets, axis=0) * delta_t
 
     # Total ENU
     total_ENU = offset_ENU + secular_ENU
 
-    for i in range(N_offsets):
-        pred_vec[2*i] = np.dot(vecs[2*i], total_ENU[i])
-        pred_vec[2*i+1] = np.dot(vecs[2*i+1], total_ENU[i])
+    #for i in range(N_offsets):
+    #    pred_vec[2*i] = np.dot(vecs[2*i], total_ENU[i])
+    #    pred_vec[2*i+1] = np.dot(vecs[2*i+1], total_ENU[i])
+
+    # Flatten
+    total_ENU_flatten = total_ENU.reshape(N_offsets*3, 1)
+
+    # Prediction
+    pred_vec = np.matmul(vec_mat, total_ENU_flatten)
 
     return np.linalg.norm(pred_vec - data_vec)
 
 if __name__=='__main__':
     BMC = Bayesian_MCMC()
-    BMC.run_test() 
+    BMC.run_test0() 

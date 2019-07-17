@@ -212,7 +212,7 @@ class inversion(fourdvel):
             fourD_sim.set_stack_design_mat_set(stack_design_mat_set)
 
             # Provide grounding
-            grounding = - 0.5
+            grounding = - 2
             fourD_sim.set_grounding(grounding)
 
             # Get offsets
@@ -489,7 +489,8 @@ class inversion(fourdvel):
             BMC.set_stack_design_mat_set(stack_design_mat_set)
 
             # Run inversion
-            model_vec_set = BMC.run_optimize()
+            #model_vec_set = BMC.run_optimize()
+            model_vec_set = BMC.run_MCMC()
 
             # Convert to tidal params.
             tide_vec_set = self.model_vec_set_to_tide_vec_set(point_set, model_vec_set)

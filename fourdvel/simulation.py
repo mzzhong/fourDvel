@@ -597,10 +597,10 @@ class simulation(basics):
 
             model_vec = np.asarray(model_vec)[:,None]
 
-            print(cos_coef[('S2','u')])
-            print(sin_coef[('S2','u')])
-
-            print(stop)
+            #print(cos_coef[('S2','u')])
+            #print(sin_coef[('S2','u')])
+            #print(self.grounding)
+            #print(stop)
 
             # Obtain stacked matrix
             stacked_design_mat_EN_ta, stacked_design_mat_EN_tb, stacked_design_mat_U_ta, stacked_design_mat_U_tb = self.stack_design_mat_set[point]
