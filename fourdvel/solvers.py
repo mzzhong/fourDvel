@@ -115,8 +115,76 @@ class Bayesian_MCMC(basics):
         pm.traceplot(trace)
         plt.savefig('2.png')
 
+    def run_test1(self):
 
-    def run_test(self):
+        # Linear regression
+        P = 4
+        N = 2000
+        model = np.arange(P).reshape(P,1)
+        np.random.seed(20190717)
+        G = np.random.randn(N*P).reshape(N,P)
+        true_data = np.matmul(G,model)
+
+        real_data = true_data + np.random.randn(N).reshape(N,1)
+
+        # Solve for model (psudo-inverse)
+        est_model_true_data = np.matmul(np.linalg.pinv(G), true_data)
+        print(est_model_true_data.T)
+
+        est_model_real_data = np.matmul(np.linalg.pinv(G), real_data)
+        print(est_model_real_data.T)
+
+        # Solver for model using Bayesian programming
+        self.linear_model = pm.Model()
+        tt_G = theano.shared(G)
+        with self.linear_model as model:
+            rvs = []
+            for i in range(P):
+                rv = pm.Normal('x_'+str(i), mu=0, sigma=100, shape=(1,1))
+                rvs.append(rv)
+            model_vec = pm.math.concatenate(rvs, axis=0)
+            pred = pm.math.dot(tt_G, model_vec)
+            pm.Normal('obs',mu=pred, sigma=1, observed=real_data)
+
+            n_draws = 500
+            step = pm.Metropolis()
+            trace1 = pm.sample(draws = n_draws, step=step, cores=4, tune=500, discard_tuned_samples=False)
+            fname1 = pm.save_trace(trace1)
+
+            trace2 = pm.sample(draws = n_draws, step=step, cores=4, tune=500, trace=trace1, discard_tuned_samples=False)
+            fname2 = pm.save_trace(trace2)
+
+            a = trace1.get_values('x_3')
+            print(a.shape)
+            a2 = trace2.get_values('x_3')
+            print(a2.shape)
+            return 0
+           
+
+
+            print(dir(trace))
+            print('a')
+            print(type(a))
+            print(a.shape)
+            print(a[:100,0,0])
+            plt.plot(a[:,0,0])
+            plt.savefig('4.png')
+            b = trace.get_values('x_3',chains=[3])
+            print('b')
+            print(type(b))
+            print(b.shape)
+            print(b[:100,0,0])
+
+        with self.linear_model:
+            trace2 = pm.load_trace(fname)
+            a = trace2.get_values('x_3')
+            plt.plot(a[:,0,0]) 
+            plt.savefig('5.png')
+
+
+        return 0
+
+    def run_test2(self):
 
         N = 10
         G = np.zeros(shape=(20,N))+1
@@ -192,9 +260,8 @@ class Bayesian_MCMC(basics):
             #print(trace.point(50,chain=0))
             #print(trace.points)
 
-    def construct_model_vec(self, point):
+    def construct_model_vec(self, point, grounding=False):
 
-        self.bmc_model = pm.Model()
         RVs_secular = []
         RVs_tidal = []
 
@@ -213,7 +280,8 @@ class Bayesian_MCMC(basics):
 
             # Secular component
             for i, comp in enumerate(comps):
-                rv = pm.Normal('Secular_'+ comp, mu=model_prior[i], sigma=max(0.1*abs(model_prior[i]),0.0001), shape=(1,1), testval=model_prior[i])
+                #rv = pm.Normal('Secular_'+ comp, mu=model_prior[i], sigma=max(0.1*abs(model_prior[i]),0.0001), shape=(1,1), testval=model_prior[i])
+                rv = pm.Normal('Secular_'+ comp, mu=0, sigma=10, shape=(1,1), testval=model_prior[i])
                 RVs_secular.append(rv)
 
             self.model_vec_secular = pm.math.concatenate(RVs_secular, axis=0)
@@ -222,6 +290,8 @@ class Bayesian_MCMC(basics):
             # Tidal componens
             sigma_permiss = 10
             sigma_restrict = 0.0001
+            #sigma_restrict = 10
+
             comp_name = ['cosE','cosN','cosU','sinE','sinN','sinU']
             for i, tide_name in enumerate(self.modeling_tides):
                 for j in range(6):
@@ -241,11 +311,134 @@ class Bayesian_MCMC(basics):
             self.model_vec_tidal = pm.math.concatenate(RVs_tidal, axis=0)
 
             # Grouding component
-            self.grounding = pm.Uniform('grounding', lower= up_lower, upper = up_upper, testval=-1)
+            if grounding:
+                self.grounding = pm.Uniform('grounding', lower= up_lower, upper = up_upper, testval=-1)
 
 
         print('secular parameter vector length: ', len(RVs_secular))
         print('tidal parameter vector length: ', len(RVs_tidal))
+
+        return 0
+
+    def remove_design_mat_cols(self, G, head_offset=3):
+
+        cols = []
+
+        # Secular E and N is included in G
+        if head_offset==3:
+            cols.append(G[:,0:2])
+
+        for i, tide_name in enumerate(self.modeling_tides):
+            for j in range(6):
+                k = head_offset + i*6 + j
+                if self.up_short_period and tide_name in ['Mf','Msf','Mm'] and (j==2 or j==5):
+                    # Not include this parameter
+                    pass
+
+                elif self.horizontal_long_period and tide_name in ['M2','S2','O1'] and (j==0 or j==1 or j==3 or j==4):
+
+                    # Not include this parameter
+                    pass
+                else:
+                    #print(tide_name, j)
+                    cols.append(G[:,k][:,None])
+
+        new_G = np.hstack(cols)
+
+        return new_G
+    
+    def run_MCMC_linear(self):
+
+        print('Running MCMC on linear model...')
+
+        for point in self.point_set:
+            print('The grid point is: ', point)
+
+            # Design matrix
+            linear_design_mat = self.linear_design_mat_set[point]
+
+            # Subset the design matrix to remove some parameters
+            linear_design_mat = self.remove_design_mat_cols(linear_design_mat)
+
+            # Print
+            #print(linear_design_mat[:,2].tolist())
+            #print(np.linalg.cond(linear_design_mat))
+            #print(np.linalg.matrix_rank(linear_design_mat))
+            #print(stop)
+
+            # Data
+            data_vec = self.data_vec_set[point]
+
+            # Pseudo-inverese
+            model_est = np.matmul(np.linalg.pinv(linear_design_mat), data_vec)
+            print('pseudo-inverse solution of orgingal matrix')
+            print(model_est.T)
+
+            # Rescale of mean and std
+            col_mean = np.nanmean(linear_design_mat, axis=0)[None,:]
+            col_std = np.nanstd(linear_design_mat, axis=0)[None,:]
+            #print(col_mean)
+            print("col_std")
+            print(col_std)
+            
+            #normalized_linear_design_mat = (linear_design_mat - col_mean)/col_std
+            normalized_linear_design_mat = linear_design_mat / col_std
+
+            # Pseudo-inverese
+            normalized_model_est = np.matmul(np.linalg.pinv(normalized_linear_design_mat), data_vec)
+            print('pseudo-inverse solution of normalized matrix')
+            print(normalized_model_est.T)
+
+            # Scale back
+            #recovered_model_est = np.linalg.pinv(linear_design_mat).dot(normalized_linear_design_mat).dot(normalized_model_est)
+            recovered_model_est = normalized_model_est / col_std.T
+
+            print('pseudo-inverse solution of normalized matrix after scaling back')
+            print(recovered_model_est.T)
+
+            print('G shape: ', linear_design_mat.shape)
+            print('data shape: ', data_vec.shape)
+
+            # PyMC
+            N, P = linear_design_mat.shape
+            tt_linear_G = theano.shared(linear_design_mat)
+            #tt_linear_G = theano.shared(normalized_linear_design_mat)
+
+            #plt.imshow(linear_design_mat, aspect='auto')
+            #plt.colorbar()
+            #plt.savefig('G.png')
+            #print(stop)
+
+            # Construct the parameter vector
+            self.bmc_model = pm.Model()
+            #self.construct_model_vec(point = point, grounding = False)
+
+            with self.bmc_model as model:
+                # option 1
+                #model_vec = pm.math.concatenate([self.model_vec_secular, self.model_vec_tidal], axis=0)
+
+                # option 2
+                #rvs = []
+                #print('total number of parameters: ', P)
+                #for i in range(P):
+                #    rv = pm.Normal('x_'+str(i), mu=0, sigma=10, shape=(1,1))
+                #    rvs.append(rv)
+                #    model_vec = pm.math.concatenate(rvs, axis=0)
+        
+                # option 3
+                model_vec = pm.Normal('x', mu=0, sigma=10, shape=(P,1))
+                    
+                pred = pm.math.dot(tt_linear_G, model_vec)
+                pm.Normal('obs', mu = pred, sigma=0.2, observed = data_vec)
+
+                #step = pm.Metropolis()
+                #N_draws = 500000
+                #trace = pm.sample(draws=N_draws, step=step, tune=N_draws//2, discard_tuned_samples=True)
+
+                N_draws = 1000
+                trace = pm.sample(draws=N_draws, tune=1000)
+                pm.traceplot(trace)
+                plt.savefig('2.png')
 
         return 0
 
@@ -254,13 +447,22 @@ class Bayesian_MCMC(basics):
         print('Running Bayesian MCMC...')
 
         for point in self.point_set:
+            
             print('The grid point is: ',point)
-
-            # Construct the parameter vector
-            self.construct_model_vec(point)
 
             # Obtain design matrix
             d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb = self.stack_design_mat_set[point]
+
+            # Subset the design matrix to remove some parameters
+            d_mat_EN_ta = self.remove_design_mat_cols(d_mat_EN_ta, head_offset=0)
+            d_mat_EN_tb = self.remove_design_mat_cols(d_mat_EN_tb, head_offset=0)
+            d_mat_U_ta = self.remove_design_mat_cols(d_mat_U_ta, head_offset=0)
+            d_mat_U_tb = self.remove_design_mat_cols(d_mat_U_tb, head_offset=0)
+
+            #print(d_mat_EN_ta.shape)
+            #print(d_mat_EN_tb.shape)
+            #print(d_mat_U_ta.shape)
+            #print(d_mat_U_tb.shape)
 
             # Obtain data vector
             data_vec = self.data_vec_set[point]
@@ -287,7 +489,7 @@ class Bayesian_MCMC(basics):
                 delta_t[i,0] = t_b - t_a
 
             delta_t = np.repeat(delta_t, 3, axis=1)
- 
+
             tt_vecs = theano.shared(vecs)
             tt_delta_t = theano.shared(delta_t)
 
@@ -303,16 +505,29 @@ class Bayesian_MCMC(basics):
                 
             #print('delta_t: ',delta_t)
 
-            # Make design matrix shared
+            # Make the design matrix shared
             tt_d_mat_EN_ta = theano.shared(d_mat_EN_ta)
             tt_d_mat_EN_tb = theano.shared(d_mat_EN_tb)
             tt_d_mat_U_ta = theano.shared(d_mat_U_ta)
             tt_d_mat_U_tb = theano.shared(d_mat_U_tb)
 
-            self.model_vec_secular = self.model_vec_secular.T
 
+            # Construct the parameter vector
+            self.bmc_model = pm.Model()
             with self.bmc_model as model:
-                
+
+                # The model vector
+                _ , P = d_mat_EN_ta.shape
+    
+                # E, N, U
+                self.model_vec_secular = pm.Normal('secular', mu=0, sigma=10, shape=(1,3))
+    
+                # Tidal components
+                self.model_vec_tidal = pm.Normal('tidal', mu=0, sigma=10, shape=(P,1))
+
+                # Tidal components
+                self.grounding = pm.Normal('grounding', mu=0, sigma=10, shape=(1,1))
+
                 dis_EN_ta = tt_d_mat_EN_ta.dot(self.model_vec_tidal)
                 dis_EN_tb = tt_d_mat_EN_tb.dot(self.model_vec_tidal)
 
@@ -320,8 +535,8 @@ class Bayesian_MCMC(basics):
                 dis_U_tb = tt_d_mat_U_tb.dot(self.model_vec_tidal)
 
                 # Clipping here ...
-                #dis_U_ta = tt.clip(dis_U_ta, self.grounding, 100)
-                #dis_U_tb = tt.clip(dis_U_tb, self.grounding, 100)
+                dis_U_ta = tt.clip(dis_U_ta, self.grounding, 100)
+                dis_U_tb = tt.clip(dis_U_tb, self.grounding, 100)
 
                 # offset
                 offset_EN = dis_EN_tb - dis_EN_ta
@@ -347,19 +562,20 @@ class Bayesian_MCMC(basics):
                 pred_vec = tt_vec_mat.dot(offset_total_flatten)
                 
                 # Observation
-                obs = pm.Normal('obs', mu=pred_vec, sigma=0.02, observed=data_vec)
+                obs = pm.Normal('obs', mu=pred_vec, sigma=0.2, observed=data_vec)
 
                 print('Model is built')
                 
-                MAP_or_sample = "sample"
-                if MAP_or_sample == 'MAP':
-                    map_estimate = pm.find_MAP(model=model)
-                    print(map_estimate)
-                elif MAP_or_sample == 'sample':
+                MAP_or_Sample = "Sample"
+                
+                map_estimate = pm.find_MAP(model=model)
+                print(map_estimate)
+                
+                if MAP_or_Sample == 'Sample':
                     #step = pm.Metropolis()
                     #step = pm.HamiltonianMC()
                     #step = pm.NUTS()
-                    trace = pm.sample(1000, cores = 4)
+                    trace = pm.sample(1000, tune=1000)
 
                     pm.traceplot(trace)
                     plt.savefig('bayes_2.png')
@@ -550,4 +766,4 @@ def forward(x, *T):
 
 if __name__=='__main__':
     BMC = Bayesian_MCMC()
-    BMC.run_test0() 
+    BMC.run_test1() 
