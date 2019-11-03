@@ -1,16 +1,8 @@
 #!/usr/bin/env python3
 
 import numpy as np
-
-import theano
-import theano.tensor as tt
-import pymc3 as pm
-
-import seaborn as sns
 import matplotlib.pyplot as plt
-
 import datetime
-
 from basics import basics
 
 plt.style.use('seaborn-darkgrid')
@@ -23,6 +15,11 @@ class Bayesian_Linear(basics):
 class Bayesian_MCMC(basics):
 
     def __init__(self):
+
+        import theano
+        import theano.tensor as tt
+        import pymc3 as pm
+        import seaborn as sns
 
         super(Bayesian_MCMC, self).__init__()
 

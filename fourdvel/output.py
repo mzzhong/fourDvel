@@ -302,11 +302,12 @@ class output(fourdvel):
                 # Down-sample for velocity vector.
                 if quant_name == 'secular_horizontal_velocity':
                     output_keys = []
+                    
                     for point in this_grid_set.keys():
 
                         lon, lat = point
-                        lon_ind = np.round(lon/self.lon_step)
-                        lat_ind = np.round(lat/self.lat_step) 
+                        lon_ind = np.round(lon/self.lon_step_int)
+                        lat_ind = np.round(lat/self.lat_step_int) 
 
                         if lon_ind % 10==0 and lat_ind % 10==0:
                             output_keys.append((lon,lat))
@@ -354,7 +355,11 @@ def main():
 
     # Analysis the results. 
     out.output_estimations()
-    out.output_differences(compare_id=620, compare_prefix='true')
+    # Evans
+    #out.output_differences(compare_id=620, compare_prefix='true')
+    # Rutford
+    out.output_differences(compare_id=20201000, compare_prefix='true')
+
     out.residual()
 
     #out.output_others()

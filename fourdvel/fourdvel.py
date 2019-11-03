@@ -28,30 +28,80 @@ from scipy import linalg
 
 from basics import basics
 
+INT_NAN = -99999
+
 class fourdvel(basics):
 
     def __init__(self, param_file='params.in'):
 
+
         super(fourdvel,self).__init__()
 
-        # Data.
-        self.csk_data = {}
-        self.csk_tracks = range(22)
+        self.read_parameters(param_file)
 
-        for i in self.csk_tracks:
-            self.csk_data[i] = []
+        if self.proj == "Evans":
+            # Data.
+            self.csk_data = {}
+            self.csk_tracks = range(22)
 
-        self.s1_data = {}
-        self.s1_tracks = [37,52,169,65,7,50,64]
+            for it in self.csk_tracks:
+                self.csk_data[it] = []
+
+            self.s1_data = {}
+            self.s1_tracks = [37,52,169,65,7,50,64]
         
-        for i in self.s1_tracks:
-            self.s1_data[i] = []
+            for it in self.s1_tracks:
+                self.s1_data[it] = []
 
-        # Grounding line file.
-        self.glfile = '/home/mzzhong/links/jokull-nobak-net/Ant_Data/GL_Points_Evans.txt'
+            self.satellite_constants()
+
+        elif self.proj == "Rutford":
+            self.csk_data = {}
+            self.csk_tracks = [8,10,23,25,40,52,55,67,69,82,97,99,114,126,128,129,141,143,156,158,171,172,173,186,188,201,203,215,218,230,231,232]
+
+            for it in self.csk_tracks:
+                self.csk_data[it] = []
+
+            self.s1_data = {}
+            self.s1_tracks = [37,65,7]
+        
+            for it in self.s1_tracks:
+                self.s1_data[it] = []
+
+            self.satellite_constants()
+
+        # Related folders
         self.design_mat_folder = './design_mat'
 
-        self.read_parameters(param_file)
+
+        ########### Control the solution (Rutford) ##########
+        # physical size     lat x lon
+        #   100m x 100m     0.001 x 0.005
+        #   500m x 500m     0.005 x 0.025
+        resolution=self.resolution
+
+        if resolution == 500:
+            self.lat_step = 0.005
+            self.lon_step = 0.025
+            self.lat_step_int = self.round_int_5dec(self.lat_step)
+            self.lon_step_int = self.round_int_5dec(self.lon_step)
+        elif resolution == 100:
+            self.lat_step = 0.001
+            self.lon_step = 0.005
+            self.lat_step_int = self.round_int_5dec(self.lat_step)
+            self.lon_step_int = self.round_int_5dec(self.lon_step)
+
+        else:
+            raise Exception("Undefined resolution")
+            return
+
+        # The inverse to size
+        self.lon_re = np.round(1/self.lon_step).astype(int)
+        self.lat_re = np.round(1/self.lat_step).astype(int)
+
+        print("fourdvel initialization done")
+
+        return 0
 
     def read_parameters(self, param_file):
         
@@ -60,7 +110,6 @@ class fourdvel(basics):
         fmt = '%Y%m%d'
 
         params = f.readlines()
-
 
         # Quick and dirty:
         self.data_uncert_const = None
@@ -74,6 +123,10 @@ class fourdvel(basics):
             except:
                 continue
 
+            if name == 'proj':
+                self.proj = value
+                print('proj',value)
+
             if name == 'test_id':
                 self.test_id = value
                 print('test_id',value)
@@ -85,6 +138,10 @@ class fourdvel(basics):
             if name == 'grid_set_name':
                 self.grid_set_name = value
                 print('grid_set_name: ',value)
+
+            if name == 'resolution':
+                self.resolution = int(value)
+                print('resolution: ',value)
 
             if name == 'grid_set_velo_name':
                 self.grid_set_velo_name = value
@@ -176,12 +233,14 @@ class fourdvel(basics):
 
         return 0
             
-    def get_CSK_trackDates(self):
+    def get_CSK_trackDates_from_log(self):
 
         import csv
         from CSK_Utils import CSK_Utils
 
+        # csk_data[track_number] = [date1, date2, date3,...]
         csk_data = self.csk_data
+
         csk_start = self.csk_start
         csk_end = self.csk_end
 
@@ -206,22 +265,24 @@ class fourdvel(basics):
                 
                 # Count as one product.
                 tot_product = tot_product + 1
-                
-                #print(row)
+
+                # Satellite 
                 sate = 'CSKS' + row[1][-1]
+                # Date
                 acq_datefmt = row[5].split(' ')[0]
+                # Direction
                 direction = row[7][0]
-                
+
+                # Convert date string to date object
                 date_comp = [int(item) for item in acq_datefmt.split('-')]
                 theDate = date(date_comp[0],date_comp[1],date_comp[2])
-                #print(sate, date_comp, direction)
 
+                # If the date is within the range set by user
                 if theDate >= csk_start and theDate < csk_end:
     
-                    # Find the corresponding track.                
+                    # Find the figure out the track number.                
                     tracks = csk.date2track(day=theDate, sate=sate)[sate]
-    
-                    # Ascending or descending.                
+                   
                     if direction == 'A':
                         track = [ i for i in tracks if i<=10 ]
                     else:
@@ -236,16 +297,56 @@ class fourdvel(basics):
                     tot_frames = tot_frames + csk.numOfFrames[track[0]]
     
         
-        print("number of product: ", tot_product)
-        print("number of frames: ", tot_frames)
+        print("Number of product: ", tot_product)
+        print("Number of frames: ", tot_frames)
 
-
-        # Sort the tracks.
+        # Sort the dates of each track.
+        # Output the track info
         for track_num in sorted(csk_data.keys()):
             csk_data[track_num].sort()
             print(track_num)
             print(csk_data[track_num])
         
+        return 0
+
+    def get_CSK_trackDates(self):
+
+        import glob
+
+        csk_data = self.csk_data
+        csk_start = self.csk_start
+        csk_end = self.csk_end
+
+        tracklist = self.csk_tracks
+
+        option = "data_based"
+
+        if option=="data_based":
+
+            for track_num in tracklist: 
+            
+                filefolder = '/net/kraken/nobak/mzzhong/CSK-Rutford/track_' + str(track_num).zfill(3) + '_0' + '/raw/201*'
+
+                filelist = glob.glob(filefolder)
+                csk_data[track_num] = []
+    
+                for rawfile in filelist:
+                    datestr = rawfile.split('/')[-1]
+                    if len(datestr)==8:
+                        theDate = date(int(datestr[0:4]), int(datestr[4:6]), int(datestr[6:8]))
+                        if theDate >= csk_start and theDate < csk_end:
+                            csk_data[track_num].append(theDate)
+    
+                csk_data[track_num] = list(set(csk_data[track_num]))
+                csk_data[track_num].sort()
+
+                print("track_num: ",track_num)
+                print(csk_data[track_num])
+
+        else:
+            print("option", option, "is not defined yet")
+            raise Exception("dates are not available")
+
         return 0
 
     def get_S1_trackDates(self):
@@ -257,7 +358,6 @@ class fourdvel(basics):
         s1_start = self.s1_start
         s1_end = self.s1_end
 
-        
         s1 = S1_Utils()
 
         tracklist = self.s1_tracks
@@ -293,7 +393,6 @@ class fourdvel(basics):
     
                 ref_date = s1.ref_date[track_num]
 
-               
                 day = s1_start
                 while day < s1_end:
                     if ((day - ref_date).days % 6==0 and track_num!=7) or \
@@ -303,11 +402,8 @@ class fourdvel(basics):
 
                 print("track_num: ",track_num)
                 print(s1_data[track_num])
- 
-
-            #print(stop)
         else:
-            
+            print("option", option, "is not defined yet")
             raise Exception("dates are not available")
 
         return 0
@@ -317,14 +413,17 @@ class fourdvel(basics):
         self.grid_set_velo = None
 
         if hasattr(self, 'grid_set_velo_name'):
+
             dim = 3
             if dim == 3:
-                grid_set_velo_pkl = self.grid_set_velo_name + '_3d' + '.pkl'
+                grid_set_velo_pkl = self.grid_set_velo_name + '_' + str(self.resolution) + '_3d' + '.pkl'
     
             if os.path.exists(grid_set_velo_pkl):
                 print('Loading grid_set_velo...')
                 with open(grid_set_velo_pkl,'rb') as f:
                     self.grid_set_velo = pickle.load(f)
+            else:
+                raise Exception("Unable to load velocity model")
 
     def get_tile_set(self):
 
@@ -335,6 +434,7 @@ class fourdvel(basics):
                 print('Loading tile_set ...')
                 with open(tile_set_pkl,'rb') as f:
                     self.tile_set = pickle.load(f)
+
 
 
     def get_data_uncert(self):
@@ -348,6 +448,9 @@ class fourdvel(basics):
                 with open(grid_set_data_uncert_set_pkl,'rb') as f:
                     self.grid_set_data_uncert = pickle.load(f)
 
+    def round_to_grid_points(self, x, re):
+        
+        return np.round(x * re)/re
 
     def get_grid_set(self):
         import gdal
@@ -357,7 +460,10 @@ class fourdvel(basics):
         redo = 0
         grid_set_pkl = self.grid_set_name + '.pkl'
 
-        # Step size
+        # Step size in geocoded files
+        # lon_step = 0.02 degree
+        # lat_step = 0.005 degree
+
         self.lon_step = 0.02
         self.lat_step = 0.005
 
@@ -493,13 +599,197 @@ class fourdvel(basics):
                                 pass
                         else:
                             grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])].append(info)
-                    
+
+            print("Total number of grid points: ", len(grid_set))
+
+            print("Save to pickle file...")                    
             with open(grid_set_pkl,'wb') as f:
                 pickle.dump(grid_set,f)
 
             self.grid_set = grid_set
 
         return 0
+
+    def get_grid_set_v2(self):
+        import gdal
+
+        # Currently only CSK on Rutford
+        redo = 0
+
+
+        ###########################################
+        # Generate pickle file
+        grid_set_pkl = self.grid_set_name + '_' + str(resolution) + '.pkl'
+
+        lat_step_int = self.lat_step_int
+        lon_step_int = self.lon_step_int
+
+        print("step_int: ", lon_step_int, lat_step_int)
+        print("re size: ", self.lon_re, self.lat_re)
+
+        if os.path.exists(grid_set_pkl) and redo == 0:
+            print('Loading grid_set...')
+
+            with open(grid_set_pkl,'rb') as f:
+                self.grid_set = pickle.load(f)
+
+            print('total number of grid points: ', len(self.grid_set))
+        else:
+            print('Calculating grid_set...')
+            grid_set = {}
+
+            #satellites = ['csk','s1']
+            satellites = ['csk']
+
+            directory = {}
+            tracklist = {}
+            offset_id = {}
+
+            directory['csk'] = '/net/kraken/nobak/mzzhong/CSK-Rutford'
+            tracklist['csk'] = [8,10,23,25,40,52,55,67,69,82,97,99,114,126,128,129,141,143,156,158,171,172,173,186,188,201,203,215,218,230,231,232]
+            offset_id['csk'] = 20190921
+
+            directory['s1'] = '/net/jokull/nobak/mzzhong/S1-Evans'
+            # update 20190702
+            tracklist['s1'] = [37, 52, 169, 65, 7, 50, 64]
+            offset_id['s1'] = 20180703
+
+            for sate in satellites:
+
+                for track_num in tracklist[sate]:
+
+                    print(sate,track_num)
+
+                    if sate == 'csk':
+                        trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(3)+'_0')
+                    else:
+                        trackdir = os.path.join(directory[sate],'track_' + str(track_num))
+ 
+                    gc_losfile = os.path.join(trackdir,'merged','geom_master','gc_los_offset_' + str(offset_id[sate]) + '.rdr')
+                    
+                    gc_losvrtfile = gc_losfile + '.vrt'
+                    dataset = gdal.Open(gc_losvrtfile)
+                    geoTransform = dataset.GetGeoTransform()
+                    
+                    lon0 = geoTransform[0]
+                    lon_interval = geoTransform[1]
+        
+                    lat0 = geoTransform[3]
+                    lat_interval = geoTransform[5]
+        
+                    xsize = dataset.RasterXSize
+                    ysize = dataset.RasterYSize
+        
+                    lon_list = np.linspace(lon0, lon0 + lon_interval*(xsize-1), xsize)
+                    lat_list = np.linspace(lat0, lat0 + lat_interval*(ysize-1), ysize)
+
+                    #print(lon_list, lat_list)
+
+                    ## If files not geocoded onto the FULL RESOLUTION grid points, 
+                    ## Do it here
+                    #lon_list = self.round_to_grid_points(lon_list, self.lon_re)
+                    #lat_list = self.round_to_grid_points(lat_list, self.lat_re)
+                    #######################################################
+
+                    #print(lon_list, lat_list)
+
+                    ### Convert to 5 decimal point integer
+                    lon_list = self.round_int_5dec(lon_list)
+                    lat_list = self.round_int_5dec(lat_list)
+        
+                    #print(lon_list,len(lon_list),xsize)
+                    #print(lat_list,len(lat_list),ysize)
+
+                    # Mesh grid
+                    grid_lon, grid_lat = np.meshgrid(lon_list, lat_list)
+        
+                    # Maskout the invalid
+                    los = dataset.GetRasterBand(1).ReadAsArray()
+                    azi = dataset.GetRasterBand(2).ReadAsArray()
+        
+                    #print(grid_lon)
+                    #print(grid_lon.shape)
+                    #print(los.shape)
+
+                    grid_lon[los == 0] = INT_NAN
+                    grid_lat[los == 0] = INT_NAN
+        
+                    #fig = plt.figure(1)
+                    #ax = fig.add_subplot(111)
+                    #ax.imshow(grid_lat)
+                    #plt.show()
+
+                    # Flatten the grid points        
+                    grid_lon_1d = grid_lon.flatten()
+                    grid_lat_1d = grid_lat.flatten()
+        
+                    # Read the observation vectors
+                    enu_gc_losfile = os.path.join(trackdir,'merged','geom_master','enu_gc_los_offset_' + str(offset_id[sate]) + '.rdr.vrt')
+                    enu_gc_azifile = os.path.join(trackdir,'merged','geom_master','enu_gc_azi_offset_' + str(offset_id[sate]) + '.rdr.vrt')
+                    try:
+                        dataset = gdal.Open(enu_gc_losfile)
+                    except:
+                        raise Exception('geometry file not exist')
+
+                    # Los ENU
+                    elos = dataset.GetRasterBand(1).ReadAsArray()
+                    nlos = dataset.GetRasterBand(2).ReadAsArray()
+                    ulos = dataset.GetRasterBand(3).ReadAsArray()
+        
+                    # Azi ENU
+                    dataset = gdal.Open(enu_gc_azifile)
+                    eazi = dataset.GetRasterBand(1).ReadAsArray()
+                    nazi = dataset.GetRasterBand(2).ReadAsArray()
+                    uazi = dataset.GetRasterBand(3).ReadAsArray()
+        
+                    #print(grid_lon_1d,len(grid_lon_1d))
+                    #print(grid_lat_1d,len(grid_lat_1d))
+
+
+                    # Loop through all grid points   
+                    for kk in range(len(grid_lon_1d)):
+        
+                        ii = kk // xsize
+                        jj = kk - ii * xsize
+        
+                        if grid_lon[ii,jj]==INT_NAN or grid_lat[ii,jj]==INT_NAN:
+                            continue
+
+                        ### Add downsampling here #########
+                        if grid_lon[ii,jj]%lon_step_int!=0 or grid_lat[ii,jj]% lat_step_int!=0:
+                            continue
+
+                        # The element being pushed into the list.
+                        # 1. track number; 2. los (three vectors) 3. azi (three vectors) 4. satellite name.
+                        info = (track_num,(elos[ii,jj],nlos[ii,jj],ulos[ii,jj]),(eazi[ii,jj],nazi[ii,jj],uazi[ii,jj]),sate)
+        
+                        # Push into the grid_set, only add new grid when sate is csk.
+                        if (grid_lon[ii,jj],grid_lat[ii,jj]) not in grid_set.keys():
+                            if sate=='csk':
+                                grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])] = [info]
+                            else:
+                                pass
+                        else:
+                            grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])].append(info)
+
+            print(grid_set.keys())
+            print("Total number of grid points: ", len(grid_set))
+
+            print("Writing to Pickle file...")
+            with open(grid_set_pkl,'wb') as f:
+                pickle.dump(grid_set,f)
+
+            self.grid_set = grid_set
+
+            print("Done")
+
+        print("Output a test point")
+        key = (-8100000,-7900000)
+        print("Test point: ",key)
+        print(self.grid_set[key])
+
+        return 0
+
 
     def coverage(self): 
 
@@ -602,7 +892,7 @@ class fourdvel(basics):
             with open(timings_pkl, 'rb') as f:
                 self.timings = pickle.load(f)
         else:
-            # Derive all timings
+            # Derive all timings (date + time fraction)
             self.timings = []
 
             # CSK
@@ -618,13 +908,8 @@ class fourdvel(basics):
 
             self.timings = sorted(self.timings)
             
-            #print(self.timings)
-            #print(len(self.timings))
-
             with open(timings_pkl,'wb') as f:
                 pickle.dump(self.timings, f)
-
-            #print(len(self.timings))
 
         #print(self.timings)
         #print(stop)
@@ -653,7 +938,7 @@ class fourdvel(basics):
             with open(design_mat_set_pkl,'wb') as f:
                 pickle.dump(self.design_mat_set,f)
 
-        # For simulation
+        # For simulation, we need design mat for all tides
         if self.test_mode==1:
 
             rutford_design_mat_set_pkl = self.pickle_dir +'/'+ '_'.join(['design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt), 'Rutford_full'] ) + '.pkl'
@@ -674,7 +959,7 @@ class fourdvel(basics):
     def preparation(self):
 
         # Get pre-defined grid points and the corresponding tracks and vectors.
-        self.get_grid_set()
+        self.get_grid_set_v2()
 
         self.get_grid_set_velo()
         self.get_tile_set()
@@ -697,6 +982,7 @@ class fourdvel(basics):
         elif self.use_s1:
             self.get_S1_trackDates()
 
+        # Prepartion G matrix libaray for inversion
         self.get_timings()
         self.get_design_mat_set()
 
@@ -1283,12 +1569,11 @@ class fourdvel(basics):
 
         # If G is singular.
         if np.linalg.cond(invCm_p) < 1/sys.float_info.epsilon:
-
-            print('normal')
+            #print('normal')
         #if np.linalg.cond(invCm_p) < 10**8:
             Cm_p = np.linalg.pinv(invCm_p)
         else:
-            print('singular')
+            #print('singular')
             Cm_p = np.zeros(shape=invCm_p.shape) + np.nan
 
         #print(stop)
@@ -1398,9 +1683,10 @@ class fourdvel(basics):
             resid_of_tides = self.resid_of_tides(linear_design_mat_set[point],
                                                 data_vec_set[point], model_vec_set[point])
 
-            if point == self.test_point:
-                print(resid_of_tides)
-                print(len(resid_of_tides))
+            # Ouput the residual
+            #if point == self.test_point:
+                #print(resid_of_tides)
+                #print(len(resid_of_tides))
 
             if not np.isnan(resid_of_tides[0,0]):
                 # range and azimuth

@@ -135,6 +135,9 @@ class display(fourdvel):
         cap=100
         for key in sorted(show_dict.keys()):
             lon, lat = key
+
+            lon, lat = self.int5d_to_float([lon,lat])
+
             value = show_dict[key]
 
             # More then one value (velocity vector).

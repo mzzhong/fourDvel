@@ -158,10 +158,8 @@ class inversion(fourdvel):
         indep_tracks = sorted(list(set(indep_tracks)))
 
         # Print total number of tracks.
-        print('Number of tracks in this point set: ', len(indep_tracks))
-        print(indep_tracks)
-
-        #print(stop)
+        print("Number of tracks in this point set: ", len(indep_tracks))
+        print("They are: ", indep_tracks)
 
         if test_mode == 1:
             
@@ -181,6 +179,7 @@ class inversion(fourdvel):
 
                 # Create all offsetfields
                 offsetfields_set[point] = self.tracks_to_full_offsetfields(tracks)
+                
                 # Not available
                 offsets_set[point] = "test_mode is 1"
 
@@ -189,17 +188,16 @@ class inversion(fourdvel):
 
             # Synthetic data.
             fourD_sim = simulation()
-            
+
             # Model parameters.
             velo_model_set = {}
             for point in point_set:
                 velo_model_set[point] = self.grid_set_velo[point]
-            
+
             # Obtain the synthetic ice flow.
             (secular_v_set, tide_amp_set, tide_phase_set) = fourD_sim.syn_velocity_set(
                                                             point_set = point_set, 
                                                             velo_model_set = velo_model_set)
-
             # Data prior.
             noise_sigma_set = {}
             for point in point_set:
@@ -228,7 +226,6 @@ class inversion(fourdvel):
             # True tidal params. (Every point has the value)
             true_tide_vec_set = fourD_sim.true_tide_vec_set(point_set, secular_v_set, 
                                             self.modeling_tides, tide_amp_set, tide_phase_set)
-
 
         if test_mode == 2 or test_mode == 3:
 
@@ -386,8 +383,6 @@ class inversion(fourdvel):
             invCd_set = self.real_data_uncertainty_set(point_set, data_vec_set, \
                                                             noise_sigma_set)
  
-
-
             from solvers import Bayesian_Linear
 
             BL = Bayesian_Linear()
@@ -419,7 +414,7 @@ class inversion(fourdvel):
             ### Inversion ###
             # Estimate model params.
             model_vec_set = self.param_estimation_set(point_set, linear_design_mat_set, data_vec_set, invCd_set, invCm_set, Cm_p_set)
-            print('model_vec_set: ', model_vec_set)
+            #print('model_vec_set: ', model_vec_set)
             print('Model vec set estimation Done')
     
             # Calculale the residual.
@@ -428,9 +423,8 @@ class inversion(fourdvel):
     
             # Convert to tidal params.
             tide_vec_set = self.model_vec_set_to_tide_vec_set(point_set, model_vec_set)
-            print('tide_vec_set: ',tide_vec_set)
+            #print('tide_vec_set: ',tide_vec_set)
             print('Tide vec set Done')
-            #print(stop)
     
             # Convert model posterior to uncertainty of params.
             # Require: tide_vec and Cm_p
@@ -505,8 +499,8 @@ class inversion(fourdvel):
         else:
             raise Exception('Please choose a inversion method')
 
-
-        ##### Show the results ####
+        ########### Inversion done ##########################
+        ########### Show the results ########################
         # Stack the true and inverted models.
         # Show on point in the point set.
 
@@ -583,44 +577,50 @@ class inversion(fourdvel):
         count_tile = 0
         count_run = 0
 
-        #print(len(tile_set))
-        #print(stop)
+        print("Number of tiles: ",len(tile_set))
+        print("All tiles",tile_set.keys())
 
         for tile in sorted(tile_set.keys()):
+            
             # Work on a particular tile.
             lon, lat = tile
             
             # Run all in serial.
-            #if (count_tile >= start_tile and count_tile < stop_tile): 
+            if (count_tile >= start_tile and count_tile < stop_tile):
             
             #if (count_tile >= start_tile and count_tile < stop_tile and 
             #                                            count_tile % 2 == 1):
 
-            # Only run this example tile.
-            if count_tile >= start_tile and count_tile < stop_tile and tile == (-77, -76.6):
-
-            # Debug this tile.
+            # Debug this tile for Evans.
+            #if count_tile >= start_tile and count_tile < stop_tile and f_tile == (-81, -79):
+            # Debug this tile for Evans
             #if count_tile >= start_tile and count_tile < stop_tile and tile == (-84.0, -76.2):
 
+            # Debug this tile for Rutford
+            #if count_tile >= start_tile and count_tile < stop_tile and tile == self.float_lonlat_to_int5d((-83.0, -78.6)):
+
                 print('***  Start a new tile ***')
-                
+                self.print_int5d([lon, lat])
+
                 point_set = tile_set[tile] # List of tuples
 
                 # Output the location and size of tile. 
                 print('tile coordinates: ', tile)
                 print('Number of points in this tile: ', len(point_set))
 
+                #print(point_set)
+
                 # Find the union of tracks 
                 # Only consider track_number and satellite which define the offsetfields.
                 tracks_set = {}
                 for point in point_set:
                     tracks_set[point] = grid_set[point]
-                
+
                 self.test_point = point_set[0] 
                 
                 # Inversion happens here
-                #self.inversion_method = 'Bayesian_Linear'
-                self.inversion_method = 'Bayesian_MCMC'
+                self.inversion_method = 'Bayesian_Linear'
+                #self.inversion_method = 'Bayesian_MCMC'
                 
                 all_sets  = self.point_set_tides(point_set = point_set, tracks_set = tracks_set, inversion_method=self.inversion_method)
 
@@ -668,13 +668,11 @@ class inversion(fourdvel):
         print('Total number of tiles: ', n_tiles)
 
         # Chop into multiple threads. 
-        nthreads = 10
+        nthreads = 16
         total_number = n_tiles
-        print(total_number)
-        print(stop)
 
         divide = self.chop_into_threads(total_number, nthreads)
-        print(divide)
+        print("divide: ", divide)
 
         # Multithreading starts here.
         # The function to run every chunk.
@@ -762,8 +760,8 @@ def main():
     fourd_inv = inversion()
 
     # Tile set.
-    fourd_inv.driver_serial_tile()
-    #fourd_inv.driver_parallel_tile()
+    #fourd_inv.driver_serial_tile()
+    fourd_inv.driver_parallel_tile()
 
     print('All finished!')
 

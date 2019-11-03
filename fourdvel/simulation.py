@@ -76,7 +76,7 @@ class simulation(basics):
         self.verti_scale = 1
 
         # Models are represented in displacement.
-        model_num = 5
+        model_num = 2
 
         if model_num == 1:
 
@@ -148,7 +148,7 @@ class simulation(basics):
             # 1. Scale the vertical motion.
             coe = 2/3
             # 2. Add horizontal short_period on ice shelves.
-            # 3. Use appropriate numbers for periodic grounding
+            # 3. Use simple model (only S2 and M2) on ice shelf for periodic grounding.
  
             tidesRut_params['K2'] =    [5.00,  163,    0*coe,   99]
             tidesRut_params['S2'] =    [5.00, 184,     150.0*coe,  115]
@@ -172,8 +172,8 @@ class simulation(basics):
             # Model 4, increase the horizontal amplitude of M2 and O1
             # 1. Scale the vertical motion.
             coe = 2/3
-            # 2. Remove horizontal short_period on ice shelves.
-            # 3. Use appropriate numbers for periodic grounding
+            # 2. Remove added horizontal short_period on ice shelves.
+            # 3. Use simple model (only S2 and M2) on ice shelf for periodic grounding.
  
             tidesRut_params['K2'] =    [0.31,  163,    0*coe,   99]
             tidesRut_params['S2'] =    [0.363, 184,     150.0*coe,  115]
@@ -526,14 +526,16 @@ class simulation(basics):
         data_vector = np.zeros(shape=(n_rows,1))
         t_origin = self.t_origin.date()
 
+        method = "without grounding"
+
         # Three components.
-        if self.t_axis is not None:
+        # Numerical method
+        if method == "time series provided":
 
             #print('numerical')
             t_axis = self.t_axis
             v = self.v_set[point]
             v_e, v_n, v_u = v
-            method = 'numerical'
 
             # Find the d_e, d_n, d_u
             #t_axis, v_e, v_n, v_u
@@ -558,11 +560,44 @@ class simulation(basics):
             fig.savefig('fig_sim/2.png',format='png')
             print(np.max(d_u))
 
-        else:
-            method = 'analytical_with_grounding'
+        # Analytical with grounding
+        elif method == "with grounding old way":
+
+            # secular offset
+            secular_off = np.asarray(secular_v)[:,None] * (t_b - t_a)
+            print(secular_off)
+
+            # Tidal displacement
+            G_a = self.design_mat_set[timing_a]
+            G_b = self.design_mat_set[timing_b]
+
+            dis_timing_a = np.matmul(G_a, model_vec)
+            dis_timing_b = np.matmul(G_b, model_vec)
+
+            #print('dis_EN_ta: ',dis_EN_ta[0:2])
+            #print('dis_EN_tb: ',dis_EN_tb[0:2])
+            #print('dis_U_ta: ',dis_U_ta[0])
+            #print('dis_U_tb: ',dis_U_tb[0])
+        
+
+            #print('dis_timing_a: ',dis_timing_a)
+            #print('dis_timing_b: ',dis_timing_b)
+
+            # Grounding
+            if dis_timing_b[2] < grounding:
+                dis_timing_b[2] = grounding
+            if dis_timing_a[2] < grounding:
+                dis_timing_a[2] = grounding
+
+            # Tidal offset
+            tide_off = dis_timing_b - dis_timing_a
+
+            # Total offset
+            offset_vec = secular_off + tide_off
+
+        elif method == "with grounding":
 
             ## For a single point
-
             timings = self.timings
             design_mat_set = self.design_mat_set
 
@@ -639,175 +674,148 @@ class simulation(basics):
                 data_vector1[2*i,0] = np.dot(offsetfields[i][2],offset_ENU[:,i])
                 data_vector1[2*i+1,0] = np.dot(offsetfields[i][3],offset_ENU[:,i])
 
+            data_vector = data_vector1
 
-#        # Generate offsets
-#        for i in range(n_offsets):
-#
-#            #print('offsetfield: ',i,'/',n_offsets,'\n')
-#
-#            #print(offsetfields[i])
-#            vecs = [offsetfields[i][2],offsetfields[i][3]]
-#            
-#            t_a = (offsetfields[i][0] - t_origin).days + offsetfields[i][4]
-#            t_b = (offsetfields[i][1] - t_origin).days + offsetfields[i][4]
-#
-#            timing_a = (offsetfields[i][0], round(offsetfields[i][4],4))
-#            timing_b = (offsetfields[i][1], round(offsetfields[i][4],4))
-#
-#            if method == 'numerical_old_version':
-#
-#                ## Numerical way.
-#                # Cut the time series.
-#                if t_a >= t_axis[0] and t_b <= t_axis[-1]:
-#                    inds = np.argmin(np.abs(t_axis-t_a))
-#                    inde = np.argmin(np.abs(t_axis-t_b))
-#                else:
-#                    raise Exception('Time axis too short!')
-#
-#                t_interval = t_axis[inds:inde]
-#                v_e_interval = v_e[inds:inde]
-#                v_n_interval = v_n[inds:inde]
-#                v_u_interval = v_u[inds:inde]
-#
-#                # Plot the cut time series. 
-#                #if i==1:
-#                #    fig = plt.figure(1, figsize=(10,6))
-#                #    plt.clf()
-#                #    ax = fig.add_subplot(111)
-#                #    ax.plot(t_interval,v_u_interval)
-#                #    fig.savefig('interval.png',format='png')
-#
-#                # Integration of velocity wrt time. 
-#                offset_e = np.trapz(v_e_interval, t_interval)
-#                offset_n = np.trapz(v_n_interval, t_interval)
-#                offset_u = np.trapz(v_u_interval, t_interval)
-#
-#                # Velocity vector.
-#                offset_vec = np.zeros(shape=(3,1))
-#                offset_vec[:,0] = [offset_e,offset_n,offset_u]
-#
-#                #print(offset_vec)
-#            
-#            elif method == "numerical":
-#
-#                if t_a >= t_axis[0] and t_b <= t_axis[-1]:
-#                    inds = np.argmin(np.abs(t_axis-t_a))
-#                    inde = np.argmin(np.abs(t_axis-t_b))
-#                else:
-#                    raise Exception('Time axis too short!')
-#
-#                offset_e = d_e[inde] - d_e[inds]
-#                offset_n = d_n[inde] - d_n[inds]
-#                offset_u = d_u[inde] - d_u[inds]
-#
-#                # Velocity vector.
-#                offset_vec = np.zeros(shape=(3,1))
-#                offset_vec[:,0] = [offset_e,offset_n,offset_u]
-#
-#            elif method == 'analytical':
-#
-#                offset={}
-#
-#                offset['e'] = 0
-#                offset['n'] = 0
-#                offset['u'] = 0
-#
-#                # Three components.
-#                comps = ['e','n','u']
-#
-#                #print(tide_amp)
-#                #print(tide_phase)
-#
-#                ii = 0
-#                for comp in comps:
-#                    offset[comp] = offset[comp] + secular_v[ii] * (t_b - t_a)
-#                    ii = ii + 1
-#
-#                    # Changed to Rutford tides instead of modeling tides
-#                    # 2019.07.05
-#
-#                    # Iterative over all tidal components
-#                    for tide_name in self.syn_tidesRut:
-#
-#                        omega = 2*np.pi / self.tide_periods[tide_name]
-#                        dis_amp = tide_dis_amp[(tide_name, comp)]
-#                        dis_phase = tide_dis_phase[(tide_name, comp)]
-#                        
-#                        # Displacement difference
-#                        tide_dis = dis_amp*np.cos(omega*t_b + dis_phase) - dis_amp * np.cos(omega*t_a + dis_phase)
-#
-#                        offset[comp] = offset[comp] + tide_dis
-#
-#                    #print(stop)
-#                
-#                # Velocity vector.
-#                offset_vec = np.zeros(shape=(3,1))
-#                offset_vec[:,0] = [offset['e'],offset['n'],offset['u']]
-#
-#            elif method == "analytical_with_grounding_old_way":
-#
-#                # secular offset
-#                secular_off = np.asarray(secular_v)[:,None] * (t_b - t_a)
-#                print(secular_off)
-#
-#                # Tidal displacement
-#                G_a = self.design_mat_set[timing_a]
-#                G_b = self.design_mat_set[timing_b]
-#
-#                dis_timing_a = np.matmul(G_a, model_vec)
-#                dis_timing_b = np.matmul(G_b, model_vec)
-#
-#                #print('dis_EN_ta: ',dis_EN_ta[0:2])
-#                #print('dis_EN_tb: ',dis_EN_tb[0:2])
-#                #print('dis_U_ta: ',dis_U_ta[0])
-#                #print('dis_U_tb: ',dis_U_tb[0])
-#            
-#
-#                #print('dis_timing_a: ',dis_timing_a)
-#                #print('dis_timing_b: ',dis_timing_b)
-#
-#                # Grounding
-#                if dis_timing_b[2] < grounding:
-#                    dis_timing_b[2] = grounding
-#                if dis_timing_a[2] < grounding:
-#                    dis_timing_a[2] = grounding
-#
-#                # Tidal offset
-#                tide_off = dis_timing_b - dis_timing_a
-#
-#                # Total offset
-#                offset_vec = secular_off + tide_off
-#
-#                #print('offset_ENU: ', offset_ENU[:,0])
-#                #print('offset_vec: ', offset_vec)
-#
-#                #print(stop)
-# 
-#
-#            # Project 3d displacement onto observational vectors
-#            #offset_vec = offset_vec_2
-#
-#            # Two observation vectors.
-#            for j in range(2):
-#                obs_vec = np.zeros(shape=(3,1))
-#                obs_vec[:,0] = np.asarray(vecs[j])
-#                #print("Observation vector:\n", obs_vec)
-#                
-#                # Projection onto the observation vectors.
-#                obs_offset = np.matmul(np.transpose(offset_vec),obs_vec)
-#                #print(obs_offset)
-#                
-#                # Record the data.
-#                data_vector[2*i+j] = obs_offset
+        elif method == "without grounding":
 
+            # Convert parameters from velocity to displacement
+            tide_dis_amp = {}
+            tide_dis_phase = {}
 
+            for comp in ['e','n','u']:
+                for tide_name in self.syn_tidesRut:            
+                    omega = 2*np.pi / self.tide_periods[tide_name]
+                    # amplitude
+                    tide_dis_amp[(tide_name,comp)] = tide_amp[(tide_name,comp)] / omega
+                    # phase
+                    tide_dis_phase[(tide_name,comp)] = tide_phase[(tide_name,comp)]+ np.pi
 
-        data_vector = data_vector1
+            # Generate offsets
+            for i in range(n_offsets):
+    
+                #print('offsetfield: ',i,'/',n_offsets,'\n')
+    
+                #print(offsetfields[i])
+                vecs = [offsetfields[i][2],offsetfields[i][3]]
+                
+                t_a = (offsetfields[i][0] - t_origin).days + offsetfields[i][4]
+                t_b = (offsetfields[i][1] - t_origin).days + offsetfields[i][4]
+    
+                timing_a = (offsetfields[i][0], round(offsetfields[i][4],4))
+                timing_b = (offsetfields[i][1], round(offsetfields[i][4],4))
 
-        # Add noise.
+                option = "analytical"
+    
+                if option == 'numerical_old_way':
+    
+                    ## Numerical way.
+                    # Cut the time series.
+                    if t_a >= t_axis[0] and t_b <= t_axis[-1]:
+                        inds = np.argmin(np.abs(t_axis-t_a))
+                        inde = np.argmin(np.abs(t_axis-t_b))
+                    else:
+                        raise Exception('Time axis too short!')
+    
+                    t_interval = t_axis[inds:inde]
+                    v_e_interval = v_e[inds:inde]
+                    v_n_interval = v_n[inds:inde]
+                    v_u_interval = v_u[inds:inde]
+    
+                    # Plot the cut time series. 
+                    #if i==1:
+                    #    fig = plt.figure(1, figsize=(10,6))
+                    #    plt.clf()
+                    #    ax = fig.add_subplot(111)
+                    #    ax.plot(t_interval,v_u_interval)
+                    #    fig.savefig('interval.png',format='png')
+    
+                    # Integration of velocity wrt time. 
+                    offset_e = np.trapz(v_e_interval, t_interval)
+                    offset_n = np.trapz(v_n_interval, t_interval)
+                    offset_u = np.trapz(v_u_interval, t_interval)
+    
+                    # Velocity vector.
+                    offset_vec = np.zeros(shape=(3,1))
+                    offset_vec[:,0] = [offset_e,offset_n,offset_u]
+    
+                    #print(offset_vec)
+                
+                elif option == "numerical_new_way":
+    
+                    if t_a >= t_axis[0] and t_b <= t_axis[-1]:
+                        inds = np.argmin(np.abs(t_axis-t_a))
+                        inde = np.argmin(np.abs(t_axis-t_b))
+                    else:
+                        raise Exception('Time axis too short!')
+    
+                    offset_e = d_e[inde] - d_e[inds]
+                    offset_n = d_n[inde] - d_n[inds]
+                    offset_u = d_u[inde] - d_u[inds]
+    
+                    # Velocity vector.
+                    offset_vec = np.zeros(shape=(3,1))
+                    offset_vec[:,0] = [offset_e,offset_n,offset_u]
+    
+                elif option == 'analytical':
+    
+                    offset={}
+    
+                    offset['e'] = 0
+                    offset['n'] = 0
+                    offset['u'] = 0
+    
+                    # Three components.
+                    comps = ['e','n','u']
+    
+                    #print(tide_amp)
+                    #print(tide_phase)
+    
+                    ii = 0
+                    for comp in comps:
+                        offset[comp] = offset[comp] + secular_v[ii] * (t_b - t_a)
+                        ii = ii + 1
+    
+                        # Changed to Rutford tides instead of modeling tides
+                        # 2019.07.05
+    
+                        # Iterative over all tidal components
+                        for tide_name in self.syn_tidesRut:
+    
+                            omega = 2*np.pi / self.tide_periods[tide_name]
+                            dis_amp = tide_dis_amp[(tide_name, comp)]
+                            dis_phase = tide_dis_phase[(tide_name, comp)]
+                            
+                            # Displacement difference
+                            tide_dis = dis_amp*np.cos(omega*t_b + dis_phase) - dis_amp * np.cos(omega*t_a + dis_phase)
+    
+                            offset[comp] = offset[comp] + tide_dis
+    
+                        #print(stop)
+                    
+                    # Velocity vector.
+                    offset_vec = np.zeros(shape=(3,1))
+                    offset_vec[:,0] = [offset['e'],offset['n'],offset['u']]
+    
+    
+                ########## End with constructing offset_vec in without grounding #############3
+    
+                # Project 3d displacement onto observational vectors
+                # Two observation vectors.
+                for j in range(2):
+                    obs_vec = np.zeros(shape=(3,1))
+                    obs_vec[:,0] = np.asarray(vecs[j])
+                    #print("Observation vector:\n", obs_vec)
+                    
+                    # Projection onto the observation vectors.
+                    obs_offset = np.matmul(np.transpose(offset_vec),obs_vec)
+                    #print(obs_offset)
+                    
+                    # Record the data.
+                    data_vector[2*i+j] = obs_offset
+
+        ###########  Add noise #####################
         lon, lat = point
-        seed_num = int(lon/self.lon_step * 100000 + \
-                        lat/self.lat_step) % (2**30-1)
+        seed_num = int(lon*10+lat) % (2**30-1)
         np.random.seed(seed=seed_num)
 
         # Range.

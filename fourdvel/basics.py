@@ -38,16 +38,6 @@ class basics():
         for tide_name in self.tides:
             self.tide_omegas[tide_name] = 2*np.pi/tide_periods[tide_name]
 
-        # Pixel size
-        self.lon_re = 50
-        self.lat_re = 200
-
-        self.lon_step = 1/self.lon_re
-        self.lat_step = 1/self.lat_re
-
-        # Load the satellite constants
-        self.satellite_constants()
-
     def latlon_distance(self, lon1,lat1,lon2,lat2):
         
         R = 6371
@@ -85,6 +75,21 @@ class basics():
 
     def round1000(self, value):
         return np.round(value*1000)/1000
+
+    # Make all coordinates integer
+    def round_int_5dec(self, value):
+        return np.round(value*100000).astype(int)
+
+    def int5d_to_float(self,x):
+        return [num/(10**5) for num in x]
+
+    def print_int5d(self,x):
+        print(np.asarray(x)/10**5)
+        return 0
+
+    def float_lonlat_to_int5d(self,x):
+        lon, lat = x
+        return (int(round(lon*10**5)), int(round(lat*10**5)))
 
     def comp_name(self,comp):
 
@@ -141,45 +146,69 @@ class basics():
         self.track_timefraction = {}
         track_timefraction = self.track_timefraction
 
-        # CSK.
-        fid = open('/net/kamb/ssd-tmp1/mzzhong/insarRoutines/csk_times.txt')
-        csk_times = fid.readlines()
-        fid.close()
+        if self.proj == "Rutford":
 
-        # 22 tracks.
-        tracks = range(22) 
-        for track_num in tracks:
-            track_timefraction[('csk',track_num)] = float(csk_times[track_num])
+            # CSK.
+            fid = open('/net/kraken/nobak/mzzhong/CSK-Rutford/csk_times_rutford.txt')
+            csk_times = fid.readlines()
+            fid.close()
 
-        # S1AB.
-        # Time of scene.
-        t37 = datetime.time(6,26,45)
-        track_timefraction[('s1',37)] = (t37.hour * 3600 + t37.minute*60 + t37.second)/(24*3600)
-        
-        t52 = datetime.time(7,7,30)
-        track_timefraction[('s1',52)] = (t52.hour * 3600 + t52.minute*60 + t52.second)/(24*3600)
+            # 32 tracks in total
+            tracks = self.csk_tracks
+            for it, track_num in enumerate(tracks):
+                track_timefraction[('csk',track_num)] = float(csk_times[it])
 
-        t169 = datetime.time(7,40,30)
-        track_timefraction[('s1',169)] = (t169.hour * 3600 + t169.minute*60 + t169.second)/(24*3600)
+            # S1AB, only three tracks cover Rutford Ice Stream
+            # Time of scene.
+            t37 = datetime.time(6,26,45)
+            track_timefraction[('s1',37)] = (t37.hour * 3600 + t37.minute*60 + t37.second)/(24*3600)
+ 
+            t65 = datetime.time(4,34,10)
+            track_timefraction[('s1',65)] = (t65.hour * 3600 + t65.minute*60 + t65.second)/(24*3600)
 
-        t65 = datetime.time(4,34,10)
-        track_timefraction[('s1',65)] = (t65.hour * 3600 + t65.minute*60 + t65.second)/(24*3600)
+            t7 = datetime.time(5,6,30)
+            track_timefraction[('s1',7)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
 
-        t7 = datetime.time(5,6,30)
-        track_timefraction[('s1',7)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+        elif self.proj == "Evans":
 
-
-        # new tracks
-        t50 = datetime.time(3,53,40)
-        track_timefraction[('s1',50)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
-
-        t64 = datetime.time(2,57,0)
-        track_timefraction[('s1',64)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
-
-        #t49 = datetime.time(2,16,0)
-        #track_timefraction[('s1',49)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
-
-        #print(track_timefraction)
+            # CSK.
+            fid = open('/net/kamb/ssd-tmp1/mzzhong/insarRoutines/csk_times.txt')
+            csk_times = fid.readlines()
+            fid.close()
+    
+            # 22 tracks.
+            tracks = range(22) 
+            for track_num in tracks:
+                track_timefraction[('csk',track_num)] = float(csk_times[track_num])
+    
+            # S1AB.
+            # Time of scene.
+            t37 = datetime.time(6,26,45)
+            track_timefraction[('s1',37)] = (t37.hour * 3600 + t37.minute*60 + t37.second)/(24*3600)
+            
+            t52 = datetime.time(7,7,30)
+            track_timefraction[('s1',52)] = (t52.hour * 3600 + t52.minute*60 + t52.second)/(24*3600)
+    
+            t169 = datetime.time(7,40,30)
+            track_timefraction[('s1',169)] = (t169.hour * 3600 + t169.minute*60 + t169.second)/(24*3600)
+    
+            t65 = datetime.time(4,34,10)
+            track_timefraction[('s1',65)] = (t65.hour * 3600 + t65.minute*60 + t65.second)/(24*3600)
+    
+            t7 = datetime.time(5,6,30)
+            track_timefraction[('s1',7)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+    
+            # New tracks
+            t50 = datetime.time(3,53,40)
+            track_timefraction[('s1',50)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+    
+            t64 = datetime.time(2,57,0)
+            track_timefraction[('s1',64)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+    
+            #t49 = datetime.time(2,16,0)
+            #track_timefraction[('s1',49)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+    
+            #print(track_timefraction)
 
         return 0
 
