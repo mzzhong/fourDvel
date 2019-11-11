@@ -44,25 +44,50 @@ class inversion(fourdvel):
         print('Find track data...')
         print(self.test_point, track_num, sate)
 
-        if sate == 'csk':
-            stack = "stripmap"
-            workdir = "/net/kraken/nobak/mzzhong/CSK-Evans"
-            name='track_' + str(track_num).zfill(2) + str(0)
-            runid = 20180712
+        if self.proj == "Evans":
 
-        elif sate == 's1':
-            stack = 'tops'
+            if sate == 'csk':
+                stack = "stripmap"
+                workdir = "/net/kraken/nobak/mzzhong/CSK-Evans"
+                name='track_' + str(track_num).zfill(2) + str(0)
+                runid = 20180712
+    
+            elif sate == 's1':
+                stack = 'tops'
+    
+                workdir = '/net/jokull/nobak/mzzhong/S1-Evans'
+                
+                name = 'track_' + str(track_num)
+                runid = 20180703
 
-            workdir = '/net/jokull/nobak/mzzhong/S1-Evans'
-            
-            #workdir = '/net/jokull/bak/mzzhong/S1-Evans'
+        elif self.proj == "Rutford":
 
-            name = 'track_' + str(track_num)
-            runid = 20180703
+            if sate == 'csk':
+                stack = "stripmap"
+                workdir = "/net/kraken/nobak/mzzhong/CSK-Rutford"
+                name='track_' + str(track_num).zfill(3) + '_' + str(0)
+
+                # 64 x 128
+                runid = 20190921
+    
+            elif sate == 's1':
+
+                raise Exception("S1 data not ready for Rutford yet")
+
+                stack = 'tops'
+    
+                workdir = '/net/jokull/nobak/mzzhong/S1-Evans'
+                
+                name = 'track_' + str(track_num)
+                runid = 20180703
+        
+        else:
+            raise Exception("Can't find data for project: ", self.proj)
+
 
         # Create dense offset object.
-        offset = dense_offset(stack=stack, workdir=workdir)
-        offset.initiate(trackname = name, runid=runid)
+        offset = dense_offset(stack=stack, workdir=workdir, runid=runid)
+        offset.initiate(trackname = name)
 
         print('satellite: ', sate, ' track number: ', track_num)
 
@@ -98,13 +123,13 @@ class inversion(fourdvel):
                     track_offsetfields_set[point].append(offsetfield)
 
             # 2019.02.14
-            # Cancel the obtained offsets, if no vec info is available.
+            # Cancel the obtained offsets, if no vec info is available for the point.
             else:
                 track_pairs_set[point] = []
                 track_offsets_set[point] = []
 
-            if point == (-83.74, -76.02):
-                print('track_offsetfields at this point: ', track_offsetfields_set[point])
+            #if point == (-83.74, -76.02):
+            #    print('track_offsetfields at this point: ', track_offsetfields_set[point])
 
         return track_offsetfields_set, track_offsets_set
 
@@ -210,7 +235,7 @@ class inversion(fourdvel):
             fourD_sim.set_stack_design_mat_set(stack_design_mat_set)
 
             # Provide grounding
-            grounding = - 1
+            grounding = -1
             fourD_sim.set_grounding(grounding)
 
             # Get offsets
@@ -237,6 +262,8 @@ class inversion(fourdvel):
             data_info_set = {}
             offsetfields_set = {}
             offsets_set = {}
+            true_tide_vec_set = {}
+
             for point in point_set:
                 offsetfields_set[point] = []
                 offsets_set[point] = []
@@ -280,7 +307,7 @@ class inversion(fourdvel):
                 print('Length of offsetfields and offsets: ', 
                         len(track_offsetfields_set[test_point]),len(track_offsets_set[test_point]))
 
-                # Point by point addtion
+                # Point by point addition
                 for point in point_set:
                     # List addition.
                     offsetfields_set[point] = offsetfields_set[point] + track_offsetfields_set[point]
@@ -298,6 +325,7 @@ class inversion(fourdvel):
             print('Total number of offsetfields: ', len(offsetfields_set[test_point]))
             print('Total length of offsets: ', len(offsets_set[test_point]))
 
+            # Generate synthetic data
             if test_mode == 2:
 
                 # Synthetic data.
@@ -318,7 +346,16 @@ class inversion(fourdvel):
                 for point in point_set:
                     noise_sigma_set[point] = self.load_noise_sigma(point)
 
- 
+                # Stack the design matrix for Rutford tides
+                stack_design_mat_set = self.stack_design_mat_set(point_set, self.rutford_design_mat_set, offsetfields_set)
+
+                # Provide the matrix to simulator
+                fourD_sim.set_stack_design_mat_set(stack_design_mat_set)
+
+                # Provide grounding
+                grounding = -1
+                fourD_sim.set_grounding(grounding)
+
                 data_vec_set = fourD_sim.syn_offsets_data_vec_set(
                                     point_set = point_set,
                                     secular_v_set = secular_v_set, 
@@ -331,6 +368,7 @@ class inversion(fourdvel):
                 # True tidal params. (Every point has the value)
                 true_tide_vec_set = fourD_sim.true_tide_vec_set(point_set,secular_v_set,                                    self.modeling_tides, tide_amp_set, tide_phase_set)
 
+            # Just use the obtained data
             elif test_mode == 3:
 
                 # Real data
@@ -341,15 +379,15 @@ class inversion(fourdvel):
                 for point in point_set:
                     noise_sigma_set[point] = self.load_noise_sigma(point)
 
-                # Get reference velocity
-                n_params = 3 + len(self.modeling_tides) * 6
-                for point in point_set:
-
-                    true_tide_vec_set[point] = np.zeros(shape=(n_params, 1))
-    
-                    true_tide_vec_set[point][0] = secular_v_set[point][0]
-                    true_tide_vec_set[point][1] = secular_v_set[point][1]
-                    true_tide_vec_set[point][2] = secular_v_set[point][2]
+#                # Get reference velocity
+#                n_params = 3 + len(self.modeling_tides) * 6
+#                for point in point_set:
+#
+#                    true_tide_vec_set[point] = np.zeros(shape=(n_params, 1))
+#    
+#                    true_tide_vec_set[point][0] = secular_v_set[point][0]
+#                    true_tide_vec_set[point][1] = secular_v_set[point][1]
+#                    true_tide_vec_set[point][2] = secular_v_set[point][2]
 
 
         return (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set)
@@ -458,7 +496,6 @@ class inversion(fourdvel):
             # Set linear tides
             BMC.set_linear_design_mat_set(linear_design_mat_set)
 
- 
             # Set modeling tides
             BMC.set_modeling_tides(self.modeling_tides)
             
@@ -485,16 +522,22 @@ class inversion(fourdvel):
             # Run inversion
             #model_vec_set = BMC.run_optimize()
             #model_vec_set = BMC.run_MCMC_linear()
-            model_vec_set = BMC.run_MCMC()
+            #model_vec_set = BMC.run_MCMC()
+            BMC.run_MCMC()
+            model_vec_set = {}
+            model_vec_set[self.test_point] = np.zeros(shape=(100,1))
 
             # Convert to tidal params.
-            tide_vec_set = self.model_vec_set_to_tide_vec_set(point_set, model_vec_set)
+            #tide_vec_set = self.model_vec_set_to_tide_vec_set(point_set, model_vec_set)
+            tide_vec_set = model_vec_set
 
             # Other set are not available currently
             tide_vec_uq_set = {}
             resid_of_secular_set = {}
             resid_of_tides_set = {}
             other_set_1 = {}
+
+            print(stop)
 
         else:
             raise Exception('Please choose a inversion method')
@@ -505,6 +548,7 @@ class inversion(fourdvel):
         # Show on point in the point set.
 
         if self.show_vecs == True:
+        #if self.show_vecs == True and inversion_method=="Bayesian_Linear":
 
             if true_tide_vec_set is not None:
                 stacked_vecs = np.hstack((  true_tide_vec_set[self.test_point], 
@@ -586,7 +630,7 @@ class inversion(fourdvel):
             lon, lat = tile
             
             # Run all in serial.
-            if (count_tile >= start_tile and count_tile < stop_tile):
+            #if (count_tile >= start_tile and count_tile < stop_tile):
             
             #if (count_tile >= start_tile and count_tile < stop_tile and 
             #                                            count_tile % 2 == 1):
@@ -598,6 +642,12 @@ class inversion(fourdvel):
 
             # Debug this tile for Rutford
             #if count_tile >= start_tile and count_tile < stop_tile and tile == self.float_lonlat_to_int5d((-83.0, -78.6)):
+
+            #if count_tile >= start_tile and count_tile < stop_tile and tile == self.float_lonlat_to_int5d((-83.0, -78.8)):
+
+            #if count_tile >= start_tile and count_tile < stop_tile and tile == self.float_lonlat_to_int5d((-83.0, -78.4)):
+
+            if count_tile >= start_tile and count_tile < stop_tile and tile == self.float_lonlat_to_int5d((-83, -78.6)):
 
                 print('***  Start a new tile ***')
                 self.print_int5d([lon, lat])
@@ -619,8 +669,8 @@ class inversion(fourdvel):
                 self.test_point = point_set[0] 
                 
                 # Inversion happens here
-                self.inversion_method = 'Bayesian_Linear'
-                #self.inversion_method = 'Bayesian_MCMC'
+                #self.inversion_method = 'Bayesian_Linear'
+                self.inversion_method = 'Bayesian_MCMC'
                 
                 all_sets  = self.point_set_tides(point_set = point_set, tracks_set = tracks_set, inversion_method=self.inversion_method)
 
@@ -760,8 +810,8 @@ def main():
     fourd_inv = inversion()
 
     # Tile set.
-    #fourd_inv.driver_serial_tile()
-    fourd_inv.driver_parallel_tile()
+    fourd_inv.driver_serial_tile()
+    #fourd_inv.driver_parallel_tile()
 
     print('All finished!')
 

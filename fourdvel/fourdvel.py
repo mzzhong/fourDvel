@@ -619,7 +619,7 @@ class fourdvel(basics):
 
         ###########################################
         # Generate pickle file
-        grid_set_pkl = self.grid_set_name + '_' + str(resolution) + '.pkl'
+        grid_set_pkl = self.grid_set_name + '_' + str(self.resolution) + '.pkl'
 
         lat_step_int = self.lat_step_int
         lon_step_int = self.lon_step_int
@@ -685,8 +685,15 @@ class fourdvel(basics):
 
                     #print(lon_list, lat_list)
 
-                    ## If files not geocoded onto the FULL RESOLUTION grid points, 
-                    ## Do it here
+                    ## If files not geocoded onto the FULL RESOLUTION grid points,
+                    ## do it here.
+
+                    ## This is closed for now, because rutford offset field have
+                    ## been geocoded to full resolution
+    
+                    ## lat 0.001
+                    ## lon 0.005
+
                     #lon_list = self.round_to_grid_points(lon_list, self.lon_re)
                     #lat_list = self.round_to_grid_points(lat_list, self.lat_re)
                     #######################################################
@@ -864,12 +871,16 @@ class fourdvel(basics):
             timing_a = (offsetfields[i][0], round(offsetfields[i][4],4))
             timing_b = (offsetfields[i][1], round(offsetfields[i][4],4))
 
+            # design_mat_set shape: 
+            # 2 * n_params for EN
+            # 1 * n_params for U
             stacked_design_mat_EN_ta.append(design_mat_set[timing_a][:2,:])
             stacked_design_mat_EN_tb.append(design_mat_set[timing_b][:2,:])
 
             stacked_design_mat_U_ta.append(design_mat_set[timing_a][2,:])
             stacked_design_mat_U_tb.append(design_mat_set[timing_b][2,:])
 
+        # Vertical stack
         stacked_design_mat_EN_ta = np.vstack(tuple(stacked_design_mat_EN_ta))
         stacked_design_mat_EN_tb = np.vstack(tuple(stacked_design_mat_EN_tb))
         stacked_design_mat_U_ta = np.vstack(tuple(stacked_design_mat_U_ta))
@@ -939,7 +950,7 @@ class fourdvel(basics):
                 pickle.dump(self.design_mat_set,f)
 
         # For simulation, we need design mat for all tides
-        if self.test_mode==1:
+        if self.test_mode==1 or self.test_mode==2:
 
             rutford_design_mat_set_pkl = self.pickle_dir +'/'+ '_'.join(['design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt), 'Rutford_full'] ) + '.pkl'
     

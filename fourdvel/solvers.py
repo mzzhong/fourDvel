@@ -5,6 +5,11 @@ import matplotlib.pyplot as plt
 import datetime
 from basics import basics
 
+import theano
+import theano.tensor as tt
+import pymc3 as pm
+import seaborn as sns
+
 plt.style.use('seaborn-darkgrid')
 
 class Bayesian_Linear(basics):
@@ -15,11 +20,6 @@ class Bayesian_Linear(basics):
 class Bayesian_MCMC(basics):
 
     def __init__(self):
-
-        import theano
-        import theano.tensor as tt
-        import pymc3 as pm
-        import seaborn as sns
 
         super(Bayesian_MCMC, self).__init__()
 
@@ -33,9 +33,6 @@ class Bayesian_MCMC(basics):
         self.n_params = 3 + 6 * len(modeling_tides)
 
     def set_model_priors(self, model_prior_set=None, no_secular_up=False, up_short_period=False, horizontal_long_period=False, up_lower=None, up_upper=None):
-
-        #with self.bmc_model as model:
-        #    secular_v = 
 
         self.model_prior_set = model_prior_set
         self.no_secular_up = no_secular_up
@@ -293,7 +290,7 @@ class Bayesian_MCMC(basics):
             for i, tide_name in enumerate(self.modeling_tides):
                 for j in range(6):
                     k = 3 + i*6 + j
-                    if up_short_period and not tide_name in ['M2','S2','O1'] and (j==2 or j==5):
+                    if up_short_period and not tide_name in ['M2','S2','O1','K1'] and (j==2 or j==5):
                         sigma = sigma_restrict
     
                     elif horizontal_long_period and not tide_name in ['Mf','Msf','Mm'] and (j==0 or j==1 or j==3 or j==4):
@@ -332,7 +329,7 @@ class Bayesian_MCMC(basics):
                     # Not include this parameter
                     pass
 
-                elif self.horizontal_long_period and tide_name in ['M2','S2','O1'] and (j==0 or j==1 or j==3 or j==4):
+                elif self.horizontal_long_period and tide_name in ['M2','S2','O1','K1'] and (j==0 or j==1 or j==3 or j==4):
 
                     # Not include this parameter
                     pass
@@ -448,9 +445,12 @@ class Bayesian_MCMC(basics):
             print('The grid point is: ',point)
 
             # Obtain design matrix
+            # row size: 
+            # EN: 2 * num of offset fields
+            # U:  1 * num of offset fields
             d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb = self.stack_design_mat_set[point]
 
-            # Subset the design matrix to remove some parameters
+            # Subset the design matrix to remove some parameters according to prior 
             d_mat_EN_ta = self.remove_design_mat_cols(d_mat_EN_ta, head_offset=0)
             d_mat_EN_tb = self.remove_design_mat_cols(d_mat_EN_tb, head_offset=0)
             d_mat_U_ta = self.remove_design_mat_cols(d_mat_U_ta, head_offset=0)
@@ -478,6 +478,7 @@ class Bayesian_MCMC(basics):
             vecs = np.zeros(shape=(N_data, 3))
             delta_t = np.zeros(shape=(N_offsets,1))
             t_origin = self.t_origin.date()
+            
             for i in range(N_offsets):
                 vecs[2*i,:] = np.asarray(offsetfields[i][2])
                 vecs[2*i+1,:] = np.asarray(offsetfields[i][3])
@@ -485,12 +486,14 @@ class Bayesian_MCMC(basics):
                 t_b = (offsetfields[i][1] - t_origin).days + round(offsetfields[i][4],4)
                 delta_t[i,0] = t_b - t_a
 
+            # shape = (N_offsets ,3)
             delta_t = np.repeat(delta_t, 3, axis=1)
 
             tt_vecs = theano.shared(vecs)
             tt_delta_t = theano.shared(delta_t)
 
             # Form the observation vector matrix
+            # shape: N_data x (N_offsets*3)
             vec_mat = np.zeros(shape=(N_data, N_offsets*3))
             for i in range(N_offsets):
                 vec1 = np.asarray(offsetfields[i][2])
@@ -531,42 +534,48 @@ class Bayesian_MCMC(basics):
                 dis_U_ta = tt_d_mat_U_ta.dot(self.model_vec_tidal)
                 dis_U_tb = tt_d_mat_U_tb.dot(self.model_vec_tidal)
 
-                # Clipping here ...
+                # Clipping U here
                 dis_U_ta = tt.clip(dis_U_ta, self.grounding, 100)
                 dis_U_tb = tt.clip(dis_U_tb, self.grounding, 100)
 
-                # offset
+                # Find offset
                 offset_EN = dis_EN_tb - dis_EN_ta
                 offset_U = dis_U_tb - dis_U_ta
 
                 # Form 2d displacement
+                # Reshape EN from vector to matrix
+                # (N_offsets * 2, 1) -> (N_offsets, 2)
                 offset_EN = offset_EN.reshape(shape=(N_offsets,2))
 
-                # Form 3d displacement
+                # Form 3d displacement 
+                # ENU: shape = (N_offsets, 3)
                 offset_ENU = pm.math.concatenate([offset_EN, offset_U], axis=1)
 
-                # secular velocity
+                # Find secular displacement
+                # model_vec_secular (1,3)
+                # (N_offsets, 3) * (N_offsets, 3)
                 offset_secular = self.model_vec_secular.repeat(N_offsets, axis=0) * tt_delta_t
 
-                # Add secular velocity
+                # Add secular displacement
                 offset_total = offset_ENU + offset_secular
 
                 # Flatten it to a vector
                 offset_total_flatten = offset_total.reshape(shape=(N_offsets*3,1))
 
                 # Multiply to observation
-
+                # N_offsets * 3 -> N_data
                 pred_vec = tt_vec_mat.dot(offset_total_flatten)
                 
                 # Observation
-                obs = pm.Normal('obs', mu=pred_vec, sigma=0.2, observed=data_vec)
+                obs = pm.Normal('obs', mu=pred_vec, sigma=1, observed=data_vec)
 
                 print('Model is built')
                 
                 MAP_or_Sample = "Sample"
                 
-                map_estimate = pm.find_MAP(model=model)
-                print(map_estimate)
+                # MAP solution
+                #map_estimate = pm.find_MAP(model=model)
+                #print(map_estimate)
                 
                 if MAP_or_Sample == 'Sample':
                     #step = pm.Metropolis()
@@ -575,9 +584,10 @@ class Bayesian_MCMC(basics):
                     trace = pm.sample(1000, tune=1000)
 
                     pm.traceplot(trace)
-                    plt.savefig('bayes_2.png')
+                    plt.savefig('bayes_9.png')
                     print(trace)
 
+            # Only do the first point in the point set
             return 0
 
     def construct_bounds(self, point):
@@ -611,7 +621,7 @@ class Bayesian_MCMC(basics):
         for i, tide_name in enumerate(self.modeling_tides):
             for j in range(6):
                 k = 3 + i*6 + j
-                if up_short_period and not tide_name in ['M2','S2','O1'] and (j==2 or j==5):
+                if up_short_period and not tide_name in ['M2','S2','O1','K1'] and (j==2 or j==5):
                     bound = bound_restrict
 
                 elif horizontal_long_period and not tide_name in ['Mf','Msf','Mm'] and (j==0 or j==1 or j==3 or j==4):
@@ -643,6 +653,7 @@ class Bayesian_MCMC(basics):
             print('bounds: ', len(bounds))
 
             # Obtain design matrix
+            # row size: N_offsets
             d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb = self.stack_design_mat_set[point]
 
             # Obtain data vector

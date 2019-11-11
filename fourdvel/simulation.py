@@ -526,11 +526,13 @@ class simulation(basics):
         data_vector = np.zeros(shape=(n_rows,1))
         t_origin = self.t_origin.date()
 
-        method = "without grounding"
+        #method = "without grounding"
+        method = "with grounding"
 
         # Three components.
         # Numerical method
         if method == "time series provided":
+            #print(method)
 
             #print('numerical')
             t_axis = self.t_axis
@@ -562,6 +564,7 @@ class simulation(basics):
 
         # Analytical with grounding
         elif method == "with grounding old way":
+            #print(method)
 
             # secular offset
             secular_off = np.asarray(secular_v)[:,None] * (t_b - t_a)
@@ -596,6 +599,7 @@ class simulation(basics):
             offset_vec = secular_off + tide_off
 
         elif method == "with grounding":
+            #print(method)
 
             ## For a single point
             timings = self.timings
@@ -666,7 +670,7 @@ class simulation(basics):
                 
                 offset_ENU[:,i] = offset_ENU[:,i] +  tmp * (t_b - t_a) 
 
-            print('offset_ENU: ', offset_ENU.shape)
+            #print('offset_ENU: ', offset_ENU.shape)
 
             # Find observed offset
             data_vector1 = np.zeros(shape=(n_offsets*2,1))
@@ -678,7 +682,9 @@ class simulation(basics):
 
         elif method == "without grounding":
 
-            # Convert parameters from velocity to displacement
+            #print(method)
+
+            ### CONVERT parameters from velocity to displacement ###
             tide_dis_amp = {}
             tide_dis_phase = {}
 
