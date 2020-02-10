@@ -11,7 +11,7 @@ class basics():
         self.pickle_dir = '/net/kamb/ssd-tmp1/mzzhong/insarRoutines/pickles'
 
         # Time origin
-        self.t_origin = datetime.datetime(2018,1,1,0,0,0,0)
+        self.t_origin = datetime.datetime(1992,1,1,0,0,0,0)
 
         # Tides
         self.tides = ['K2','S2','M2','K1','P1','O1','Mf','Msf','Mm','Ssa','Sa', 'M4', 'S4', 'MS4']
@@ -80,8 +80,12 @@ class basics():
     def round_int_5dec(self, value):
         return np.round(value*100000).astype(int)
 
-    def int5d_to_float(self,x):
-        return [num/(10**5) for num in x]
+    def int5d_to_float(self, x):
+
+        if isinstance(x, list) or isinstance(x, tuple):
+            return [num/(10**5) for num in x]
+        else:
+            return x/(10**5)
 
     def print_int5d(self,x):
         print(np.asarray(x)/10**5)
@@ -110,6 +114,9 @@ class basics():
         # minute
         return value /360 * self.tide_periods[tide_name] * 24* 60
 
+    def deg2day(self,value, tide_name):
+        # days
+        return value /360 * self.tide_periods[tide_name]
 
     def cm2m(self,value):
         return value / 100
@@ -124,22 +131,45 @@ class basics():
         return dis_amp * self.tide_omegas[tide_name]
 
     def velo_phase_to_dis_phase(self, phase, deg = False):
-        if deg:
-            return phase - 90
+        if deg==True:
+            return self.wrapped_deg(phase - 90)
+        elif deg==False:
+            return self.wrapped(phase - np.pi/2)
         else:
-            return phase - np.pi/2
+            raise Exception()
 
     def dis_phase_to_velo_phase(self, phase, deg = False):
-        if deg:
-            return phase + 90
+        if deg==True:
+            return self.wrapped_deg(phase + 90)
+        elif deg==False:
+            return self.wrapped(phase + np.pi/2)
         else:
-            return phase + np.pi/2
+            raise Exception()
 
     def unit_vec(self, v1, v2=None):
         if v2:
             return np.asarray([v1,v2,np.sqrt(1-v1**2-v2**2)])
         else:
             return np.asarray([v1,np.sqrt(1-v1**2),0])
+
+    def chop_into_threads(self, total_number, nthreads):
+
+        # Devide chunk size.
+        mod = total_number % nthreads        
+        if mod > 0:
+            chunk_size = (total_number - mod + nthreads) // nthreads
+        else:
+            chunk_size = total_number // nthreads
+
+        # Deduce divides.
+        divide = np.zeros(shape=(nthreads+1,))
+        divide[0] = 0
+
+        for it in range(1, nthreads+1):
+            divide[it] = chunk_size * it
+        divide[nthreads] = total_number
+
+        return divide
 
     def satellite_constants(self):
 

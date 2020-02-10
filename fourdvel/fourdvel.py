@@ -28,27 +28,42 @@ from scipy import linalg
 
 from basics import basics
 
+from numba import jit
+
 INT_NAN = -99999
 
 class fourdvel(basics):
 
-    def __init__(self, param_file='params.in'):
-
+    def __init__(self, param_file=None):
 
         super(fourdvel,self).__init__()
 
-        self.read_parameters(param_file)
+        #print(param_file)
+
+        if param_file is None:
+            self.read_parameters(sys.argv[1])
+        else:
+            self.read_parameters(param_file)
 
         if self.proj == "Evans":
             # Data.
+
+            # CSK
+            # Key is track, values are dates            
             self.csk_data = {}
+
             self.csk_tracks = range(22)
 
             for it in self.csk_tracks:
                 self.csk_data[it] = []
+            self.csk_workdir = "/net/kraken/nobak/mzzhong/CSK-Evans"
 
+            # S1
+            # Key is track, values are dates
             self.s1_data = {}
+
             self.s1_tracks = [37,52,169,65,7,50,64]
+            self.s1_workdir = "/net/jokull/nobak/mzzhong/S1-Evans"
         
             for it in self.s1_tracks:
                 self.s1_data[it] = []
@@ -56,14 +71,23 @@ class fourdvel(basics):
             self.satellite_constants()
 
         elif self.proj == "Rutford":
+
+            # CSK
             self.csk_data = {}
+
             self.csk_tracks = [8,10,23,25,40,52,55,67,69,82,97,99,114,126,128,129,141,143,156,158,171,172,173,186,188,201,203,215,218,230,231,232]
+
+            self.csk_workdir = "/net/kraken/nobak/mzzhong/CSK-Rutford"
 
             for it in self.csk_tracks:
                 self.csk_data[it] = []
 
+            # S1
             self.s1_data = {}
+
             self.s1_tracks = [37,65,7]
+
+            self.s1_workdir = "/net/jokull/nobak/mzzhong/S1-Evans"
         
             for it in self.s1_tracks:
                 self.s1_data[it] = []
@@ -80,19 +104,33 @@ class fourdvel(basics):
         #   500m x 500m     0.005 x 0.025
         resolution=self.resolution
 
-        if resolution == 500:
-            self.lat_step = 0.005
-            self.lon_step = 0.025
-            self.lat_step_int = self.round_int_5dec(self.lat_step)
-            self.lon_step_int = self.round_int_5dec(self.lon_step)
-        elif resolution == 100:
-            self.lat_step = 0.001
-            self.lon_step = 0.005
-            self.lat_step_int = self.round_int_5dec(self.lat_step)
-            self.lon_step_int = self.round_int_5dec(self.lon_step)
+        if self.proj == "Rutford":
+            if resolution == 500:
+                self.lat_step = 0.005
+                self.lon_step = 0.025
+                self.lat_step_int = self.round_int_5dec(self.lat_step)
+                self.lon_step_int = self.round_int_5dec(self.lon_step)
+            elif resolution == 100:
+                self.lat_step = 0.001
+                self.lon_step = 0.005
+                self.lat_step_int = self.round_int_5dec(self.lat_step)
+                self.lon_step_int = self.round_int_5dec(self.lon_step)
+            else:
+                print("Unknown resolution")
+                print(stop)
+
+        elif self.proj == "Evans":
+            if resolution == 500:
+                self.lat_step = 0.005
+                self.lon_step = 0.02
+                self.lat_step_int = self.round_int_5dec(self.lat_step)
+                self.lon_step_int = self.round_int_5dec(self.lon_step)
+            else:
+                print("Unknown resolution")
+                print(stop)
 
         else:
-            raise Exception("Undefined resolution")
+            raise Exception("Unknown project name")
             return
 
         # The inverse to size
@@ -101,9 +139,9 @@ class fourdvel(basics):
 
         print("fourdvel initialization done")
 
-        return 0
-
     def read_parameters(self, param_file):
+
+        print(param_file)
         
         f = open(param_file)
 
@@ -130,6 +168,37 @@ class fourdvel(basics):
             if name == 'test_id':
                 self.test_id = value
                 print('test_id',value)
+
+                self.estimation_dir = "/net/kamb/ssd-tmp1/mzzhong/insarRoutines/estimations/"+str(self.test_id)
+                if not os.path.exists(self.estimation_dir):
+                    os.mkdir(self.estimation_dir)
+
+                print("estimation dir: ", self.estimation_dir)
+
+                ## Save the paramerer file
+                if param_file=="params.in":
+                    cmd = " ".join(["cp", param_file, "./params/"+str(self.test_id)+'_'+param_file])
+                    print("copy param file: ",cmd)
+                    os.system(cmd)
+
+            if name == "test_point":
+
+                if value!="None":
+                    the_point = [float(x) for x in value.split(",")]
+                    self.test_point = self.float_lonlat_to_int5d(the_point)
+                else:
+                    self.test_point = None
+                print("test_point", value, self.test_point)
+
+            if name == "inversion_method":
+
+                self.inversion_method = value
+                print("inversion_method", value)
+
+            if name == "sampling_data_sigma":
+
+                self.sampling_data_sigma = float(value)
+                print("sampling_data_sigma", value)
 
             if name == 'test_mode':
                 self.test_mode = int(value)
@@ -230,6 +299,10 @@ class fourdvel(basics):
                     self.horizontal_long_period = True
                 else:
                     self.horizontal_long_period = False
+
+            if name == 'grounding':
+                self.grounding = float(value)
+                print("grounding: ",self.grounding)
 
         return 0
             
@@ -429,13 +502,15 @@ class fourdvel(basics):
 
         self.tile_set = None
         if hasattr(self,'tile_set_name'):
+            self.tile_set_name = self.tile_set_name.replace("$resolution", str(self.resolution))
+
             tile_set_pkl = self.tile_set_name + '.pkl'
             if os.path.exists(tile_set_pkl):
                 print('Loading tile_set ...')
                 with open(tile_set_pkl,'rb') as f:
                     self.tile_set = pickle.load(f)
 
-
+            print("total number of tiles: ", len(self.tile_set))
 
     def get_data_uncert(self):
 
@@ -452,170 +527,12 @@ class fourdvel(basics):
         
         return np.round(x * re)/re
 
-    def get_grid_set(self):
-        import gdal
-
-        # Currently only CSK
-
-        redo = 0
-        grid_set_pkl = self.grid_set_name + '.pkl'
-
-        # Step size in geocoded files
-        # lon_step = 0.02 degree
-        # lat_step = 0.005 degree
-
-        self.lon_step = 0.02
-        self.lat_step = 0.005
-
-        if os.path.exists(grid_set_pkl) and redo == 0:
-            print('Loading grid_set...')
-
-            with open(grid_set_pkl,'rb') as f:
-                self.grid_set = pickle.load(f)
-
-            #print(self.grid_set[-77,-76.8])
-
-        else:
-            print('Calculating grid_set...')
-            grid_set = {}
-
-            satellites = ['csk','s1']
-            #satellites = ['csk']
-
-            directory = {}
-            tracklist = {}
-            offset_id = {}
-
-            directory['csk'] = '/net/kraken/nobak/mzzhong/CSK-Evans'
-            tracklist['csk'] = range(22)
-            offset_id['csk'] = 20180712
-
-            directory['s1'] = '/net/jokull/nobak/mzzhong/S1-Evans'
-
-            # update 20190702
-            tracklist['s1'] = [37, 52, 169, 65, 7, 50, 64]
-
-            offset_id['s1'] = 20180703
-
-            for sate in satellites:
-
-                for track_num in tracklist[sate]:
-
-                    print(sate,track_num)
-
-                    if sate == 'csk':
-                        trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(2)+'0')
-                    else:
-                        trackdir = os.path.join(directory[sate],'track_' + str(track_num))
- 
-                    gc_losfile = os.path.join(trackdir,'merged','geom_master','gc_los_offset_' + str(offset_id[sate]) + '.rdr')
-                    
-                    gc_losvrtfile = gc_losfile + '.vrt'
-                    dataset = gdal.Open(gc_losvrtfile)
-                    geoTransform = dataset.GetGeoTransform()
-                    
-                    lon0 = geoTransform[0]
-                    lon_interval = geoTransform[1]
-        
-                    lat0 = geoTransform[3]
-                    lat_interval = geoTransform[5]
-        
-                    xsize = dataset.RasterXSize
-                    ysize = dataset.RasterYSize
-        
-                    lon_list = np.linspace(lon0, lon0 + lon_interval*(xsize-1), xsize)
-                    lat_list = np.linspace(lat0, lat0 + lat_interval*(ysize-1), ysize)
-        
-                    #print(lon_list,len(lon_list),xsize)
-                    #print(lat_list,len(lat_list),ysize)
-        
-                    grid_lon, grid_lat = np.meshgrid(lon_list, lat_list)
-        
-                    # rounding
-                    grid_lon = self.round1000(grid_lon)
-                    grid_lat = self.round1000(grid_lat)
-        
-                    # maskout the invalid
-                    los = dataset.GetRasterBand(1).ReadAsArray()
-                    azi = dataset.GetRasterBand(2).ReadAsArray()
-        
-                    #print(los)
-                    #print(azi)
-        
-                    grid_lon[los == 0] = np.nan
-                    grid_lat[los == 0] = np.nan
-        
-                    #fig = plt.figure(1)
-                    #ax = fig.add_subplot(111)
-                    #ax.imshow(grid_lat)
-                    #plt.show()
-        
-                    grid_lon_1d = grid_lon.flatten()
-                    grid_lat_1d = grid_lat.flatten()
-        
-        
-                    # read the vectors
-                    enu_gc_losfile = os.path.join(trackdir,'merged','geom_master','enu_gc_los_offset_' + str(offset_id[sate]) + '.rdr.vrt')
-                    enu_gc_azifile = os.path.join(trackdir,'merged','geom_master','enu_gc_azi_offset_' + str(offset_id[sate]) + '.rdr.vrt')
-
-                    try:
-                        dataset = gdal.Open(enu_gc_losfile)
-                    except:
-                        raise Exception('geometry file not exist')
-
-                    elos = dataset.GetRasterBand(1).ReadAsArray()
-                    nlos = dataset.GetRasterBand(2).ReadAsArray()
-                    ulos = dataset.GetRasterBand(3).ReadAsArray()
-        
-                    dataset = gdal.Open(enu_gc_azifile)
-                    eazi = dataset.GetRasterBand(1).ReadAsArray()
-                    nazi = dataset.GetRasterBand(2).ReadAsArray()
-                    uazi = dataset.GetRasterBand(3).ReadAsArray()
-        
-        
-                    #grid_lon_1d = grid_lon_1d[np.logical_not(np.isnan(grid_lon_1d))]
-                    #grid_lat_1d = grid_lat_1d[np.logical_not(np.isnan(grid_lat_1d))]
-        
-                    #print(grid_lon_1d,len(grid_lon_1d))
-                    #print(grid_lat_1d,len(grid_lat_1d))
-        
-                    for kk in range(len(grid_lon_1d)):
-        
-                        ii = kk // xsize
-                        jj = kk - ii * xsize
-        
-                        if np.isnan(grid_lon[ii,jj]) or np.isnan(grid_lat[ii,jj]):
-                            continue
-
-                        # The element being pushed into the list.
-                        # 1. track number; 2. los (three vectors) 3. azi (three vectors) 4. satellite name.
-                        info = (track_num,(elos[ii,jj],nlos[ii,jj],ulos[ii,jj]),(eazi[ii,jj],nazi[ii,jj],uazi[ii,jj]),sate)
-        
-                        # Push into the grid_set, only add new grid when sate is csk.
-                        if (grid_lon[ii,jj],grid_lat[ii,jj]) not in grid_set.keys():
-                            if sate=='csk':
-                                grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])] = [info]
-                            else:
-                                pass
-                        else:
-                            grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])].append(info)
-
-            print("Total number of grid points: ", len(grid_set))
-
-            print("Save to pickle file...")                    
-            with open(grid_set_pkl,'wb') as f:
-                pickle.dump(grid_set,f)
-
-            self.grid_set = grid_set
-
-        return 0
 
     def get_grid_set_v2(self):
         import gdal
 
         # Currently only CSK on Rutford
         redo = 0
-
 
         ###########################################
         # Generate pickle file
@@ -625,7 +542,7 @@ class fourdvel(basics):
         lon_step_int = self.lon_step_int
 
         print("step_int: ", lon_step_int, lat_step_int)
-        print("re size: ", self.lon_re, self.lat_re)
+        print("re size (sampling rate): ", self.lon_re, self.lat_re)
 
         if os.path.exists(grid_set_pkl) and redo == 0:
             print('Loading grid_set...')
@@ -635,24 +552,32 @@ class fourdvel(basics):
 
             print('total number of grid points: ', len(self.grid_set))
         else:
+            print("Cannot find: ", grid_set_pkl, "or redo is True")
             print('Calculating grid_set...')
             grid_set = {}
 
-            #satellites = ['csk','s1']
-            satellites = ['csk']
+            # Only use CSK for now
+            satellites = ['csk','s1']
+            #satellites = ['csk']
 
             directory = {}
             tracklist = {}
             offset_id = {}
 
-            directory['csk'] = '/net/kraken/nobak/mzzhong/CSK-Rutford'
-            tracklist['csk'] = [8,10,23,25,40,52,55,67,69,82,97,99,114,126,128,129,141,143,156,158,171,172,173,186,188,201,203,215,218,230,231,232]
-            offset_id['csk'] = 20190921
+            directory['csk'] = self.csk_workdir
 
-            directory['s1'] = '/net/jokull/nobak/mzzhong/S1-Evans'
+            tracklist['csk'] = self.csk_tracks
+            if self.proj == "Rutford":
+                offset_id['csk'] = 20190921
+            elif self.proj == "Evans":
+                offset_id['csk'] = 20180712
+
+            directory['s1'] = self.s1_workdir
+
             # update 20190702
-            tracklist['s1'] = [37, 52, 169, 65, 7, 50, 64]
-            offset_id['s1'] = 20180703
+            tracklist['s1'] = self.s1_tracks
+            #offset_id['s1'] = 20180703
+            offset_id['s1'] = 20200101
 
             for sate in satellites:
 
@@ -660,10 +585,14 @@ class fourdvel(basics):
 
                     print(sate,track_num)
 
-                    if sate == 'csk':
+                    if sate == 'csk' and self.proj == "Rutford":
                         trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(3)+'_0')
-                    else:
+                    elif sate == "csk" and self.proj == "Evans":
+                        trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(2)+'0')
+                    elif sate == "s1":
                         trackdir = os.path.join(directory[sate],'track_' + str(track_num))
+                    else:
+                        raise Exception("Undefined")
  
                     gc_losfile = os.path.join(trackdir,'merged','geom_master','gc_los_offset_' + str(offset_id[sate]) + '.rdr')
                     
@@ -779,7 +708,7 @@ class fourdvel(basics):
                         else:
                             grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])].append(info)
 
-            print(grid_set.keys())
+            #print(grid_set.keys())
             print("Total number of grid points: ", len(grid_set))
 
             print("Writing to Pickle file...")
@@ -791,12 +720,18 @@ class fourdvel(basics):
             print("Done")
 
         print("Output a test point")
-        key = (-8100000,-7900000)
-        print("Test point: ",key)
-        print(self.grid_set[key])
+
+        if self.proj == "Rutford":
+            key = (-8100000,-7900000)
+            print("Test point: ",key)
+            print(self.grid_set[key])
+
+        elif self.proj == "Evans":
+            key = (-7700000, -7680000)
+            print("Test point: ",key)
+            print(self.grid_set[key])
 
         return 0
-
 
     def coverage(self): 
 
@@ -881,11 +816,17 @@ class fourdvel(basics):
             stacked_design_mat_U_tb.append(design_mat_set[timing_b][2,:])
 
         # Vertical stack
-        stacked_design_mat_EN_ta = np.vstack(tuple(stacked_design_mat_EN_ta))
-        stacked_design_mat_EN_tb = np.vstack(tuple(stacked_design_mat_EN_tb))
-        stacked_design_mat_U_ta = np.vstack(tuple(stacked_design_mat_U_ta))
-        stacked_design_mat_U_tb = np.vstack(tuple(stacked_design_mat_U_tb))
+        if stacked_design_mat_EN_ta:
+            stacked_design_mat_EN_ta = np.vstack(tuple(stacked_design_mat_EN_ta))
 
+        if stacked_design_mat_EN_tb:
+            stacked_design_mat_EN_tb = np.vstack(tuple(stacked_design_mat_EN_tb))
+
+        if stacked_design_mat_U_ta:
+            stacked_design_mat_U_ta = np.vstack(tuple(stacked_design_mat_U_ta))
+
+        if stacked_design_mat_U_tb:
+            stacked_design_mat_U_tb = np.vstack(tuple(stacked_design_mat_U_tb))
 
         return (stacked_design_mat_EN_ta, stacked_design_mat_EN_tb, stacked_design_mat_U_ta, stacked_design_mat_U_tb)
 
@@ -944,7 +885,7 @@ class fourdvel(basics):
                 self.design_mat_set = pickle.load(f)
         else:
             self.design_mat_set = fwd.design_mat_set(self.timings, self.modeling_tides)
-            print(len(self.design_mat_set))
+            print("Size of design mat set: ",len(self.design_mat_set))
 
             with open(design_mat_set_pkl,'wb') as f:
                 pickle.dump(self.design_mat_set,f)
@@ -961,11 +902,38 @@ class fourdvel(basics):
             else:
                 rutford_tides = ['K2','S2','M2','K1','P1','O1','Msf','Mf','Mm','Ssa','Sa']
                 self.rutford_design_mat_set = fwd.design_mat_set(self.timings, rutford_tides)
-                print(len(self.rutford_design_mat_set))
+                print("Size of design mat set: ", len(self.rutford_design_mat_set))
     
                 with open(rutford_design_mat_set_pkl,'wb') as f:
                     pickle.dump(self.rutford_design_mat_set,f)
         return 0
+
+    def get_offset_field_stack(self):
+    
+        self.offsetFieldStack_all = {}
+
+        if self.use_csk:
+
+            for track in self.csk_tracks:
+                track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track).zfill(3) + '_0', \
+                                                            "cuDenseOffsets", "offsetFieldStack_20190921_v10.pkl")
+                if os.path.exists(track_offsetFieldStack_pkl):
+                    print("Loading: ", track_offsetFieldStack_pkl)
+                    with open(track_offsetFieldStack_pkl,'rb') as f:
+                        offsetFieldStack = pickle.load(f)
+                        self.offsetFieldStack_all[("csk", track)] = offsetFieldStack
+
+
+        if self.use_s1:
+
+            for track in self.s1_tracks:
+                track_offsetFieldStack_pkl = os.path.join(self.s1_workdir, "track_" + str(track), \
+                                                            "cuDenseOffsets", "offsetFieldStack_20200101_v10.pkl")
+                if os.path.exists(track_offsetFieldStack_pkl):
+                    print("Loading: ", track_offsetFieldStack_pkl)
+                    with open(track_offsetFieldStack_pkl,'rb') as f:
+                        offsetFieldStack = pickle.load(f)
+                        self.offsetFieldStack_all[("s1", track)] = offsetFieldStack
 
     def preparation(self):
 
@@ -996,6 +964,9 @@ class fourdvel(basics):
         # Prepartion G matrix libaray for inversion
         self.get_timings()
         self.get_design_mat_set()
+
+        # Load offset field stack data
+        self.get_offset_field_stack()
 
         return 0
 
@@ -1275,8 +1246,6 @@ class fourdvel(basics):
         return G
         # End of building.
 
-
-
     def model_vec_set_to_tide_vec_set(self, point_set, model_vec_set):
         tide_vec_set = {}
 
@@ -1314,40 +1283,119 @@ class fourdvel(basics):
             # E N U
             for t in range(3):
 
+                ### return value is in velocity domain m/d
+
                 # cos term.
                 coe1 = model_vec[3+k*6+t]
 
                 # sin term.
                 coe2 = model_vec[3+k*6+t+3]
 
+                # omega
                 omega = 2*np.pi / tide_periods[tide_name]
 
-                # Amplitide.
-                amp = np.sqrt(coe1*coe1+coe2*coe2)*omega
+                approach = 2
+                # Approach 1
+                if approach==1:
+                    # disp = a*coswt + b*sinwt
+                    # velo = -aw * sinwt + bw*coswt
+                    # sqrt(a**2+b**2)*w * sin(wt + phi)
+                    # write it in the sin form, to be consistent with synthetic test
+                    # tan phi = b/(-a)
+    
+                    # From displacement to velocity doamin
+                    # For amplitide
+                    amp = np.sqrt(coe1*coe1+coe2*coe2)*omega
+    
+                    # Phase.
+                    phase = np.arctan2(coe2,-coe1)
 
-                # Phase.
-                phase = np.arctan2(coe2,-coe1)
+                # Approach 2
+                elif approach==2:
+                    # disp = a*coswt + b*sinwt
+                    # disp = amp * sin(wt + phi)
+                    # disp_amp = np.sqrt(a**2+b**2)
+                    # disp_phi = a/b
 
-                #if t == 1:
-                #    print(tide_name,'North component')
-                #    print('Two terms:\n',coe1,coe2)
+                    disp_amp = np.sqrt(coe1**2 + coe2**2)
+                    disp_phase = np.arctan2(coe1,coe2)
 
-                # Four quadrants.
-                #if coe2>0 and -coe1>0:
-                #    pass
-                #elif coe2>0 and -coe1<0:
-                #    phi = phi + np.pi
-                #elif coe2<0 and -coe1<0:
-                #    phi = phi - np.pi
-                #elif coe2<0 and -coe1>0:
-                #    pass
+                    amp = self.dis_amp_to_velo_amp(disp_amp,tide_name)
+                    phase = self.dis_phase_to_velo_phase(disp_phase)
+                    #print(disp_phase, phase)
+                    #print(stop)
+                    phase = self.wrapped(phase)
 
-                #phi = phi + np.pi
+                else:
+                    raise Exception()
 
                 param_vec[3+k*6+t,0] = amp
                 param_vec[3+k*6+t+3,0] = phase
+
         
         return param_vec
+
+    # tide_vec to model_vec
+    def tide_vec_set_to_model_vec_set(self, point_set, tide_vec_set):
+        model_vec_set = {}
+
+        for point in point_set:
+            model_vec_set[point] = self.tide_vec_to_model_vec(tide_vec_set[point])
+
+        return model_vec_set
+
+    def tide_vec_to_model_vec(self, tide_vec):
+
+        # Tides.
+        tide_periods = self.tide_periods
+        n_modeling_tides = self.n_modeling_tides
+        modeling_tides = self.modeling_tides
+
+        num_params = 3 + n_modeling_tides*6
+        param_vec = np.zeros(shape=(num_params,1))
+
+        # If tide_vec is invalid.
+        if np.isnan(tide_vec[0,0]):
+            param_vec = param_vec + np.nan
+            return param_vec
+
+        # Model_vec is valid.
+        param_vec[0:3,0] = tide_vec[0:3,0]
+
+        # Tides.
+        for k in range(n_modeling_tides):
+            
+            tide_name = modeling_tides[k]
+
+            # Model_vec terms: cosE, cosN, cosU, sinE, sinN, sinU.
+            # Tide_vec terms:, ampE, ampN, ampU, phaseE, phaseN, phaseU
+            
+            # E N U
+            for t in range(3):
+
+                ### return value is in velocity domain m/d
+                # velo = amp*sin(wt + phi)
+                # velo = amp*sin(phi)coswt + amp*cos(phi)sinwt
+                # disp = amp/w*sin(phi)*sinwt - amp/w*cos(phi)*coswt
+                # cos term = -amp/w*cos(phi)
+                # sin term = amp/w*sin(phi)
+
+                # amp term.
+                amp = tide_vec[3+k*6+t]
+
+                # phase term.
+                phi = tide_vec[3+k*6+t+3]
+
+                omega = 2*np.pi / tide_periods[tide_name]
+
+                cos_term = -amp/omega * np.cos(phi)
+                sin_term = amp/omega * np.sin(phi)
+
+                param_vec[3+k*6+t,0] = cos_term
+                param_vec[3+k*6+t+3,0] = sin_term
+        
+        return param_vec
+
 
     def model_posterior_to_uncertainty_set(self, point_set, tide_vec_set, Cm_p_set):
 
@@ -1541,8 +1589,6 @@ class fourdvel(basics):
                 if not tide_name in ['Mf','Msf','Mm'] and horizontal_long_period and (j==0 or j==1 or j==3 or j==4):
                     inv_sigma[k,k] = inf_restrict
  
-        #print(stop)
-
         invCm = np.square(inv_sigma)
 
         return invCm
@@ -1763,7 +1809,7 @@ class fourdvel(basics):
         
         return resid_of_tides
 
-    def tide_vec_to_quantity(self, tide_vec, quant_name, point=None, state=None):
+    def tide_vec_to_quantity(self, tide_vec, quant_name, point=None, state=None, extra_info=None):
 
         # modeling tides.
         modeling_tides = self.modeling_tides
@@ -1771,7 +1817,6 @@ class fourdvel(basics):
         tide_omegas = self.tide_omegas
 
         t_vec = tide_vec[:,0]
-
 
         # Output nan, if not exist.
         item_name = quant_name.split('_')[0]
@@ -1848,30 +1893,121 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
-        # Msf along flow displacement amplitude.
-        elif quant_name == 'Msf_along_flow_displacement_amplitude':
+        elif quant_name == "Msf_horizontal_displacement_group":
+
+            # Find the size of vertical tides
             k = 0
             for tide_name in modeling_tides:
-                if tide_name == 'Msf':
-                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
-                    phaseE = self.velo_phase_to_dis_phase(t_vec[3+k*6+3], tide_name)
-
-                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
-                    phaseN = self.velo_amp_to_dis_amp(t_vec[3+k*6+4],tide_name)
-
+                if tide_name == 'M2':
+                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    quant = np.sqrt(ampU**2)
                 else:
                     k=k+1
 
-        # Msf across flow displacement amplitude.
-        elif quant_name == 'Msf_across_flow_displacement_amplitude':
+            # End of finding ampU
+
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
-                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
-                    phaseE = self.velo_phase_to_dis_phase(t_vec[3+k*6+3], tide_name)
+                    
+                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6], tide_name)
+                    phaseE = self.velo_phase_to_dis_phase(t_vec[3+k*6+3])
 
-                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
-                    phaseN = self.velo_amp_to_dis_amp(t_vec[3+k*6+4],tide_name)
+                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1], tide_name)
+                    phaseN = self.velo_phase_to_dis_phase(t_vec[3+k*6+4])
+
+                    # 2019.11.26: Calculate along flow and cross flow
+                    # restore the amplitude representation
+                    # The displacement is represented as amp*sin(omega*t+phase)
+                    a = ampE * np.sin(phaseE) # amp of cos term
+                    b = ampE * np.cos(phaseE) # amp of sin term
+                    c = ampN * np.sin(phaseN) # amp of cos term
+                    d = ampN * np.cos(phaseN) # amp os sin term
+
+                    # Find ve and vn
+                    ve = t_vec[0]
+                    vn = t_vec[1]
+
+                    # Along flow angle
+                    # between -pi and pi
+                    # rotation of coordinates; add minus before
+                    theta1 = -np.arctan2(vn,ve)
+
+                    # ALF Rotation
+                    amp_cos_alf = a*np.cos(theta1) - c*np.sin(theta1)
+                    amp_sin_alf = b*np.cos(theta1) - d*np.sin(theta1)
+
+                    # ALF amplitude % phase
+                    # e * coswt + f * sinwt
+                    # sqrt(e**2 + f**2) * cos(wt+phi)
+                    # artan(phi) = e/f
+                    amp_alf = (amp_cos_alf**2 + amp_sin_alf**2)**(1/2)
+                    phase_alf = np.arctan2(amp_cos_alf, amp_sin_alf)
+
+                    # ACF rotation
+                    amp_cos_crf = a*np.sin(theta1) + c*np.cos(theta1)
+                    amp_sin_crf = b*np.sin(theta1) + d*np.cos(theta1)
+
+                    # ACF amplitude
+                    amp_crf = (amp_cos_crf**2 + amp_sin_crf**2)**(1/2)
+                    phase_crf = np.arctan2(amp_cos_crf, amp_sin_crf)
+
+
+                    # Convert unit of phase (use days for Msf)
+                    phase_alf = self.rad2deg(phase_alf)
+                    phase_alf = self.wrapped_deg(phase_alf)
+                    phase_alf = self.deg2day(phase_alf, tide_name)
+
+                    phase_crf = self.rad2deg(phase_crf)
+                    phase_crf = self.wrapped_deg(phase_crf)
+                    phase_crf = self.deg2day(phase_crf, tide_name)
+
+
+                    # Check if the value is valid not
+                    ve_model = self.grid_set_velo[point][0]
+                    vn_model = self.grid_set_velo[point][1]
+                    v_model = (ve_model**2 + vn_model**2)**(1/2)
+
+
+                    lon, lat = self.int5d_to_float(point)
+
+                    thres_for_v = 0.4
+                    thres_for_amp = 0.1
+
+                    amp_full = (amp_alf**2 + amp_crf**2)**0.5
+
+                    if v_model>thres_for_v and amp_alf>thres_for_amp:
+                        if self.proj == "Rutford" and lat<-77.8:
+                            pass
+
+                        elif self.proj == "Evans" and ampU>0.5:
+                            pass
+
+                        else:
+                            phase_alf = np.nan
+                    else:
+                        phase_alf = np.nan
+
+                    if v_model > thres_for_v and amp_crf > thres_for_amp:
+                        if self.proj == "Rutford" and lat<-77.8:
+                            pass
+
+                        elif self.proj == "Evans" and ampU>0.5:
+                            pass
+
+                        else:
+                            phase_crf = np.nan
+                    else:
+                        phase_crf = np.nan
+
+
+                    quant = {}
+                    quant["Msf_along_flow_displacement_amplitude"] = amp_alf
+                    quant["Msf_along_flow_displacement_phase"] = phase_alf
+                    quant["Msf_cross_flow_displacement_amplitude"] = amp_crf
+                    quant["Msf_cross_flow_displacement_phase"] = phase_crf
+                    quant["Msf_horizontal_displacement_amplitude"] = amp_full 
+                    return quant
 
                 else:
                     k=k+1
@@ -1893,10 +2029,10 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
-                    phaseE=self.velo_phase_to_dis_phase(t_vec[3+k*6+3],tide_name)
+                    phaseE=self.velo_phase_to_dis_phase(t_vec[3+k*6+3])
 
                     quant = self.rad2deg(phaseE)
-                    quant = quant.wrapped_deg(quant)
+                    quant = self.wrapped_deg(quant)
 
                 else:
                     k=k+1
@@ -1923,6 +2059,8 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+        ############### End of Msf ###############
+
         # Mf lumped horizontal displacement amplitude.
         elif quant_name == 'Mf_horizontal_displacement_amplitude':
             k = 0
@@ -1931,52 +2069,6 @@ class fourdvel(basics):
                     ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
                     ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
                     quant = np.sqrt(ampE**2 + ampN**2)
-                else:
-                    k=k+1
-
-        # Mf East amp.
-        elif quant_name == 'Mf_east_displacement_amplitude':
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'Mf':
-                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
-                    quant = ampE
-                else:
-                    k=k+1
-
-
-        # Mf East phase.
-        elif quant_name == 'Mf_east_displacement_phase':
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'Mf':
-                    phaseE=self.velo_phase_to_dis_phase(t_vec[3+k*6+3],tide_name)
-
-                    quant = self.rad2deg(phaseE)
-                    quant = quant.wrapped_deg(quant)
-
-                else:
-                    k=k+1
-
-        # Mf North amp.
-        elif quant_name == 'Mf_north_displacement_amplitude':
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'Mf':
-                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
-                    quant = ampN
-                else:
-                    k=k+1
-
-        # Mf North phase.
-        elif quant_name == 'Mf_north_displacement_phase':
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'Mf':
-                    phaseN = self.velo_amp_to_dis_amp(t_vec[3+k*6+4],tide_name)
-                    quant = self.rad2deg(phaseN)
-                    quant = self.wrapped_deg(quant)
-
                 else:
                     k=k+1
 
@@ -1992,52 +2084,6 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
-        # M2 East amp.
-        elif quant_name == 'M2_east_displacement_amplitude':
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'M2':
-                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
-                    quant = ampE
-                else:
-                    k=k+1
-
-
-        # M2 East phase.
-        elif quant_name == 'M2_east_displacement_phase':
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'M2':
-                    phaseE=self.velo_phase_to_dis_phase(t_vec[3+k*6+3],tide_name)
-
-                    quant = self.rad2deg(phaseE)
-                    quant = quant.wrapped_deg(quant)
-
-                else:
-                    k=k+1
-
-        # M2 North amp.
-        elif quant_name == 'M2_north_displacement_amplitude':
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'M2':
-                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
-                    quant = ampN
-                else:
-                    k=k+1
-
-        # M2 North phase.
-        elif quant_name == 'M2_north_displacement_phase':
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'M2':
-                    phaseN = self.velo_amp_to_dis_amp(t_vec[3+k*6+4],tide_name)
-                    quant = self.rad2deg(phaseN)
-                    quant = self.wrapped_deg(quant)
-
-                else:
-                    k=k+1
-
         # O1 lumped horizontal displacement amplitude.
         elif quant_name == 'O1_horizontal_displacement_amplitude':
             k = 0
@@ -2048,53 +2094,6 @@ class fourdvel(basics):
                     quant = np.sqrt(ampE**2 + ampN**2)
                 else:
                     k=k+1
-
-        # O1 East amp.
-        elif quant_name == 'O1_east_displacement_amplitude':
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'O1':
-                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
-                    quant = ampE
-                else:
-                    k=k+1
-
-
-        # O1 East phase.
-        elif quant_name == 'O1_east_displacement_phase':
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'O1':
-                    phaseE=self.velo_phase_to_dis_phase(t_vec[3+k*6+3],tide_name)
-
-                    quant = self.rad2deg(phaseE)
-                    quant = quant.wrapped_deg(quant)
-
-                else:
-                    k=k+1
-
-        # O1 North amp.
-        elif quant_name == 'O1_north_displacement_amplitude':
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'O1':
-                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
-                    quant = ampN
-                else:
-                    k=k+1
-
-        # O1 North phase.
-        elif quant_name == 'O1_north_displacement_phase':
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'O1':
-                    phaseN = self.velo_amp_to_dis_amp(t_vec[3+k*6+4],tide_name)
-                    quant = self.rad2deg(phaseN)
-                    quant = self.wrapped_deg(quant)
-
-                else:
-                    k=k+1
-
 
         ##################################################################3
         # Up component
@@ -2109,28 +2108,41 @@ class fourdvel(basics):
                 else:
                     k=k+1
         
-        # O1 Up phase. (only on ice shelves)
-        elif quant_name == 'O1_up_displacement_phase':
+        # O1 Up phase. 
+        # (only on ice shelves)
+        elif quant_name.startswith('O1_up_displacement_phase'):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'O1':
                     ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
                     thres = 0.1
 
+                    # value in velocity model > 0
+                    # estimated value > thres
                     if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq') :
                         value = t_vec[3+k*6+5]
 
                         if state in [ 'true','est']:
-                            phaseU=self.velo_phase_to_dis_phase(value, tide_name)
+                            phaseU=self.velo_phase_to_dis_phase(value)
                             quant = self.rad2deg(phaseU)
-                            quant = self.wrapped_deg(quant)
-                            quant = self.deg2minute(quant, tide_name)
+                            if quant_name.endswith("in_deg"):
+                                pass
+                            else:
+                                quant = self.deg2minute(quant, tide_name)
+
                         elif state in ['uq']:
                             quant = value
                             quant = self.rad2deg(quant)
-                            quant = self.deg2minute(quant,tide_name)
+
+                            if quant_name.endswith("in_deg"):
+                                pass
+                            else:
+                                quant = self.deg2minute(quant,tide_name)
+                        else:
+                            raise Exception("Unknown state")
 
 
+                    # set to np.nan
                     else:
                         quant = np.nan
                 else:
@@ -2145,8 +2157,11 @@ class fourdvel(basics):
                     quant = np.sqrt(ampU**2)
                 else:
                     k=k+1
-        # M2 Up phase.
-        elif quant_name == 'M2_up_displacement_phase':
+        
+        # M2 Up phase. 
+        # convert to minute
+        elif quant_name.startswith('M2_up_displacement_phase'):
+
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'M2':
@@ -2154,24 +2169,37 @@ class fourdvel(basics):
                     thres = 0.3
 
                     if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
+                        # Find the phase
                         value = t_vec[3+k*6+5]
 
                         if state in [ 'true','est']:
-                            phaseU=self.velo_phase_to_dis_phase(value, tide_name)
+                            phaseU=self.velo_phase_to_dis_phase(value)
+                            print("phase radian: ", phaseU)
                             quant = self.rad2deg(phaseU)
-                            quant = self.wrapped_deg(quant)
-                            quant = self.deg2minute(quant, tide_name)
+                            print("phase degree: ", quant)
+                            
+                            if quant_name.endswith("in_deg"):
+                                pass
+                            else:
+                                quant = self.deg2minute(quant, tide_name)
+                                print("phaseU minute: ", phaseU)
+
                         elif state in ['uq']:
                             quant = value
                             quant = self.rad2deg(quant)
-                            quant = self.deg2minute(quant,tide_name)
+
+                            if quant_name.endswith("in_deg"):
+                                pass
+                            else:
+                                quant = self.deg2minute(quant,tide_name)
+                        else:
+                            raise Exception("Unknown state")
                     
                     else:
                         quant = np.nan
 
                 else:
                     k=k+1
-
         else:
             quant = None
             raise Exception(quant_name, ' is not defined yet!')

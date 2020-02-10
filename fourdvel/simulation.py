@@ -70,6 +70,17 @@ class simulation(basics):
         
         ###############################################
 
+        #### Convention: This is in displacement domain
+
+        # Disp = A * sin(omega * t + phi)
+
+        # the corresponding Velo is
+        # Velo = A * omega * sin(omega * t + phi + pi/2)
+
+        # This conversion is done with 
+        # dis_amp_to_velo_phase & dis_phase_velo_phase
+
+
         # Horizontal: assume this corresponds to 1 meter /day.
         self.ref_speed = 1
         # Vertical: assume the vertical scale.
@@ -81,10 +92,11 @@ class simulation(basics):
         if model_num == 1:
 
             # Model 1
+            # Original
             # Displacement.        
             tidesRut_params['K2'] =    [0.31,  163,    29.1,   99]
             tidesRut_params['S2'] =    [0.363, 184,    101.6,  115]
-            tidesRut_params['M2'] =    [0.259, 177,    156.3,  70] # M2
+            tidesRut_params['M2'] =    [0.259, 177,    156.3,  70]  # M2
 
             tidesRut_params['K1'] =    [0.19,  79,     49,     73]
             tidesRut_params['P1'] =    [0.24,  77.0,   16.6,   64]
@@ -100,13 +112,14 @@ class simulation(basics):
         if model_num == 2:
 
             # Model 2.
+            # Original
             # 1. Scale the vertical motion.
             coe = 2/3
  
             tidesRut_params['K2'] =    [0.31,  163,    29.1*coe,   99]
             tidesRut_params['S2'] =    [0.363, 184,    101.6*coe,  115]
 
-            tidesRut_params['M2'] =    [0.259, 177,    156.3*coe,  70] # M2
+            tidesRut_params['M2'] =    [0.259, 177,    156.3*coe,  70]  # M2
 
             tidesRut_params['K1'] =    [0.19,  79,     49*coe,     73]
             tidesRut_params['P1'] =    [0.24,  77.0,   16.6*coe,   64]
@@ -195,7 +208,7 @@ class simulation(basics):
 
 
         ###############################################################      
-        # Convert displacement to velocity.
+        # Convert from displacement domain to velocity domain.
         for tide_name in tidesRut_params.keys():
             tidesRut_params[tide_name][0] = self.dis_amp_to_velo_amp(
                                                     tidesRut_params[tide_name][0],
@@ -214,7 +227,7 @@ class simulation(basics):
             tidesRut_params[tide_name][3] = self.dis_phase_to_velo_phase(
                                                     tidesRut_params[tide_name][3],
                                                     deg = True)
- 
+
         #print(tidesRut_params)
 
         ##################################################################
@@ -311,6 +324,10 @@ class simulation(basics):
         for point in point_set:
 
             velo_model = velo_model_set[point]
+
+            #if point==self.test_point:
+            #    print(velo_model)
+            #    print(stop)
         
             (t_axis, secular_v, v, tide_amp, tide_phase) = self.syn_velocity(
                                                             velo_model = velo_model)
@@ -410,6 +427,9 @@ class simulation(basics):
 
         #self.method = 'analytical'
         self.method = 'analytical'
+
+        # Create synthetic time series
+        # "sin" is used
 
         if self.method == 'numerical' or self.method == 'both':
             sim = {}
@@ -526,8 +546,8 @@ class simulation(basics):
         data_vector = np.zeros(shape=(n_rows,1))
         t_origin = self.t_origin.date()
 
-        #method = "without grounding"
-        method = "with grounding"
+        #method = "with grounding"
+        method = "without grounding"
 
         # Three components.
         # Numerical method
@@ -561,42 +581,6 @@ class simulation(basics):
             ax.set_xlim([-12,12])
             fig.savefig('fig_sim/2.png',format='png')
             print(np.max(d_u))
-
-        # Analytical with grounding
-        elif method == "with grounding old way":
-            #print(method)
-
-            # secular offset
-            secular_off = np.asarray(secular_v)[:,None] * (t_b - t_a)
-            print(secular_off)
-
-            # Tidal displacement
-            G_a = self.design_mat_set[timing_a]
-            G_b = self.design_mat_set[timing_b]
-
-            dis_timing_a = np.matmul(G_a, model_vec)
-            dis_timing_b = np.matmul(G_b, model_vec)
-
-            #print('dis_EN_ta: ',dis_EN_ta[0:2])
-            #print('dis_EN_tb: ',dis_EN_tb[0:2])
-            #print('dis_U_ta: ',dis_U_ta[0])
-            #print('dis_U_tb: ',dis_U_tb[0])
-        
-
-            #print('dis_timing_a: ',dis_timing_a)
-            #print('dis_timing_b: ',dis_timing_b)
-
-            # Grounding
-            if dis_timing_b[2] < grounding:
-                dis_timing_b[2] = grounding
-            if dis_timing_a[2] < grounding:
-                dis_timing_a[2] = grounding
-
-            # Tidal offset
-            tide_off = dis_timing_b - dis_timing_a
-
-            # Total offset
-            offset_vec = secular_off + tide_off
 
         elif method == "with grounding":
             #print(method)
@@ -682,8 +666,6 @@ class simulation(basics):
 
         elif method == "without grounding":
 
-            #print(method)
-
             ### CONVERT parameters from velocity to displacement ###
             tide_dis_amp = {}
             tide_dis_phase = {}
@@ -691,10 +673,15 @@ class simulation(basics):
             for comp in ['e','n','u']:
                 for tide_name in self.syn_tidesRut:            
                     omega = 2*np.pi / self.tide_periods[tide_name]
+
+                    # Changed 2020.02.09
                     # amplitude
-                    tide_dis_amp[(tide_name,comp)] = tide_amp[(tide_name,comp)] / omega
+                    #tide_dis_amp[(tide_name,comp)] = tide_amp[(tide_name,comp)] / omega
+                    tide_dis_amp[(tide_name,comp)] = self.velo_amp_to_dis_amp(tide_amp[(tide_name,comp)], tide_name)
+
                     # phase
-                    tide_dis_phase[(tide_name,comp)] = tide_phase[(tide_name,comp)]+ np.pi
+                    #tide_dis_phase[(tide_name,comp)] = tide_phase[(tide_name,comp)] + np.pi
+                    tide_dis_phase[(tide_name, comp)] = self.velo_phase_to_dis_phase(tide_phase[(tide_name, comp)], deg=False)
 
             # Generate offsets
             for i in range(n_offsets):
@@ -726,14 +713,6 @@ class simulation(basics):
                     v_e_interval = v_e[inds:inde]
                     v_n_interval = v_n[inds:inde]
                     v_u_interval = v_u[inds:inde]
-    
-                    # Plot the cut time series. 
-                    #if i==1:
-                    #    fig = plt.figure(1, figsize=(10,6))
-                    #    plt.clf()
-                    #    ax = fig.add_subplot(111)
-                    #    ax.plot(t_interval,v_u_interval)
-                    #    fig.savefig('interval.png',format='png')
     
                     # Integration of velocity wrt time. 
                     offset_e = np.trapz(v_e_interval, t_interval)
@@ -792,8 +771,10 @@ class simulation(basics):
                             dis_phase = tide_dis_phase[(tide_name, comp)]
                             
                             # Displacement difference
-                            tide_dis = dis_amp*np.cos(omega*t_b + dis_phase) - dis_amp * np.cos(omega*t_a + dis_phase)
-    
+                            # Changed to use sin instead of cos 2020.02.09
+                            #tide_dis = dis_amp * np.cos(omega*t_b + dis_phase) - dis_amp * np.cos(omega*t_a + dis_phase)
+                            tide_dis = dis_amp * np.sin(omega*t_b + dis_phase) - dis_amp * np.sin(omega*t_a + dis_phase)
+   
                             offset[comp] = offset[comp] + tide_dis
     
                         #print(stop)
@@ -840,245 +821,4 @@ def main():
 if __name__=='__main__':
 
     main()
-
-## Deprecated:
-#    def syn_offsets_data_vec_set(self, point_set, secular_v_set, modeling_tides, 
-#                            tide_amp_set, tide_phase_set, offsetfields_set, noise_sigma_set):
-#
-#        data_vec_set = {}
-#        # Point by Point.
-#        count = 0
-#        for point in point_set:
-#            print(count)
-#            count = count + 1
-#
-#            # Obtain offsets from synthetics.
-#            offsetfields = offsetfields_set[point]
-#            secular_v = secular_v_set[point]
-#            tide_amp = tide_amp_set[point]
-#            tide_phase = tide_phase_set[point]
-#            
-#            n_offsets = len(offsetfields)
-#            #print("number of offsetfields:", n_offsets)
-#            n_rows = n_offsets * 2
-#            data_vector = np.zeros(shape=(n_rows,1))
-#            t_origin = self.t_origin.date()
-#   
-#            for i in range(n_offsets):
-#    
-#                #print('offsetfield: ',i,'/',n_offsets,'\n')
-#                vecs = [offsetfields[i][2],offsetfields[i][3]]
-#                t_a = (offsetfields[i][0] - t_origin).days + offsetfields[i][4]
-#                t_b = (offsetfields[i][1] - t_origin).days + offsetfields[i][4]
-#    
-#                offset={}
-#                offset['e'] = 0
-#                offset['n'] = 0
-#                offset['u'] = 0
-#
-#                n_modelng_tides = len(modeling_tides) # Three components.
-#                comps = ['e','n','u']
-#    
-#                ii = 0
-#                for comp in comps:
-#                    offset[comp] = offset[comp] + secular_v[ii] * (t_b - t_a)
-#                    ii = ii + 1
-#                    for tide_name in modeling_tides:
-#                        omega = 2*np.pi / self.tide_periods[tide_name] 
-#                        dis_amp = tide_amp[(tide_name,comp)] / omega
-#                        dis_phase = tide_phase[(tide_name,comp)] + np.pi
-#    
-#                        tide_dis = dis_amp*np.cos(omega*t_b + dis_phase) - dis_amp * np.cos(omega*t_a + dis_phase)
-#                        offset[comp] = offset[comp] + tide_dis
-#                
-#                # Velocity vector.
-#                offset_vec = np.zeros(shape=(3,1))
-#                offset_vec[:,0] = [offset['e'],offset['n'],offset['u']]
-#    
-#                # Project to two observation vectors.
-#                for j in range(2):
-#                    obs_vec = np.zeros(shape=(3,1))
-#                    obs_vec[:,0] = np.asarray(vecs[j])
-#                    #print("Observation vector:\n", obs_vec)
-#                    
-#                    # Projection onto the observation vectors.
-#                    obs_offset = np.matmul(np.transpose(offset_vec),obs_vec)
-#                    #print(obs_offset)
-#                    
-#                    # Record the data.
-#                    data_vector[2*i+j] = obs_offset
-#
-#            data_vec_set[point] = data_vector
-#    
-#        # Add noise
-#        np.random.seed(seed=2018)
-#        for point in point_set:
-#            data_vec_set[point] = data_vec_set[point] +  \
-#                np.random.normal(scale = noise_sigma_set[point], size=data_vec_set[point].shape)
-#    
-#        print('Data vector Done')
-#
-#        return data_vec_set
-
-
-#    def syn_velocity_set(self, point_set, velo_model_set):
-#        
-#        # Tides.
-#        tide_periods = self.tide_periods
-#
-#        # Reference speed to tide amplitudes.
-#        ref_speed = self.ref_speed
-#        verti_scale = self.verti_scale
-#
-#        # Rutford tide model.
-#        tidesRut_params = self.tidesRut_params
-#        syn_tidesRut = self.syn_tidesRut
-#
-#        # Initilization
-#        secular_v_set = {}
-#        tide_amp_set = {}
-#        tide_phase_set = {}
-#        
-#        for point in point_set:
-#            # Secular velcity.
-#            secular_v_e = velo_model_set[point][0]
-#            secular_v_n = velo_model_set[point][1]
-#            secular_v_u = 0
-#            verti_ratio = velo_model_set[point][2]
-#
-#            secular_speed = np.sqrt(secular_v_e**2 + secular_v_n**2)
-#            secular_v_set[point] = (secular_v_e, secular_v_n, secular_v_u)
-#
-#            # Tides
-#            tide_amp = {}
-#            tide_phase = {}
-#
-#            # Tides. (Find the parameters)
-#            for tide_name in syn_tidesRut:
-#                #print(tide_name)
-#
-#                omega = 2*np.pi / tide_periods[tide_name] 
-#
-#                horiz_amp = tidesRut_params[tide_name][0]/100 # velocity
-#                horiz_phase = np.deg2rad(tidesRut_params[tide_name][1])
-#
-#                verti_amp = tidesRut_params[tide_name][2]/100 # velocity
-#                verti_phase = np.deg2rad(tidesRut_params[tide_name][3])
-#
-#                # East component.
-#                a_e = horiz_amp * abs(secular_v_e/secular_speed) * secular_speed / ref_speed
-#                phi_e = np.sign(secular_v_e) * horiz_phase
-#
-#                # North component.
-#                a_n = horiz_amp * abs(secular_v_n/secular_speed) * secular_speed / ref_speed
-#                phi_n = np.sign(secular_v_n) * horiz_phase # rad
-#
-#                # Up component. 
-#                a_u = verti_amp * verti_scale * verti_ratio
-#                phi_u = verti_phase
-#                
-#                # Record the tides.
-#                tide_amp[(tide_name,'e')] = a_e
-#                tide_amp[(tide_name,'n')] = a_n
-#                tide_amp[(tide_name,'u')] = a_u
-#
-#                tide_phase[(tide_name,'e')] = phi_e
-#                tide_phase[(tide_name,'n')] = phi_n
-#                tide_phase[(tide_name,'u')] = phi_u
-#            
-#            tide_amp_set[point] = tide_amp
-#            tide_phase_set[point] = tide_phase
-#       
-#        # Return parameters.
-#        return (secular_v_set, tide_amp_set, tide_phase_set)
-
-
-#    def flow_model(self):
-#
-#        # Constants for ice flow model.
-#        A = 2.4e-24
-#        alpha = 0.04
-#        g = 9.81
-#        h = 1000
-#        n_g = 3
-#        rho = 900
-#        s_v = 0.6
-#
-#        # Gravitional driving stress.
-#        tau_d = rho*g*h*alpha
-#
-#        # Basal drag.
-#        tau_b = 0.8 * tau_d
-#
-#        w = 50*1000 #m
-#        L = 150*1000 #m
-#
-#        # End of constants.
-#
-#        # Beginning of simulations.
-#        x = np.linspace(0,L,num=np.round(L/500))
-#        y = np.linspace(0,2*w,num=np.round(2*w/500))
-#
-#        yy,xx = np.meshgrid(y,x)
-#        #print(xx.shape)
-#        #print(tau_d)
-#        #print(tau_d * w/h)
-#        #print(tau_d * w/h * 0.2)
-#
-#        #print(2*A*w/(n_g+1))
-#
-#        v_ideal_center = 2*A*w/(n_g+1) * (tau_d * w / h * 0.2)**n_g
-#        print(v_ideal_center)
-#
-#        v_ideal = v_ideal_center * (1 - (1-yy/w)**(n_g+1))
-#
-#        k_h=10**(-1*np.abs(np.log10(L)-0.8))
-#        gamma = (1 + np.tanh(k_h * (x-0.6*L)))/2
-#
-#        Gamma = {}
-#
-#        Gamma_const = v_ideal/v_ideal_center
-#
-#
-#        # Add all tide signals together.
-#        p_e = np.zeros(shape=t_axis.shape)
-#        p_n = np.zeros(shape=t_axis.shape)
-#        p_u = np.zeros(shape=t_axis.shape)
-#
-#        for key in syn_tidesRut:
-#            p_e = p_e + sim[(key,'e')]
-#            p_n = p_n + sim[(key,'n')]
-#            p_u = p_u + sim[(key,'u')]
-#
-#        # Full velocity signals.
-#        # Constant velocity + tidal signals.
-#        # Consider the transition from ice stream to ice shelf.
-#        v_e = np.zeros(shape=t_axis.shape)
-#
-#        v_n = s_v * x_loc/L * (-v_ideal[ind_x,ind_y]*t_axis + p_n)
-#        v_n_tides = s_v * x_loc/L * p_n
-#
-#        v_u = s_v * (x_loc-L)/(10*L) * v_ideal[ind_x,ind_y] + p_u
-#        v_u_tides = p_u
-#
-#        # Plotting.
-#        fig = plt.figure(2,figsize=(7,7))
-#        ax = fig.add_subplot(111)
-#        
-#        # Choice 1.
-#        #p1 = ax.imshow(v_ideal/v_ideal_center,cmap=plt.cm.coolwarm)
-#        #p1 = ax.imshow(v_ideal,cmap=plt.cm.coolwarm)
-#        #fig.colorbar(p1)
-#
-#        # Choice 2. Summed tidal signals.
-#        ax.plot(t_axis, v_u)
-#
-#        # velocity
-#        #v_e = np.zeros(shape=xx.shape)
-#        #v_n = np.z
-#
-#        plt.show()
-#
-#        return
-
 

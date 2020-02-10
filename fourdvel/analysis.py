@@ -1,43 +1,59 @@
 #!/usr/bin/env python3
 
 import os
+import sys
 import pickle
-
 import numpy as np
-
 import multiprocessing
-
 from fourdvel import fourdvel
 from display import display
-
 import utm
-
 import matplotlib.pyplot as plt
+
+import datetime
 
 class analysis(fourdvel):
 
     def __init__(self):
 
-        super(analysis,self).__init__()
-
-    def chop_into_threads(self, total_number, nthreads):
-
-        # Devide chunk size.
-        mod = total_number % nthreads        
-        if mod > 0:
-            chunk_size = (total_number - mod + nthreads) // nthreads
+        print(sys.argv)
+        if len(sys.argv)==1:
+            super(analysis, self).__init__()
         else:
-            chunk_size = total_number // nthreads
+            super(analysis, self).__init__(param_file = sys.argv[1])
 
-        # Deduce divides.
-        divide = np.zeros(shape=(nthreads+1,))
-        divide[0] = 0
+        self.get_grid_set_velo()
+        test_id = self.test_id
 
-        for it in range(1, nthreads+1):
-            divide[it] = chunk_size * it
-        divide[nthreads] = total_number
+        result_folder = '/home/mzzhong/insarRoutines/estimations'
+        self.this_result_folder = os.path.join(result_folder,str(test_id))
 
-        return divide
+        self.load_everything()
+
+    def load_everything(self):
+
+        this_result_folder = self.this_result_folder
+        test_id = self.test_id
+
+        # Load all the results.
+        with open(this_result_folder + '/' 
+                    + str(test_id) + '_' + 'grid_set_true_tide_vec.pkl','rb') as f:
+            self.grid_set_true_tide_vec = pickle.load(f)
+
+
+        with open(this_result_folder + '/' 
+                    + str(test_id) + '_' + 'grid_set_tide_vec.pkl','rb') as f:
+            self.grid_set_tide_vec = pickle.load(f)
+
+        with open(this_result_folder + '/' 
+                    + str(test_id) + '_' + 'grid_set_tide_vec_uq.pkl','rb') as f:
+            self.grid_set_tide_vec_uq = pickle.load(f)
+
+        self.point_set = self.grid_set_tide_vec.keys()
+
+        print("Loading done")
+
+        return 0
 
     def second_invariant(self,strain):
 
@@ -68,7 +84,7 @@ class analysis(fourdvel):
                 lon_ref = lon
                 lat_ref = lat
 
-                print(lon,lat)
+                print("lon lat: ", lon,lat)
 
                 # Nearby points.
                 lon_range = self.round1000(np.arange(lon-0.5, lon+0.5, self.lon_step))
@@ -139,11 +155,12 @@ class analysis(fourdvel):
 
         n_points = len(point_set)
 
-        n_threads = 10
+        nthreads = 10
         total_number = n_points
+        
         divide = self.chop_into_threads(total_number, nthreads)
 
-        func = self.strain
+        func = self.strain_rate
 
         manager = multiprocessing.Manager()
         grid_set_I2 = manager.dict()
@@ -154,7 +171,7 @@ class analysis(fourdvel):
             start_point = divide[ip]
             stop_point = divide[ip+1]
 
-            p = multiprocessing.Process(target=func, args=(start_point, stop_point,grid_set_I2))
+            p = multiprocessing.Process(target=func, args=(start_point, stop_point, grid_set_I2))
 
             jobs.append(p)
             p.start()
@@ -353,4 +370,57 @@ class analysis(fourdvel):
         #return np.mean(val_container)
         return np.std(val_container)
 
+    def point_time_series(self):
 
+        this_result_folder = self.this_result_folder
+        test_id = self.test_id
+        point = self.test_point
+
+        lon, lat = point
+
+        grid_set_true_tide_vec = self.grid_set_true_tide_vec
+        grid_set_tide_vec = self.grid_set_tide_vec
+        grid_set_tide_vec_uq = self.grid_set_tide_vec_uq
+
+
+        # Find the result
+        tide_vec = grid_set_tide_vec[point]
+        print("tide vec")
+        print(tide_vec)
+
+        # Plot M2
+        # Get M2 parameters
+        tide_name = "O1"
+        omega = self.tide_omegas[tide_name]
+        quant_name = tide_name+ "_up_displacement_amplitude"
+        disp_amp = self.tide_vec_to_quantity(tide_vec = tide_vec, quant_name = quant_name,  point=point, state="est")
+        print("disp_amp: ", disp_amp)
+
+        quant_name = tide_name+ "_up_displacement_phase_in_deg"
+        disp_phase = self.tide_vec_to_quantity(tide_vec = tide_vec, quant_name = quant_name,  point=point, state="est")
+        print( "disp_phase: ",disp_phase)
+
+        t1 = (datetime.datetime(2017,6,1) - self.t_origin).days
+        t2 = (datetime.datetime(2017,6,2) - self.t_origin).days
+
+        taxis = np.arange(t1,t2,1/24)
+        data = disp_amp * np.sin(omega*taxis + disp_phase/180*np.pi)
+
+        plt.plot(taxis,data)
+        plt.savefig("data.png")
+        
+        # Plot O1
+
+        return 0
+
+
+def main():
+
+    ana = analysis()
+
+    #ana.parallel_driver()
+
+    ana.point_time_series()
+
+if __name__=="__main__":
+    main()

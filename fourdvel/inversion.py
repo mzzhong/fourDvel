@@ -5,6 +5,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import sys
 import pickle
 
 from matplotlib import cm
@@ -16,6 +17,8 @@ from datetime import date
 
 import multiprocessing
 
+from multiprocessing import Value
+
 import time
 
 from scipy import linalg
@@ -26,11 +29,16 @@ from analysis import analysis
 
 class inversion(fourdvel):
 
-    def __init__(self):
-        
-        super(inversion,self).__init__()
+    def __init__(self, param_file="params.in"):
 
-        self.display = display()
+        if len(sys.argv)==2:
+            param_file = sys.argv[1]
+
+        self.param_file = param_file
+        
+        super(inversion,self).__init__(param_file)
+
+        self.display = display(param_file)
 
         self.preparation()
 
@@ -48,23 +56,27 @@ class inversion(fourdvel):
 
             if sate == 'csk':
                 stack = "stripmap"
-                workdir = "/net/kraken/nobak/mzzhong/CSK-Evans"
+                #workdir = "/net/kraken/nobak/mzzhong/CSK-Evans"
+                workdir = self.csk_workdir
                 name='track_' + str(track_num).zfill(2) + str(0)
                 runid = 20180712
     
             elif sate == 's1':
                 stack = 'tops'
     
-                workdir = '/net/jokull/nobak/mzzhong/S1-Evans'
+                #workdir = '/net/jokull/nobak/mzzhong/S1-Evans'
+                workdir = self.s1_workdir
                 
                 name = 'track_' + str(track_num)
-                runid = 20180703
+                #runid = 20180703
+                runid = 20200101
 
         elif self.proj == "Rutford":
 
             if sate == 'csk':
                 stack = "stripmap"
-                workdir = "/net/kraken/nobak/mzzhong/CSK-Rutford"
+                #workdir = "/net/kraken/nobak/mzzhong/CSK-Rutford"
+                workdir = self.csk_workdir
                 name='track_' + str(track_num).zfill(3) + '_' + str(0)
 
                 # 64 x 128
@@ -76,12 +88,14 @@ class inversion(fourdvel):
 
                 stack = 'tops'
     
-                workdir = '/net/jokull/nobak/mzzhong/S1-Evans'
+                #workdir = '/net/jokull/nobak/mzzhong/S1-Evans'
+                workdir = self.s1_workdir
                 
                 name = 'track_' + str(track_num)
                 runid = 20180703
         
         else:
+
             raise Exception("Can't find data for project: ", self.proj)
 
 
@@ -100,7 +114,12 @@ class inversion(fourdvel):
         #print('track_number: ',track_num)
         #print('used dates: ', used_dates)
  
-        track_pairs_set, track_offsets_set = offset.extract_offset_set_series(point_set = point_set, dates = used_dates)
+        track_pairs_set, track_offsets_set = \
+        offset.extract_offset_set_series(point_set = point_set, dates = used_dates, offsetFieldStack = self.offsetFieldStack_all[(sate, track_num)] )
+
+
+        #track_pairs_set, track_offsets_set = \
+        #offset.extract_offset_set_series(point_set = point_set, dates = used_dates)
 
         #print('obtained pairs: ', track_pairs)
         #print('obtained offsets: ', track_offsets)
@@ -234,9 +253,8 @@ class inversion(fourdvel):
             # Provide the matrix to simulator
             fourD_sim.set_stack_design_mat_set(stack_design_mat_set)
 
-            # Provide grounding
-            grounding = -1
-            fourD_sim.set_grounding(grounding)
+            # Provide grounding level
+            fourD_sim.set_grounding(self.grounding)
 
             # Get offsets
             data_vec_set = fourD_sim.syn_offsets_data_vec_set(
@@ -273,6 +291,13 @@ class inversion(fourdvel):
             for track in indep_tracks:
 
                 track_num = track[0]
+                sate_name = track[1]
+
+                if sate_name == "csk" and self.use_csk == False:
+                    continue
+
+                if sate_name == "s1" and self.use_s1 == False:
+                    continue
 
                 print('=========== NEW TRACK ==============')
                 print('Reading: ', track[0], track[1])
@@ -330,6 +355,8 @@ class inversion(fourdvel):
 
                 # Synthetic data.
                 fourD_sim = simulation()
+
+                fourD_sim.test_point = self.test_point
                 
                 # Model parameters.
                 velo_model_set = {}
@@ -353,8 +380,7 @@ class inversion(fourdvel):
                 fourD_sim.set_stack_design_mat_set(stack_design_mat_set)
 
                 # Provide grounding
-                grounding = -1
-                fourD_sim.set_grounding(grounding)
+                fourD_sim.set_grounding(self.grounding)
 
                 data_vec_set = fourD_sim.syn_offsets_data_vec_set(
                                     point_set = point_set,
@@ -366,6 +392,7 @@ class inversion(fourdvel):
                                     noise_sigma_set = noise_sigma_set)
 
                 # True tidal params. (Every point has the value)
+                # velocity domain m/d
                 true_tide_vec_set = fourD_sim.true_tide_vec_set(point_set,secular_v_set,                                    self.modeling_tides, tide_amp_set, tide_phase_set)
 
             # Just use the obtained data
@@ -408,22 +435,20 @@ class inversion(fourdvel):
 
         # All variables are dictionary with point_set as the key.
         # Data set formation.
-        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set)=                                self.data_set_formation(point_set, tracks_set, test_mode)
+        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set)=\
+                                                    self.data_set_formation(point_set, tracks_set, test_mode)
 
         #print(data_info_set[self.test_point])
 
         print("Data set formation Done")
 
-
-        if inversion_method == 'Bayesian_Linear':
+        do_linear = True
+        if inversion_method == 'Bayesian_Linear' or do_linear == True:
 
             # Data prior.
             invCd_set = self.real_data_uncertainty_set(point_set, data_vec_set, \
                                                             noise_sigma_set)
- 
             from solvers import Bayesian_Linear
-
-            BL = Bayesian_Linear()
 
             ### MODEL ###
             # Design matrix.
@@ -454,6 +479,12 @@ class inversion(fourdvel):
             model_vec_set = self.param_estimation_set(point_set, linear_design_mat_set, data_vec_set, invCd_set, invCm_set, Cm_p_set)
             #print('model_vec_set: ', model_vec_set)
             print('Model vec set estimation Done')
+
+
+            # Output the result of test_point
+            print("***Results of Bayesian linear")
+            bl_model_vec = model_vec_set[self.test_point]
+            print(bl_model_vec)
     
             # Calculale the residual.
             resid_of_secular_set, resid_of_tides_set = self.resids_set(point_set, linear_design_mat_set, data_vec_set, model_vec_set)
@@ -471,23 +502,53 @@ class inversion(fourdvel):
     
             print('Point set inversion Done')
 
+
+            ############ Analyze the results ##############################
             print('Start to analysis...')
             # Get continous displacement time series
             #self.continous_signal(self.test_point, tide_vec_set[self.test_point])
-
+    
             # Display the misfit
             #self.analysis = analysis()
             #self.analysis.test_point = self.test_point
-
-            # Save additional info from analysis in other_set_1
+    
+           # Save additional info from analysis in other_set_1
             other_set_1 = {} 
             #other_set_1 = self.analysis.check_fitting_set(point_set, data_info_set, offsetfields_set, linear_design_mat_set, design_mat_enu_set, data_vec_set, model_vec_set, tide_vec_set)
+    
+    
+            ########### Show the results ########################
+            # Stack the true and inverted models.
+            # Show on point in the point set.
+    
+            show_control = False
+            if self.show_vecs == True or show_control== True:
+            #if self.show_vecs == True and inversion_method=="Bayesian_Linear":
+    
+                if true_tide_vec_set is not None:
+                    stacked_vecs = np.hstack((  true_tide_vec_set[self.test_point], 
+                                                tide_vec_set[self.test_point], 
+                                                tide_vec_uq_set[self.test_point]))
+                    row_names = ['Input','Estimated','Uncertainty']
+                    column_names = ['Secular'] + self.modeling_tides
+                else:
+                    stacked_vecs = np.hstack((  tide_vec_set[self.test_point], 
+                                                tide_vec_uq_set[self.test_point]))
+                    row_names = ['Estimated','Uncertainty']
+                    column_names = ['Secular'] + self.modeling_tides
+    
+                self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
 
-        elif inversion_method=='Bayesian_MCMC':
+                #print(stop)
+
+            #######################################################
+
+
+        if inversion_method in ['Bayesian_MCMC', 'Bayesian_MCMC_Linear']:
 
             from solvers import Bayesian_MCMC
 
-            BMC = Bayesian_MCMC()
+            BMC = Bayesian_MCMC(self.param_file)
             # Set the point to work on
             BMC.set_point_set(point_set)
 
@@ -519,52 +580,55 @@ class inversion(fourdvel):
             # Provide the matrix to simulator
             BMC.set_stack_design_mat_set(stack_design_mat_set)
 
-            # Run inversion
-            #model_vec_set = BMC.run_optimize()
-            #model_vec_set = BMC.run_MCMC_linear()
-            #model_vec_set = BMC.run_MCMC()
-            BMC.run_MCMC()
-            model_vec_set = {}
-            model_vec_set[self.test_point] = np.zeros(shape=(100,1))
+            # Obtain true model vec from true tide vec
+            if self.test_mode in [1,2]:
 
-            # Convert to tidal params.
-            #tide_vec_set = self.model_vec_set_to_tide_vec_set(point_set, model_vec_set)
-            tide_vec_set = model_vec_set
+                true_model_vec_set = self.tide_vec_set_to_model_vec_set(point_set, true_tide_vec_set)
+                # For test
+                #true_tide_vec_set2 = self.model_vec_set_to_tide_vec_set(point_set, true_model_vec_set)
+                #print(true_tide_vec_set[self.test_point])
+                #print(true_tide_vec_set2[self.test_point])
+                #print(stop)
 
-            # Other set are not available currently
-            tide_vec_uq_set = {}
-            resid_of_secular_set = {}
-            resid_of_tides_set = {}
-            other_set_1 = {}
-
-            print(stop)
-
-        else:
-            raise Exception('Please choose a inversion method')
-
-        ########### Inversion done ##########################
-        ########### Show the results ########################
-        # Stack the true and inverted models.
-        # Show on point in the point set.
-
-        if self.show_vecs == True:
-        #if self.show_vecs == True and inversion_method=="Bayesian_Linear":
-
-            if true_tide_vec_set is not None:
-                stacked_vecs = np.hstack((  true_tide_vec_set[self.test_point], 
-                                            tide_vec_set[self.test_point], 
-                                            tide_vec_uq_set[self.test_point]))
-                row_names = ['Input','Estimated','Uncertainty']
-                column_names = ['Secular'] + self.modeling_tides
             else:
-                stacked_vecs = np.hstack((  tide_vec_set[self.test_point], 
-                                            tide_vec_uq_set[self.test_point]))
-                row_names = ['Estimated','Uncertainty']
-                column_names = ['Secular'] + self.modeling_tides
+                true_model_vec_set = None
+
+            # Run inversion
+            est_grounding = None
+            if inversion_method=="Bayesian_MCMC":
+                model_vec, est_grounding = BMC.run_MCMC(run_point = self.test_point, true_model_vec_set=true_model_vec_set, suffix=str(self.test_mode))
+                print("*** Result of Bayesian MCMC")
+                print(model_vec)
+
+            elif inversion_method=="Bayesian_MCMC_Linear":
+                model_vec = BMC.run_MCMC_Linear(run_point = self.test_point, true_model_vec_set = true_model_vec_set, suffix=str(self.test_mode))
+
+                print("*** Result of Bayesian MCMC Linear")
+                print(model_vec)
+
+            print("Compare model vec")
+            true_model_vec = true_model_vec_set[self.test_point]
+            print(np.hstack((true_model_vec,bl_model_vec, model_vec)), est_grounding)
+
+            print("Compare tide vec")
+            true_tide_vec = true_tide_vec_set[self.test_point]
+            bl_tide_vec = self.model_vec_to_tide_vec(bl_model_vec)
+            tide_vec = self.model_vec_to_tide_vec(model_vec)
+            print(np.hstack((true_tide_vec,bl_tide_vec, tide_vec)), est_grounding)
+
+            # Display these two
+            stacked_vecs = np.hstack((true_tide_vec, tide_vec))
+            row_names = ['Input','Estimated']
+            column_names = ['Secular'] + self.modeling_tides
 
             self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
+            print(stop)
+
+        
+        ########### Inversion done ##########################
 
         # Record and return
+        print("Recording...")
         all_sets = {}
         all_sets['true_tide_vec_set'] =  true_tide_vec_set
         all_sets['tide_vec_set'] = tide_vec_set
@@ -576,26 +640,8 @@ class inversion(fourdvel):
 
         return all_sets
 
-    def chop_into_threads(self, total_number, nthreads):
 
-        # Devide chunk size.
-        mod = total_number % nthreads        
-        if mod > 0:
-            chunk_size = (total_number - mod + nthreads) // nthreads
-        else:
-            chunk_size = total_number // nthreads
-
-        # Deduce divides.
-        divide = np.zeros(shape=(nthreads+1,))
-        divide[0] = 0
-
-        for it in range(1, nthreads+1):
-            divide[it] = chunk_size * it
-        divide[nthreads] = total_number
-
-        return divide
-
-    def driver_serial_tile(self, start_tile=None, stop_tile=None, use_threading = False, all_grid_sets=None):
+    def driver_serial_tile(self, start_tile=None, stop_tile=None, use_threading = False, all_grid_sets=None, threadId=None):
         
         # Input information.
         tile_set = self.tile_set
@@ -616,13 +662,15 @@ class inversion(fourdvel):
             stop_tile = 10**10
             self.show_vecs = True
 
-        print("start tile: ", start_tile, "stop tile: ",stop_tile)
+        #print("start tile: ", start_tile, "stop tile: ",stop_tile)
 
         count_tile = 0
         count_run = 0
 
-        print("Number of tiles: ",len(tile_set))
-        print("All tiles",tile_set.keys())
+        #print("Number of tiles: ",len(tile_set))
+
+        # Find the test point
+        test_point = self.test_point
 
         for tile in sorted(tile_set.keys()):
             
@@ -630,35 +678,39 @@ class inversion(fourdvel):
             lon, lat = tile
             
             # Run all in serial.
-            #if (count_tile >= start_tile and count_tile < stop_tile):
+            #if (count_tile >= start_tile) and (count_tile < stop_tile):
+
+            # Only run the test point tile
+            if (count_tile >= start_tile) and (count_tile < stop_tile) and \
+                    (test_point in tile_set[tile]):
             
             #if (count_tile >= start_tile and count_tile < stop_tile and 
             #                                            count_tile % 2 == 1):
 
-            # Debug this tile for Evans.
+            # Debug this tile.
             #if count_tile >= start_tile and count_tile < stop_tile and f_tile == (-81, -79):
-            # Debug this tile for Evans
+            # Debug this tile.
             #if count_tile >= start_tile and count_tile < stop_tile and tile == (-84.0, -76.2):
 
             # Debug this tile for Rutford
             #if count_tile >= start_tile and count_tile < stop_tile and tile == self.float_lonlat_to_int5d((-83.0, -78.6)):
 
-            #if count_tile >= start_tile and count_tile < stop_tile and tile == self.float_lonlat_to_int5d((-83.0, -78.8)):
+                #print("Find the tile", tile)
 
-            #if count_tile >= start_tile and count_tile < stop_tile and tile == self.float_lonlat_to_int5d((-83.0, -78.4)):
-
-            if count_tile >= start_tile and count_tile < stop_tile and tile == self.float_lonlat_to_int5d((-83, -78.6)):
-
-                print('***  Start a new tile ***')
-                self.print_int5d([lon, lat])
+                #print('***  Start a new tile ***')
+                #self.print_int5d([lon, lat])
 
                 point_set = tile_set[tile] # List of tuples
 
-                # Output the location and size of tile. 
-                print('tile coordinates: ', tile)
-                print('Number of points in this tile: ', len(point_set))
+                # Set test point 
+                if self.test_point is None:
+                    self.test_point = point_set[0]
+                    test_point = self.test_point
+                    #print(self.test_point)
 
-                #print(point_set)
+                # Output the location and size of tile. 
+                #print('tile coordinates: ', tile)
+                #print('Number of points in this tile: ', len(point_set))
 
                 # Find the union of tracks 
                 # Only consider track_number and satellite which define the offsetfields.
@@ -666,29 +718,52 @@ class inversion(fourdvel):
                 for point in point_set:
                     tracks_set[point] = grid_set[point]
 
-                self.test_point = point_set[0] 
-                
-                # Inversion happens here
-                #self.inversion_method = 'Bayesian_Linear'
-                self.inversion_method = 'Bayesian_MCMC'
-                
-                all_sets  = self.point_set_tides(point_set = point_set, tracks_set = tracks_set, inversion_method=self.inversion_method)
+                # Set the test point
+                if test_point in point_set:
+                    pass
+                else:
+                    self.test_point = point_set[0]
+                    test_point = self.test_point
 
-                # Save the results
-                # Update (only for parallel call)
+                # Run it
+                # Default is False for recording
+                recorded = False
 
-                if use_threading and self.inversion_method == 'Bayesian_Linear':
+                simple_count = True
+                if simple_count == True:
 
-                    if all_sets['true_tide_vec_set'] is not None:
-                        all_grid_sets['grid_set_true_tide_vec'].update(all_sets['true_tide_vec_set'])
-                    
-                    all_grid_sets['grid_set_tide_vec'].update(all_sets['tide_vec_set'])
+                    all_sets  = self.point_set_tides(point_set = point_set, tracks_set = tracks_set, inversion_method=self.inversion_method)
+    
+                    # Save the results
+                    # Update (only for parallel call)
+                    if use_threading and self.inversion_method == 'Bayesian_Linear':
+    
+                        # Save the results to disk
+                        point_result_folder = self.this_result_folder + '/point_result'
+    
+                        point_name = str(lon) + '_' + str(lat)
+    
+                        with open(point_result_folder + "/" + point_name + ".pkl","wb") as f:
+                            pickle.dump(all_sets, f)
 
-                    all_grid_sets['grid_set_tide_vec_uq'].update(all_sets['tide_vec_uq_set'])
-               
-                    all_grid_sets['grid_set_resid_of_secular'].update(all_sets['resid_of_secular_set'])
-                    all_grid_sets['grid_set_resid_of_tides'].update(all_sets['resid_of_tides_set'])
-                    all_grid_sets['grid_set_other_1'].update(all_sets['other_set_1'])
+                        # Say that this tile is record
+                        recorded = True
+                        
+                        # Save the results through updating dictionary manager
+                        if all_sets['true_tide_vec_set'] is not None:
+                            all_grid_sets['grid_set_true_tide_vec'].update(all_sets['true_tide_vec_set'])
+                        
+                        all_grid_sets['grid_set_tide_vec'].update(all_sets['tide_vec_set'])
+    
+                        all_grid_sets['grid_set_tide_vec_uq'].update(all_sets['tide_vec_uq_set'])
+                   
+                        all_grid_sets['grid_set_resid_of_secular'].update(all_sets['resid_of_secular_set'])
+                        all_grid_sets['grid_set_resid_of_tides'].update(all_sets['resid_of_tides_set'])
+                        all_grid_sets['grid_set_other_1'].update(all_sets['other_set_1'])
+
+                    if recorded == False:
+                        print("Problematic unrecorded tile", tile)
+                        print(stop)
 
                 # Count the run tiles
                 count_run = count_run + 1
@@ -696,9 +771,27 @@ class inversion(fourdvel):
             # Count the total tiles
             count_tile = count_tile + 1
 
+        self.f.write("count run: " + str(count_run))
+        self.f.write("count tile: " + str(count_tile))
+        print("count run: " + str(count_run))
+        print("count tile: " + str(count_tile))
+
         return 0
 
     def driver_parallel_tile(self):
+
+        # Initialization
+        test_id = self.test_id
+
+        result_folder = '/home/mzzhong/insarRoutines/estimations'
+        self.result_folder = result_folder
+
+        this_result_folder = os.path.join(result_folder, str(test_id))
+        self.this_result_folder = this_result_folder
+
+        if not os.path.exists(this_result_folder + '/point_result'):
+            os.mkdir(this_result_folder+'/point_result')
+
         # Using multi-threads to get map view estimation.
         # make driver serial tile parallel.
 
@@ -711,71 +804,114 @@ class inversion(fourdvel):
         self.grid_set_resid_of_secular = {}
         self.grid_set_resid_of_tides = {}
 
-        self.grid_set_others = {}
+        self.grid_set_other_1 = {}
 
-        # Count the total number of tiles
-        n_tiles = len(tile_set.keys())
-        print('Total number of tiles: ', n_tiles)
+        self.f = open("tile_counter.txt","w")
 
-        # Chop into multiple threads. 
-        nthreads = 16
-        total_number = n_tiles
+        do_calculation = True
 
-        divide = self.chop_into_threads(total_number, nthreads)
-        print("divide: ", divide)
+        if do_calculation:
 
-        # Multithreading starts here.
-        # The function to run every chunk.
-        func = self.driver_serial_tile
+            # Count the total number of tiles
+            n_tiles = len(tile_set.keys())
+            print('Total number of tiles: ', n_tiles)
+    
+            # Chop into multiple threads. 
+            nthreads = 10
+            self.nthreads = nthreads
+            total_number = n_tiles
+    
+            # Only calculate the first half
+            # Ad hoc control
+            # 2020.01.13
+            half_number = total_number//2    
+            divide = self.chop_into_threads(half_number, nthreads)
+            # First half
+            # pass
+            # Second half
+            divide = divide + half_number
+            print("divide: ", divide)
 
-        # Setup the array.
-        manager = multiprocessing.Manager()
-        
-        #grid_set_true_tide_vec = manager.dict()
-        #grid_set_tide_vec = manager.dict()
-        #grid_set_tide_vec_uq = manager.dict()
-        #grid_set_resid_of_secular = manager.dict()
-        #grid_set_resid_of_tides = manager.dict()
-        #grid_set_other_1 = manager.dict()
+            # Full divide
+            divide = self.chop_into_threads(total_number, nthreads)
+    
+            # Multithreading starts here.
+            # The function to run every chunk.
+            func = self.driver_serial_tile
+    
+            # Setup the array.
+            manager = multiprocessing.Manager()
+            
+            all_grid_sets = {}
+            all_grid_sets['grid_set_true_tide_vec'] = manager.dict()
+            all_grid_sets['grid_set_tide_vec'] = manager.dict()
+            all_grid_sets['grid_set_tide_vec_uq'] = manager.dict()
+            all_grid_sets['grid_set_resid_of_secular'] = manager.dict()
+            all_grid_sets['grid_set_resid_of_tides'] = manager.dict()
+            all_grid_sets['grid_set_other_1'] = manager.dict()
 
-        all_grid_sets = {}
-        all_grid_sets['grid_set_true_tide_vec'] = manager.dict()
-        all_grid_sets['grid_set_tide_vec'] = manager.dict()
-        all_grid_sets['grid_set_tide_vec_uq'] = manager.dict()
-        all_grid_sets['grid_set_resid_of_secular'] = manager.dict()
-        all_grid_sets['grid_set_resid_of_tides'] = manager.dict()
-        all_grid_sets['grid_set_other_1'] = manager.dict()
+            all_grid_sets['counter'] = manager.dict()
+    
+            jobs=[]
+            for ip in range(nthreads):
+                start_tile = divide[ip]
+                stop_tile = divide[ip+1]
+    
+                # Use contiguous chunks
+                p=multiprocessing.Process(target=func, args=(start_tile, stop_tile, True,
+                                                        all_grid_sets, ip))
+    
+                # Based on modulus
+                #p=multiprocessing.Process(target=func, args=(0, n_tiles, True,
+                #                                        all_grid_sets, ip))
+    
+                jobs.append(p)
+                p.start()
+    
+            for ip in range(nthreads):
+                jobs[ip].join()
 
-        
-        jobs=[]
-        for ip in range(nthreads):
-            start_tile = divide[ip]
-            stop_tile = divide[ip+1]
-            p=multiprocessing.Process(target=func, args=(start_tile, stop_tile, True,
-                                                    all_grid_sets))
-            jobs.append(p)
-            p.start()
+            self.f.close()
+    
+            # Convert the results to normal dictionary.
+            # Save the results to the class.
+            print("Saving the results...")
+            self.grid_set_true_tide_vec = dict(all_grid_sets['grid_set_true_tide_vec'])
+            self.grid_set_tide_vec = dict(all_grid_sets['grid_set_tide_vec'])
+            self.grid_set_tide_vec_uq = dict(all_grid_sets['grid_set_tide_vec_uq'])
+    
+            self.grid_set_resid_of_secular = dict(all_grid_sets['grid_set_resid_of_secular'])
+            self.grid_set_resid_of_tides = dict(all_grid_sets['grid_set_resid_of_tides'])
+            self.grid_set_other_1 = dict(all_grid_sets['grid_set_other_1'])
 
-        for ip in range(nthreads):
-            jobs[ip].join()
+            # Stop here
+            #print(stop)
+    
+            ## end of dict.
 
-        # Save the results.
-        self.grid_set_true_tide_vec = dict(all_grid_sets['grid_set_true_tide_vec'])
-        self.grid_set_tide_vec = dict(all_grid_sets['grid_set_tide_vec'])
-        self.grid_set_tide_vec_uq = dict(all_grid_sets['grid_set_tide_vec_uq'])
+        else:
+            # Load the results from point_result
+            print("Loading the results...")
+            point_results = os.listdir(self.this_result_folder + '/point_result')
 
-        self.grid_set_resid_of_secular = dict(all_grid_sets['grid_set_resid_of_secular'])
-        self.grid_set_resid_of_tides = dict(all_grid_sets['grid_set_resid_of_tides'])
-        self.grid_set_other_1 = dict(all_grid_sets['grid_set_other_1'])
+            for ip, point_pkl in enumerate(point_results):
+                print(ip)
+                pklfile = self.this_result_folder + '/point_result/' + point_pkl
+                with open(pklfile,"rb") as f:
+                    all_sets = pickle.load(f)
 
-        ## end of dict.
+                if all_sets['true_tide_vec_set'] is not None:
+                    self.grid_set_true_tide_vec.update(all_sets['true_tide_vec_set'])
+                
+                self.grid_set_tide_vec.update(all_sets['tide_vec_set'])
 
-        test_id = self.test_id
-        result_folder = '/home/mzzhong/insarRoutines/estimations'
+                self.grid_set_tide_vec_uq.update(all_sets['tide_vec_uq_set'])
+       
+                self.grid_set_resid_of_secular.update(all_sets['resid_of_secular_set'])
+                self.grid_set_resid_of_tides.update(all_sets['resid_of_tides_set'])
+                self.grid_set_other_1.update(all_sets['other_set_1'])
 
-        this_result_folder = os.path.join(result_folder, str(test_id))
-        if not os.path.exists(this_result_folder):
-            os.mkdir(this_result_folder)
+        ## Save the final results in dictionary manager
 
         with open(this_result_folder + '/' 
                     + str(test_id) + '_' + 'grid_set_true_tide_vec.pkl', 'wb') as f:
@@ -789,7 +925,6 @@ class inversion(fourdvel):
         with open(this_result_folder + '/' 
                     + str(test_id) + '_' + 'grid_set_tide_vec_uq.pkl','wb') as f:
             pickle.dump(self.grid_set_tide_vec_uq, f)
-
 
         with open(this_result_folder + '/' 
                     + str(test_id) + '_' + 'grid_set_resid_of_secular.pkl','wb') as f:
@@ -807,371 +942,21 @@ class inversion(fourdvel):
 
 def main():
 
+    start_time = time.time()
+
     fourd_inv = inversion()
 
     # Tile set.
-    fourd_inv.driver_serial_tile()
-    #fourd_inv.driver_parallel_tile()
+    #fourd_inv.driver_serial_tile()
+    fourd_inv.driver_parallel_tile()
 
     print('All finished!')
+
+    elapsed_time = time.time() - start_time
+    print("Elasped time: ", elapsed_time)
 
     return 0
 
 if __name__=='__main__':
 
     main()
-
-
-#    def point_tides(self, point, tracks):
-#
-#        ### Data ###
-#        # Choose the test mode.
-#        test_id = self.test_id
-#        test_mode = self.test_mode
-#
-#        # Data formation.
-#        (data_vec, invCd, offsetfields, true_tide_vec) = self.data_formation(point, tracks, test_mode)
-#
-#        #self.data_vec_mode_1 = data_vec
-#
-#        ### MODEL ###
-#        # Design matrix.
-#        design_mat = self.build_G(offsetfields=offsetfields)
-#        #print("Design matrix (G)\n:", design_mat)
-# 
-#        # Model prior.
-#        invCm = self.model_prior(horizontal = self.horizontal_prior)
-#
-#        # Model posterior.
-#        Cm_p = self.model_posterior(design_mat, invCd, invCm)
-#        #print(Cm_p[0,0])
-#        #print(design_mat[0,0])
-#        #print(stop)
-#
-#        #print('Model posterior: ',Cm_p)
-#
-#        # Show the model posterior.
-#        #self.display.show_model_mat(Cm_p)
-#
-#        #self.model_analysis(design_mat = design_mat, model_prior = invCm)
-#
-#        ### Inversion ###
-#        # Estimate model params.
-#        model_vec = self.param_estimation(design_mat, data_vec, invCd, invCm, Cm_p)
-#
-#        # Calculate and show the residuals.
-#        resid_of_secular = self.resid_of_secular(design_mat, data_vec, model_vec)
-#        self.display.show_resid_dist(resid_of_secular, label=str(test_id)+'secular')
-#
-#        resid_of_tides = self.resid_of_tides(design_mat, data_vec, model_vec)
-#        self.display.show_resid_dist(resid_of_tides, label=str(test_id)+'tides')
-#
-#        # Convert to tidal params.
-#        tide_vec = self.model_vec_to_tide_vec(model_vec)
-#
-#        # Convert model posterior to uncertainty of params.
-#        # Require: tide_vec and Cm_p
-#        tide_vec_uq = self.model_posterior_to_uncertainty(tide_vec, Cm_p)
-#
-#        #print(tide_vec_uq)
-#        #print(stop)
-#
-#        print('Inversion Done')
-#        
-#        ##### Show the results ####
-#        # Stack the true and inverted models.
-#        if true_tide_vec is not None:
-#            stacked_vecs = np.hstack((true_tide_vec, tide_vec, tide_vec_uq))
-#            row_names = ['Input','Estimated','Uncertainty']
-#            column_names = ['Secular'] + self.modeling_tides
-#        else:
-#            stacked_vecs = np.hstack((tide_vec, tide_vec_uq))
-#            row_names = ['Estimated','Uncertainty']
-#            column_names = ['Secular'] + self.modeling_tides
-#
-#        # Always save the results.
-#        self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
-#
-#        return 0
-
-#    def driver_mp(self):
-#        # Using multi-threads to get map view estimation.
-#
-#        # Calcuate design matrix and do estimations.
-#        # Always redo it.
-#        redo = 1
-#
-#        # est_dict pickle file.
-#        est_dict_pkl = self.est_dict_name + '.pkl'
-#
-#        # The minimum number of tracks.
-#        min_tracks = 2
-#
-#        if redo or not os.path.exists(est_dict_pkl):
-#
-#            # Load the grid point set.
-#            grid_set = self.grid_set
-#
-#            # Remove the bad grid points where not enough tracks are available.
-#            bad_keys=[]
-#            for key in grid_set.keys():
-#                if len(grid_set[key])<min_tracks:
-#                    bad_keys.append(key)
-#
-#            for key in bad_keys:
-#                if key in grid_set:
-#                    del grid_set[key]
-#
-#            # Count the total number of grid points.
-#            total_number = len(grid_set.keys())
-#            print(total_number)
-#
-#            # Chop into multiple threads. 
-#            nthreads = 16
-#            
-#            mod = total_number % nthreads
-#            
-#            if mod > 0:
-#                chunk_size = (total_number - mod + nthreads) // nthreads
-#            else:
-#                chunk_size = total_number // nthreads
-#
-#            divide = np.zeros(shape=(nthreads+1,))
-#            divide[0] = 0
-#
-#            for it in range(1, nthreads+1):
-#                divide[it] = chunk_size * it
-#            divide[nthreads] = total_number
-#
-#            print(divide)
-#            print(len(divide))
-#
-#            # Multithreading starts here.
-#            # The function to run every chunk.
-#            func = self.chunk_run
-#
-#            manager = multiprocessing.Manager()
-#            grid_est = manager.dict()
-#
-#            jobs=[]
-#            for ip in range(nthreads):
-#                start = divide[ip]
-#                end = divide[ip+1]
-#                p=multiprocessing.Process(target=func, args=(start,end,grid_est,))
-#                jobs.append(p)
-#                p.start()
-#
-#            for ip in range(nthreads):
-#                jobs[ip].join()
-#
-#            est_dict = dict(grid_est)
-#
-#            # Save the results.    
-#            with open(os.path.join(self.design_mat_folder, est_dict_pkl),'wb') as f:
-#                pickle.dump(est_dict,f)
-#
-#        else:
-#
-#            # Load the pre-computed results.
-#            with open(os.path.join(self.design_mat_folder,est_dict_pkl),'rb') as f:
-#                est_dict = pickle.load(f)
-#
-#        # Show the estimation.
-#        self.show_est(est_dict)
-
-
-#    def chunk_run(self,start,end,grid_est):
-#
-#        grid_set = self.grid_set
-#        
-#        count = 0
-#        for grid in grid_set.keys():
-#            # Output the percentage of completeness.
-#            if count % 500 == 0 and start==0 and count<end:
-#                print(count/end)
-#
-#            if count>=start and count<end:
-#                est_value = self.model_analysis(point=grid, tracks=grid_set[grid])
-#                grid_est[grid] = est_value
-#            count = count + 1
-
-
-#    def driver_serial(self):
-#        
-#        # Tile by tile.
-#        tile_set = self.tile_set
-#        grid_set = self.grid_set 
-#
-#        horizontal_prior = self.horizontal_prior
-#
-#        for tile in tile_set.keys():
-#
-#            if tile == (-77, -76.6):
-#
-#                for point in tile_set[tile]:
-#    
-#                    # Find the tracks.
-#                    tracks = grid_set[point]
-#    
-#                    # Obtain the real data.
-#                    self.point_tides(point = point, tracks = tracks)
-#
-#                    break
-
-
-#    def data_formation(self, point, tracks, test_mode=None):
-#
-#        from simulation import simulation
-#
-#        ### DATA ###
-#        # Modes:
-#        # 1. Synthetic data: projected catalog (Done)
-#        # 2. Synthetic data: real catalog  (Test)
-#        # 3. True data: real catalog (Not sure)
-#
-#        # If using synthetic data, need to return true tidal parameters for comparison.
-#
-#        if test_mode == 1:
-#
-#            offsetfields = self.tracks_to_full_offsetfields(tracks)
-#
-#            # Now find offsets.
-#            # Synthetic data.
-#            fourD_sim = simulation()
-#            velo_model = self.grid_set_velo[point]
-#            # Obtain the synthetic ice flow.
-#            (secular_v, tide_amp, tide_phase) = fourD_sim.syn_velocity(velo_model=velo_model)
-#
-#            # Obtain SAR data.
-#            # Data prior.
-#            ## Use external noise model.
-#            noise_sigma = self.load_noise_sigma(point)
-#
-#
-#            data_vec = fourD_sim.syn_offsets_data_vec(point=point, secular_v = secular_v, tide_amp = tide_amp, tide_phase = tide_phase, modeling_tides = self.modeling_tides, offsetfields = offsetfields, noise_sigma = noise_sigma)
-#                
-#            #print("Data vector (G)\n", data_vec)
-#
-#            # Data prior.
-#            invCd = self.real_data_uncertainty(data_vec, noise_sigma)
-#
-#            # True tidal params.
-#            true_tide_vec = fourD_sim.true_tide_vec(secular_v, self.modeling_tides, tide_amp, tide_phase)
-#
-#        if test_mode == 2 or test_mode == 3:
-#
-#            # Get catalog of real offsetfields.
-#            offsetfields = []
-#            offsets = []
-#            for track in tracks:
-#                track_offsetfields, track_offsets = self.find_track_data(point, track)
-#    
-#                print('Available track offsetfields: ',track_offsetfields)
-#                print('Obtained offsets: ', track_offsets)
-#                print('Length of offsetfields and offsets: ', len(track_offsetfields),len(track_offsets))
-#    
-#                offsetfields = offsetfields + track_offsetfields
-#                offsets = offsets + track_offsets
-#
-#            print('======= END OF EXTRACTION ========')
-#            print('Total number of offsetfields: ', len(offsetfields))
-#            print('Total length of offsets: ', len(offsets))
-#
-#            if test_mode == 2:
-#
-#                # Synthetic data.
-#                fourD_sim = simulation()
-#                # Obtain the synthetic ice flow.
-#                velo_model = self.grid_set_velo[point]
-#                (secular_v, tide_amp, tide_phase) = fourD_sim.syn_velocity(velo_model = velo_model)
-#
-#                # Data prior.
-#                ## Use external noise model.
-#                noise_sigma = self.load_noise_sigma(point)
-#
-#
-#                data_vec = fourD_sim.syn_offsets_data_vec(point=point, secular_v = secular_v, tide_amp = tide_amp, tide_phase = tide_phase, modeling_tides = self.modeling_tides, offsetfields = offsetfields, noise_sigma = noise_sigma)
-#
-#                 # Data prior.
-#                invCd = self.real_data_uncertainty(data_vec, noise_sigma)
-#
-#                # True tidal params.
-#                true_tide_vec = fourD_sim.true_tide_vec(secular_v, self.modeling_tides, tide_amp, tide_phase) 
-#    
-#            elif test_mode == 3:
-#
-#                # Flatten offsets to be a data vector.
-#                data_vec = self.offsets_to_data_vec(offsets)
-#    
-#                # Data prior.
-#                # Pre-assigned.
-#
-#                ## Use external noise model.
-#                noise_sigma = self.load_noise_sigma(point)
-#
-#                #print(noise_sigma)
-#                #print(stop)
-#
-#                invCd = self.real_data_uncertainty(data_vec, noise_sigma)
-#
-#                # No true tidal parameters.
-#                true_tide_vec = None
-#
-#        return (data_vec, invCd, offsetfields, true_tide_vec)
-
-#    def find_track_data(self, point, track):
-#
-#        from dense_offset import dense_offset
-#
-#        track_num = track[0]
-#        sate = track[3]
-#
-#        print('Find track data') 
-#        print(point, track_num, sate)
-#
-#        if sate == 'csk':
-#            stack = "stripmap"
-#            workdir = "/net/kraken/nobak/mzzhong/CSK-Evans"
-#            name='track_' + str(track_num).zfill(2) + str(0)
-#            runid = 20180712
-#
-#        elif sate == 's1':
-#            stack = 'tops'
-#            workdir = '/net/jokull/nobak/mzzhong/S1-Evans'
-#            name = 'track_' + str(track_num)
-#            runid = 20180703
-#
-#        # Create dense_offset object
-#        offset = dense_offset(stack=stack, workdir=workdir)
-#        offset.initiate(trackname = name, runid=runid)
-#
-#        print('satellite: ', sate, ' track number: ', track_num)
-#
-#        # Dates allowed to use.
-#        if sate == 'csk':
-#            used_dates = self.csk_data[track_num]
-#        elif sate == 's1':
-#            used_dates = self.s1_data[track_num]
-#
-#        #print('track_number: ',track_num)
-#        #print('used dates: ', used_dates)
-#        
-#        track_pairs, track_offsets = offset.extract_offset_series(point=point, dates = used_dates)
-#
-#        #print('obtained pairs: ', track_pairs)
-#        #print('obtained offsets: ', track_offsets)
-#
-#        # Add observation vectors and time fraction.
-#        track_offsetfields = []
-#        
-#        vec1 = track[1]
-#        vec2 = track[2]
-#        t_frac = self.track_timefraction[(sate,track_num)]
-#        tail = [vec1, vec2, t_frac]
-#
-#        for pair in track_pairs:
-#            offsetfield = pair + tail
-#            track_offsetfields.append(offsetfield)
-#
-#        return track_offsetfields, track_offsets
-
