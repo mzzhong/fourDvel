@@ -4,3 +4,6 @@
 deprecated
 .~*
 README*
+dev
+fourdvel/__pycache__
+*gmt
