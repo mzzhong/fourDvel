@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
 # Author: Minyan Zhong
+# Development starts in Aug, 2018
 
 import numpy as np
 import pandas as pd
 
 import matplotlib.pyplot as plt
 import os
+import sys
 import pickle
 
 from matplotlib import cm
@@ -27,27 +29,40 @@ from display import display
 
 from basics import basics
 
-class simulation(basics):
+class simulation(fourdvel):
 
-    def __init__(self):
+    def __init__(self, param_file):
 
-        super(simulation, self).__init__()
+        if param_file is not None:
+            super(simulation, self).__init__(param_file)
+        elif len(sys.argv)>1:
+            super(simulation, self).__init__(sys.argv[1])
+        else:
+            print("Need parameter file")
+            raise Exception()
 
+        # Tide periods
         tide_periods = self.tide_periods
 
-        # Rutford data from from Murray (2007) 
-        self.tidesRut = ['K2','S2','M2','K1','P1','O1','Mf','Msf','Mm','Ssa','Sa']
+        # Vertical displacement model
+        self.get_tidal_model()
+
+        # Set the tidal constituents in the data
+        self.tidesRut = ['K2','S2','M2','N2','K1','P1','O1','Mf','Msf','Mm','Ssa','Sa']
         tidesRut = self.tidesRut
 
         self.tidesRut_params = {}
         tidesRut_params = self.tidesRut_params
 
-        ###############################################
+        # Load Rutford vertical and horizontal tide model from from Murray (2007)
+        #############################################################
         # Actual parameters from Murray (2007)
         # First two columns are horizontal responses. (amplitude cm/d)
         # Last two columns are vertical forcings. (amplitude cm)
+        # N2 is added
         
         #tidesRut_params['K2'] =    [3.91,   163,    29.1,   99  ]
+        #tidesRut_params['N2'] =    [3.91,   163,    30.5,   20  ]
         #tidesRut_params['S2'] =    [4.56,   184,    101.6,  115 ]
         #tidesRut_params['M2'] =    [3.15,   177,    156.3,  70  ]
         #tidesRut_params['K1'] =    [1.22,   79,     49,     73  ]
@@ -58,19 +73,9 @@ class simulation(basics):
         #tidesRut_params['Mm'] =    [1.15,   253.0,  1.6,    63  ]
         #tidesRut_params['Ssa'] =   [0.92,   256.0,  1.5,    179 ]
         #tidesRut_params['Sa'] =    [0.33,   273.0,  0.2,    179 ]
+        #############################################################
 
-        ## Convert displacement to velocity.
-        #for tide_name in tidesRut_params.keys():
-        #    tidesRut_params[tide_name][2] = self.dis_amp_to_velo_amp(
-        #                                            tidesRut_params[tide_name][2],
-        #                                            tide_name = tide_name)
-        #    # We don't know the definition of phase of vertical motion in displacement domian.
-        #    # We directly use this phase.
-        #    #tidesRut_params[tide_name][3] = tidesRut_params[tide_name][3]
-        
-        ###############################################
-
-        #### Convention: This is in displacement domain
+        #### Convention: This is in displacement domain ####
 
         # Disp = A * sin(omega * t + phi)
 
@@ -80,14 +85,13 @@ class simulation(basics):
         # This conversion is done with 
         # dis_amp_to_velo_phase & dis_phase_velo_phase
 
-
         # Horizontal: assume this corresponds to 1 meter /day.
         self.ref_speed = 1
         # Vertical: assume the vertical scale.
         self.verti_scale = 1
 
         # Models are represented in displacement.
-        model_num = 2
+        model_num = 1
 
         if model_num == 1:
 
@@ -95,6 +99,7 @@ class simulation(basics):
             # Original
             # Displacement.        
             tidesRut_params['K2'] =    [0.31,  163,    29.1,   99]
+            tidesRut_params['N2'] =    [0.32,   163,    30.5,   20]
             tidesRut_params['S2'] =    [0.363, 184,    101.6,  115]
             tidesRut_params['M2'] =    [0.259, 177,    156.3,  70]  # M2
 
@@ -102,8 +107,9 @@ class simulation(basics):
             tidesRut_params['P1'] =    [0.24,  77.0,   16.6,   64]
 
             tidesRut_params['O1'] =    [0.264, 81.0,   43,     54]  # O1
-            tidesRut_params['Mf'] =    [2.54,  250.0,  2.9,    163] # Mf
-            tidesRut_params['Msf'] =   [13.28, 18.8,   0.3,    164] # Msf
+            tidesRut_params['Mf'] =    [15.00,  250.0,  2.9,    163] # Mf
+            #tidesRut_params['Msf'] =   [40.00, 18.8,   0.3,    164] # Msf
+            tidesRut_params['Msf'] =   [35.00, 260,   0.3,    164] # New Msf
 
             tidesRut_params['Mm'] =    [5.04,  253.0,  1.6,    63]
             tidesRut_params['Ssa'] =   [26.74, 256.0,  1.5,    179]
@@ -117,16 +123,16 @@ class simulation(basics):
             coe = 2/3
  
             tidesRut_params['K2'] =    [0.31,  163,    29.1*coe,   99]
+            tidesRut_params['N2'] =    [0.32,   163,    30.5*coe,   20]
             tidesRut_params['S2'] =    [0.363, 184,    101.6*coe,  115]
-
             tidesRut_params['M2'] =    [0.259, 177,    156.3*coe,  70]  # M2
 
             tidesRut_params['K1'] =    [0.19,  79,     49*coe,     73]
             tidesRut_params['P1'] =    [0.24,  77.0,   16.6*coe,   64]
-
             tidesRut_params['O1'] =    [0.264, 81.0,   43*coe,     54]  # O1
-            tidesRut_params['Mf'] =    [2.54,  250.0,  2.9*coe,    163] # Mf
-            tidesRut_params['Msf'] =   [13.28, 18.8,   0.3*coe,    164] # Msf
+            
+            tidesRut_params['Mf'] =    [15.00,  250.0,  2.9*coe,    163] # Mf
+            tidesRut_params['Msf'] =   [40.00, 18.8,   0.3*coe,    164] # Msf
 
             tidesRut_params['Mm'] =    [5.04,  253.0,  1.6*coe,    63]
             tidesRut_params['Ssa'] =   [26.74, 256.0,  1.5*coe,    179]
@@ -140,6 +146,7 @@ class simulation(basics):
             # 2. Add horizontal short_period on ice shelves.
  
             tidesRut_params['K2'] =    [5.00,  163,    29.1*coe,   99]
+            tidesRut_params['N2'] =    [5.00,   163,    30.5*coe,   20]
             tidesRut_params['S2'] =    [5.00, 184,    101.6*coe,  115]
 
             tidesRut_params['M2'] =    [10.00, 177,    156.3*coe,  70] # M2
@@ -148,8 +155,8 @@ class simulation(basics):
             tidesRut_params['P1'] =    [4.00,  77.0,   16.6*coe,   64]
 
             tidesRut_params['O1'] =    [4.00, 81.0,   43*coe,     54]  # O1
-            tidesRut_params['Mf'] =    [2.54,  250.0,  2.9*coe,    163] # Mf
-            tidesRut_params['Msf'] =   [13.28, 18.8,   0.3*coe,    164] # Msf
+            tidesRut_params['Mf'] =    [15.00,  250.0,  2.9*coe,    163] # Mf
+            tidesRut_params['Msf'] =   [40.00, 18.8,   0.3*coe,    164] # Msf
 
             tidesRut_params['Mm'] =    [5.04,  253.0,  1.6*coe,    63]
             tidesRut_params['Ssa'] =   [26.74, 256.0,  1.5*coe,    179]
@@ -164,6 +171,7 @@ class simulation(basics):
             # 3. Use simple model (only S2 and M2) on ice shelf for periodic grounding.
  
             tidesRut_params['K2'] =    [5.00,  163,    0*coe,   99]
+            tidesRut_params['N2'] =    [5.00,   163,    0*coe,   20]
             tidesRut_params['S2'] =    [5.00, 184,     150.0*coe,  115]
 
             tidesRut_params['M2'] =    [10.00, 177,    150.0*coe,  70] # M2
@@ -173,8 +181,8 @@ class simulation(basics):
 
             tidesRut_params['O1'] =    [4.00, 81.0,    0*coe,     54]  # O1
 
-            tidesRut_params['Mf'] =    [2.54,  250.0,  0*coe,    163] # Mf
-            tidesRut_params['Msf'] =   [13.28, 18.8,   0*coe,    164] # Msf
+            tidesRut_params['Mf'] =    [15.00,  250.0,  0*coe,    163] # Mf
+            tidesRut_params['Msf'] =   [40.00, 18.8,   0*coe,    164] # Msf
 
             tidesRut_params['Mm'] =    [5.04,  253.0,  0*coe,    63]
             tidesRut_params['Ssa'] =   [26.74, 256.0,  0*coe,    179]
@@ -189,6 +197,8 @@ class simulation(basics):
             # 3. Use simple model (only S2 and M2) on ice shelf for periodic grounding.
  
             tidesRut_params['K2'] =    [0.31,  163,    0*coe,   99]
+            tidesRut_params['N2'] =    [0.32,   163,    0*coe,   20]
+
             tidesRut_params['S2'] =    [0.363, 184,     150.0*coe,  115]
 
             tidesRut_params['M2'] =    [0.269, 177,    150.0*coe,  70] # M2
@@ -198,8 +208,8 @@ class simulation(basics):
 
             tidesRut_params['O1'] =    [0.264, 81.0,    0*coe,     54]  # O1
 
-            tidesRut_params['Mf'] =    [2.54,  250.0,  0*coe,    163] # Mf
-            tidesRut_params['Msf'] =   [13.28, 18.8,   0*coe,    164] # Msf
+            tidesRut_params['Mf'] =    [15.00,  250.0,  0*coe,    163] # Mf
+            tidesRut_params['Msf'] =   [40.00, 18.8,   0*coe,    164] # Msf
 
             tidesRut_params['Mm'] =    [5.04,  253.0,  0*coe,    63]
             tidesRut_params['Ssa'] =   [26.74, 256.0,  0*coe,    179]
@@ -232,31 +242,12 @@ class simulation(basics):
 
         ##################################################################
 
-        # Included constituents in synthetic data.
-        #self.syn_tidesRut = []
-        #self.syn_tidesRut = ['M2','O1','Msf']
-        #self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Mf','Msf']
+        # Set the tides for simulation given by the parameter file
+        self.syn_tidesRut = self.simulation_tides
 
-        # all constituents are included
-        self.syn_tidesRut = ['K2','S2','M2','K1','P1','O1','Msf','Mf','Mm','Ssa','Sa']
-
-
-        # Load timings and design matrix (currently hardcoded)
-        timings_pkl = os.path.join(self.pickle_dir, 'timings_csk_20171116_20200701_s1_20170601_20180601.pkl')
-
-        if os.path.exists(timings_pkl):
-            with open(timings_pkl,'rb') as f:
-                self.timings = pickle.load(f)
-        else:
-            raise Exception('timing file is missing')
-
-        design_mat_set_pkl = os.path.join(self.pickle_dir, 'design_mat_set_csk_20171116_20200701_s1_20170601_20180601_Rutford_full.pkl')
-
-        if os.path.exists(design_mat_set_pkl):
-            with open(design_mat_set_pkl, 'rb') as f:
-                self.design_mat_set = pickle.load(f)
-        else:
-            raise Exception('design matrix file is missing')
+        # Load reference velocity model
+        self.get_grid_set_v2()
+        self.get_grid_set_velo()
 
 
     def true_tide_vec_set(self, point_set, secular_v_set, modeling_tides, tide_amp_set, tide_phase_set):
@@ -392,12 +383,16 @@ class simulation(basics):
             # East component. (Amp always positive)
             a_e = horiz_amp * abs(secular_v_e/secular_speed) * secular_speed / ref_speed
             # Phase change sign, when amp is negative.
-            phi_e = np.sign(secular_v_e) * horiz_phase
+            #phi_e = np.sign(secular_v_e) * horiz_phase
+            phi_e = horiz_phase
+            if secular_v_e < 0: phi_e = self.wrapped(phi_e + np.pi)
 
             # North component. (Amp always positive)
             a_n = horiz_amp * abs(secular_v_n/secular_speed) * secular_speed / ref_speed
             # Phase change sign, when amp is negative.
-            phi_n = np.sign(secular_v_n) * horiz_phase # rad
+            #phi_n = np.sign(secular_v_n) * horiz_phase # rad
+            phi_n = horiz_phase
+            if secular_v_n < 0: phi_n = self.wrapped(phi_n + np.pi)
 
             # Up component. 
             a_u = verti_amp * verti_scale * verti_ratio
@@ -425,7 +420,6 @@ class simulation(basics):
         # If "analytical", this part is skipped. tide_amp and tide_phase 
         # are used to derive offset directly.
 
-        #self.method = 'analytical'
         self.method = 'analytical'
 
         # Create synthetic time series
@@ -498,17 +492,12 @@ class simulation(basics):
         # Return synthetic velocity time series.
         return (t_axis, secular_v, v, tide_amp, tide_phase)
 
-
     def set_stack_design_mat_set(self, stack_design_mat_set):
-
         self.stack_design_mat_set = stack_design_mat_set
-
         return 0
 
-    def set_grounding(self, grounding):
-
-        self.grounding = grounding
-
+    def set_up_disp_set(self, up_disp_set):
+        self.up_disp_set = up_disp_set
         return 0
 
     def syn_offsets_data_vec_set(self, point_set, secular_v_set, modeling_tides, 
@@ -546,15 +535,14 @@ class simulation(basics):
         data_vector = np.zeros(shape=(n_rows,1))
         t_origin = self.t_origin.date()
 
-        #method = "with grounding"
-        method = "without grounding"
+        method = self.simulation_method
 
         # Three components.
         # Numerical method
         if method == "time series provided":
-            #print(method)
-
-            #print('numerical')
+            print("time series is provided")
+            print("numerical")
+            
             t_axis = self.t_axis
             v = self.v_set[point]
             v_e, v_n, v_u = v
@@ -571,7 +559,7 @@ class simulation(basics):
             d_u = d_u - np.mean(d_u)
 
             # periodic grounding
-            d_u[d_u<self.grounding] = self.grounding
+            d_u[d_u < self.grounding] = self.grounding
             
             # Plot the velocity time series.
             fig = plt.figure(1, figsize=(10,5))
@@ -582,12 +570,7 @@ class simulation(basics):
             fig.savefig('fig_sim/2.png',format='png')
             print(np.max(d_u))
 
-        elif method == "with grounding":
-            #print(method)
-
-            ## For a single point
-            timings = self.timings
-            design_mat_set = self.design_mat_set
+        elif method == "model_with_grounding":
 
             # Convert parameters from velocity to displacement
             tide_dis_amp = {}
@@ -620,51 +603,88 @@ class simulation(basics):
 
             model_vec = np.asarray(model_vec)[:,None]
 
-            #print(cos_coef[('S2','u')])
-            #print(sin_coef[('S2','u')])
-            #print(self.grounding)
-            #print(stop)
 
             # Obtain stacked matrix
             stacked_design_mat_EN_ta, stacked_design_mat_EN_tb, stacked_design_mat_U_ta, stacked_design_mat_U_tb = self.stack_design_mat_set[point]
 
-            # Find horizontal displacement at timing_a, timing_b
-            dis_EN_ta = np.matmul(stacked_design_mat_EN_ta, model_vec)
-            dis_EN_tb = np.matmul(stacked_design_mat_EN_tb, model_vec)
+            # Obtain up displacement vector
+            tide_height_master_model, tide_height_slave_model = self.up_disp_set[point]
+            
+            # Scale the up displacement vector
+            velo_model = self.grid_set_velo[point]
+            tide_height_master = tide_height_master_model * velo_model[2]
+            tide_height_slave = tide_height_slave_model * velo_model[2]
 
-            # Find vertical displacement at timing_a, timing_b
-            dis_U_ta = np.matmul(stacked_design_mat_U_ta, model_vec)
-            dis_U_tb = np.matmul(stacked_design_mat_U_tb, model_vec)
+            # Note that the stacked design mat/up displacement may be empty 
+            # because there is no data.
+            # In this case, the stacked_design_mat is a empty list
+            # return an empty vector
 
-            # Grounding
-            dis_U_ta[dis_U_ta < self.grounding] = self.grounding
-            dis_U_tb[dis_U_tb < self.grounding] = self.grounding
-
-            # Find offset
-            offset_EN = dis_EN_tb - dis_EN_ta
-            offset_U = dis_U_tb - dis_U_ta
-
-            offset_ENU = np.vstack((np.transpose(offset_EN.reshape(n_offsets,2)), np.transpose(offset_U)))
-
-            for i in range(n_offsets):
-                t_a = (offsetfields[i][0] - t_origin).days + round(offsetfields[i][4],4)
-                t_b = (offsetfields[i][1] - t_origin).days + round(offsetfields[i][4],4)
+            if point == self.test_point:
                 
-                tmp = np.asarray(secular_v)
-                
-                offset_ENU[:,i] = offset_ENU[:,i] +  tmp * (t_b - t_a) 
+                #print(tide_height_master)
+                #print(tide_height_slave)
+                print("master tide height: ", tide_height_master.shape)
+                print("slave tide height: ", tide_height_slave.shape)
+                print(velo_model)
+                #print(stop)
 
-            #print('offset_ENU: ', offset_ENU.shape)
 
-            # Find observed offset
-            data_vector1 = np.zeros(shape=(n_offsets*2,1))
-            for i in range(n_offsets):
-                data_vector1[2*i,0] = np.dot(offsetfields[i][2],offset_ENU[:,i])
-                data_vector1[2*i+1,0] = np.dot(offsetfields[i][3],offset_ENU[:,i])
+            if len(stacked_design_mat_EN_ta)==0:
 
-            data_vector = data_vector1
+                data_vector = np.asarray([])
 
-        elif method == "without grounding":
+            else:
+
+                # Find horizontal displacement at timing_a, timing_b
+                dis_EN_ta = np.matmul(stacked_design_mat_EN_ta, model_vec)
+                dis_EN_tb = np.matmul(stacked_design_mat_EN_tb, model_vec)
+
+                # Find vertical displacement at timing_a, timing_b
+                # Use model
+                if not self.external_up_disp: 
+                    dis_U_ta = np.matmul(stacked_design_mat_U_ta, model_vec)
+                    dis_U_tb = np.matmul(stacked_design_mat_U_tb, model_vec)
+                # Use external data
+                else:
+                    dis_U_ta = tide_height_master.reshape(len(tide_height_master),1)
+                    dis_U_tb = tide_height_slave.reshape(len(tide_height_slave),1)
+
+                #print(dis_U_ta_1.shape)
+                #print(dis_U_ta_2.shape)
+                #print(velo_model)
+                #print(stop)
+                   
+    
+                # Grounding
+                dis_U_ta[dis_U_ta < self.grounding] = self.grounding
+                dis_U_tb[dis_U_tb < self.grounding] = self.grounding
+    
+                # Find offset
+                offset_EN = dis_EN_tb - dis_EN_ta
+                offset_U = dis_U_tb - dis_U_ta
+    
+                offset_ENU = np.vstack((np.transpose(offset_EN.reshape(n_offsets,2)), np.transpose(offset_U)))
+    
+                for i in range(n_offsets):
+                    t_a = (offsetfields[i][0] - t_origin).days + round(offsetfields[i][4],4)
+                    t_b = (offsetfields[i][1] - t_origin).days + round(offsetfields[i][4],4)
+                    
+                    tmp = np.asarray(secular_v)
+                    
+                    offset_ENU[:,i] = offset_ENU[:,i] +  tmp * (t_b - t_a) 
+    
+                #print('offset_ENU: ', offset_ENU.shape)
+    
+                # Find observed offset
+                data_vector1 = np.zeros(shape=(n_offsets*2,1))
+                for i in range(n_offsets):
+                    data_vector1[2*i,0] = np.dot(offsetfields[i][2],offset_ENU[:,i])
+                    data_vector1[2*i+1,0] = np.dot(offsetfields[i][3],offset_ENU[:,i])
+    
+                data_vector = data_vector1
+
+        elif method == "model_without_grounding":
 
             ### CONVERT parameters from velocity to displacement ###
             tide_dis_amp = {}

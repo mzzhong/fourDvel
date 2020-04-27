@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# Author: Minyan Zhong
+# Development starts in July, 2019
+
 from basics import basics
 import numpy as np
 

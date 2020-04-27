@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
 
 # Author: Minyan Zhong
-# Create time: June 2018
+# Development starts in June, 2018
 
-###
+# The unit of time is day
 
-# All time is in the unit of day.
-
-import numpy as np
-import matplotlib.pyplot as plt
 import os
 import sys
 import pickle
+import time
+
+import numpy as np
 
 from matplotlib import cm
-
+import matplotlib.pyplot as plt
 import seaborn as sns
 
 import datetime
@@ -22,15 +21,7 @@ from datetime import date
 
 import multiprocessing
 
-import time
-
-from scipy import linalg
-
 from basics import basics
-
-from numba import jit
-
-INT_NAN = -99999
 
 class fourdvel(basics):
 
@@ -38,15 +29,14 @@ class fourdvel(basics):
 
         super(fourdvel,self).__init__()
 
-        #print(param_file)
-
-        if param_file is None:
+        if param_file is not None:
+            self.read_parameters(param_file)
+        elif len(sys.argv)>1:
             self.read_parameters(sys.argv[1])
         else:
-            self.read_parameters(param_file)
+            raise Exception("Need to provide parameter file to class fourdvel")
 
         if self.proj == "Evans":
-            # Data.
 
             # CSK
             # Key is track, values are dates            
@@ -95,8 +85,7 @@ class fourdvel(basics):
             self.satellite_constants()
 
         # Related folders
-        self.design_mat_folder = './design_mat'
-
+        #self.design_mat_folder = './design_mat'
 
         ########### Control the solution (Rutford) ##########
         # physical size     lat x lon
@@ -137,20 +126,28 @@ class fourdvel(basics):
         self.lon_re = np.round(1/self.lon_step).astype(int)
         self.lat_re = np.round(1/self.lat_step).astype(int)
 
+        # Round test point to an existing point
+        if self.test_point is not None:
+            print("Before rounding: ",self.test_point)
+            self.test_point = self.point_rounding(self.test_point)
+            print("After rounding: ", self.test_point)
+
         print("fourdvel initialization done")
 
     def read_parameters(self, param_file):
 
-        print(param_file)
-        
+        print("Reading: ",param_file)
         f = open(param_file)
+        params = f.readlines()
+        f.close()
+
+        # Quick and dirty intialization:
+        self.data_uncert_const = None
+        self.test_point = None
+        self.single_point_mode = False
+        self.external_up_disp = False
 
         fmt = '%Y%m%d'
-
-        params = f.readlines()
-
-        # Quick and dirty:
-        self.data_uncert_const = None
 
         for param in params:
             
@@ -169,7 +166,7 @@ class fourdvel(basics):
                 self.test_id = value
                 print('test_id',value)
 
-                self.estimation_dir = "/net/kamb/ssd-tmp1/mzzhong/insarRoutines/estimations/"+str(self.test_id)
+                self.estimation_dir = self.estimations_dir + "/" + str(self.test_id)
                 if not os.path.exists(self.estimation_dir):
                     os.mkdir(self.estimation_dir)
 
@@ -181,14 +178,38 @@ class fourdvel(basics):
                     print("copy param file: ",cmd)
                     os.system(cmd)
 
-            if name == "test_point":
+            if name == "test_point_file":
 
-                if value!="None":
-                    the_point = [float(x) for x in value.split(",")]
-                    self.test_point = self.float_lonlat_to_int5d(the_point)
-                else:
-                    self.test_point = None
-                print("test_point", value, self.test_point)
+                test_point_file = value
+
+                f_test_point = open(test_point_file)
+                
+                test_point_lines = f_test_point.readlines()
+
+                #print(test_point_lines)
+                
+                f_test_point.close()
+                
+                for test_point_line in test_point_lines:
+                    #print(test_point_line)
+                    try:    
+                        name1,value1 = test_point_line.split(':')
+                        #print(name1, value1)
+
+                        name1 = name1.strip()
+                        value1 = value1.strip()
+                    except:
+                        continue
+
+                    #print("Hey: ",name1, value1)
+                    if name1=="test_point" and value1!="None":
+                        the_point = [float(x) for x in value1.split(",")]
+                        self.test_point = self.float_lonlat_to_int5d(the_point)
+                    else:
+                        continue
+                    print("test_point", value1, self.test_point)
+                    print("Turn on single point mode")
+                    self.single_point_mode = True
 
             if name == "inversion_method":
 
@@ -204,21 +225,21 @@ class fourdvel(basics):
                 self.test_mode = int(value)
                 print('test_mode',value)
 
-            if name == 'grid_set_name':
-                self.grid_set_name = value
-                print('grid_set_name: ',value)
+            #if name == 'grid_set_name':
+            #    self.grid_set_name = value
+            #    print('grid_set_name: ',value)
 
             if name == 'resolution':
                 self.resolution = int(value)
                 print('resolution: ',value)
 
-            if name == 'grid_set_velo_name':
-                self.grid_set_velo_name = value
-                print('grid_set_velo_name: ',value)
+            #if name == 'grid_set_velo_name':
+            #    self.grid_set_velo_name = value
+            #    print('grid_set_velo_name: ',value)
 
-            if name == 'tile_set_name':
-                self.tile_set_name = value
-                print('tile_set_name: ',value)
+            #if name == 'tile_set_name':
+            #    self.tile_set_name = value
+            #    print('tile_set_name: ',value)
 
             if name == 'grid_set_data_uncert_name':
                 self.grid_set_data_uncert_name = value
@@ -254,6 +275,14 @@ class fourdvel(basics):
                 else:
                     self.use_csk = False
                 print('use_csk: ',value)
+
+            if name == 'csk_id':
+                self.csk_id = int(value)
+                print('csk_id: ',value)
+
+            if name == 'csk_version':
+                self.csk_version = value
+                print('csk_version: ',value)
 
             if name == 'csk_start':
                 self.csk_start = datetime.datetime.strptime(value, fmt).date()
@@ -300,10 +329,34 @@ class fourdvel(basics):
                 else:
                     self.horizontal_long_period = False
 
+            ## Simulation ##
+            if name == 'simulation_method':
+                self.simulation_method = value
+                print("simulation_method: ",self.simulation_method)
+
+            if name == 'simulation_tides':
+                self.simulation_tides = [x.strip() for x in value.split(',')]
+                self.n_simulation_tides = len(self.simulation_tides)
+                print('simulation_tides: ', self.simulation_tides)
+
+                if self.simulation_tides[0]=='None':
+                    self.simulation_tides = []
+                    self.n_simulation_tides = 0
+            
             if name == 'grounding':
                 self.grounding = float(value)
                 print("grounding: ",self.grounding)
 
+            if name == 'external_up_disp':
+                self.external_up_disp = value
+                print('external_up_disp: ',value)
+
+            ## Analysis ##
+            if name == 'analysis_name':
+                self.analysis_name = value
+                print("analysis_name: ",self.analysis_name)
+
+        print("Done with reading parameters")
         return 0
             
     def get_CSK_trackDates_from_log(self):
@@ -378,8 +431,9 @@ class fourdvel(basics):
         for track_num in sorted(csk_data.keys()):
             csk_data[track_num].sort()
             print(track_num)
-            print(csk_data[track_num])
-        
+            print("Number of dates: ", len(csk_data[track_num]))
+            #print(csk_data[track_num])
+       
         return 0
 
     def get_CSK_trackDates(self):
@@ -398,7 +452,7 @@ class fourdvel(basics):
 
             for track_num in tracklist: 
             
-                filefolder = '/net/kraken/nobak/mzzhong/CSK-Rutford/track_' + str(track_num).zfill(3) + '_0' + '/raw/201*'
+                filefolder = self.csk_workdir + '/track_' + str(track_num).zfill(3) + '_0' + '/raw/201*'
 
                 filelist = glob.glob(filefolder)
                 csk_data[track_num] = []
@@ -413,8 +467,9 @@ class fourdvel(basics):
                 csk_data[track_num] = list(set(csk_data[track_num]))
                 csk_data[track_num].sort()
 
-                print("track_num: ",track_num)
-                print(csk_data[track_num])
+                print("track_num: ",track_num,end=",  ")
+                print("Number of dates: ",len(csk_data[track_num]))
+                #print(csk_data[track_num])
 
         else:
             print("option", option, "is not defined yet")
@@ -456,7 +511,8 @@ class fourdvel(basics):
                 s1_data[track_num].sort()
 
                 print("track_num: ",track_num)
-                print(s1_data[track_num])
+                print("Number of dates: ", len(s1_data[track_num]))
+                #print(s1_data[track_num])
 
         elif option == "fake":
 
@@ -474,43 +530,78 @@ class fourdvel(basics):
                     day = day + datetime.timedelta(days=1)
 
                 print("track_num: ",track_num)
-                print(s1_data[track_num])
+                print("Number of dates: ", len(s1_data[track_num]))
+                #print(s1_data[track_num])
+
         else:
             print("option", option, "is not defined yet")
             raise Exception("dates are not available")
 
         return 0
 
+    def get_grid_set_velo_info(self):
+
+        self.grid_set_matched_velo_2d_name = "_".join((self.grid_set_name, "matched_ref_velo_2d"))
+        self.grid_set_velo_2d_name = "_".join((self.grid_set_name, "ref_velo_2d"))
+        self.grid_set_velo_3d_name = "_".join((self.grid_set_name, "ref_velo_3d"))
+    
+        self.grid_set_matched_velo_2d_pkl_name = self.pickle_dir + '/' + self.grid_set_matched_velo_2d_name + '.pkl'
+
+        self.grid_set_velo_2d_pkl_name = self.pickle_dir + '/' + self.grid_set_velo_2d_name + '.pkl'
+
+        self.grid_set_velo_3d_pkl_name = self.pickle_dir + '/' + self.grid_set_velo_3d_name + '.pkl'
+
+        return 0
+
     def get_grid_set_velo(self):
 
-        self.grid_set_velo = None
+        self.get_grid_set_velo_info()
 
-        if hasattr(self, 'grid_set_velo_name'):
+        if os.path.exists(self.grid_set_velo_3d_pkl_name):
+            print('Loading grid_set_velo...')
+            with open(self.grid_set_velo_3d_pkl_name,'rb') as f:
+                self.grid_set_velo = pickle.load(f)
+        else:
+            print(self.grid_set_velo_3d_pkl_name)
+            raise Exception("Unable to load 3d velocity reference model")
 
-            dim = 3
-            if dim == 3:
-                grid_set_velo_pkl = self.grid_set_velo_name + '_' + str(self.resolution) + '_3d' + '.pkl'
+    def get_tile_set_info(self):
+
+        if self.proj=="Rutford":
+
+            # For 500m resolution
+            if self.resolution == 500:
+                self.tile_lon_step = 1
+                self.tile_lat_step = 0.2
     
-            if os.path.exists(grid_set_velo_pkl):
-                print('Loading grid_set_velo...')
-                with open(grid_set_velo_pkl,'rb') as f:
-                    self.grid_set_velo = pickle.load(f)
-            else:
-                raise Exception("Unable to load velocity model")
+            # For 100m resolution
+            if self.resolution == 100:
+                self.tile_lon_step = 0.2
+                self.tile_lat_step = 0.04
+        
+        elif self.proj=="Evans":
+
+            # For 500m resolution
+            self.tile_lon_step = 0.5
+            self.tile_lat_step = 0.1
+
+        self.tile_set_name = "_".join((self.grid_set_name, "tile_set","lon_step",str(self.tile_lon_step),"lat_step", str(self.tile_lat_step)))
+
+        return (self.pickle_dir + '/' + self.tile_set_name + '.pkl')
 
     def get_tile_set(self):
 
-        self.tile_set = None
-        if hasattr(self,'tile_set_name'):
-            self.tile_set_name = self.tile_set_name.replace("$resolution", str(self.resolution))
-
-            tile_set_pkl = self.tile_set_name + '.pkl'
-            if os.path.exists(tile_set_pkl):
-                print('Loading tile_set ...')
-                with open(tile_set_pkl,'rb') as f:
-                    self.tile_set = pickle.load(f)
-
+        self.tile_set_pkl_name = self.get_tile_set_info()
+        if os.path.exists(self.tile_set_pkl_name):
+            print('Loading tile_set ...')
+            with open(self.tile_set_pkl_name,'rb') as f:
+                self.tile_set = pickle.load(f)
             print("total number of tiles: ", len(self.tile_set))
+        else:
+            print("tile set file is missing: ", self.tile_set_pkl_name)
+            raise Exception()
+
+        return 0 
 
     def get_data_uncert(self):
 
@@ -523,215 +614,80 @@ class fourdvel(basics):
                 with open(grid_set_data_uncert_set_pkl,'rb') as f:
                     self.grid_set_data_uncert = pickle.load(f)
 
-    def round_to_grid_points(self, x, re):
-        
-        return np.round(x * re)/re
 
+    def get_used_datasets(self):
+
+        # Find the datasets
+        datasets = self.datasets
+        used_datasets = [datasets[i] for i, use in enumerate([self.use_csk, self.use_s1]) if use]
+
+        self.used_datasets = used_datasets
+
+        return 0
+
+    def get_grid_set_sources(self):
+
+        datasets = self.datasets
+        # Set the data sources for generating grid_set
+        sources = {}
+        if self.proj == "Rutford":
+            sources = {}
+            sources["csk"] = "20190901_v12"
+            sources["s1"] = "20200101"
+        elif self.proj == "Evans":
+            sources = {}
+            sources["csk"] = "unknown"
+            sources["s1"] = "20200101"
+        else:
+             raise Exception("Unknown project name")
+
+        used_sources = [sources[datasets[i]] for i, use in enumerate([self.use_csk, self.use_s1]) if use]
+
+        self.grid_set_sources = sources
+        self.used_grid_set_sources = used_sources
+
+        return 0
+
+    def get_grid_set_info(self):
+
+        self.get_used_datasets()
+        self.get_grid_set_sources()
+
+        if self.proj == "Rutford":
+            grid_set_prefix = "grid_set_csk-r_point"
+        elif self.proj == "Evans":
+            grid_set_prefix = "grid_set_csk-e_point"
+        else:
+            raise Exception("Unknown project name")
+
+        grid_set_datasets = "_".join(self.used_datasets)
+
+        grid_set_sources = "_".join(self.used_grid_set_sources)
+
+        grid_set_resolution = str(self.resolution)
+
+        # Finalize the name
+        self.grid_set_name= "_".join((grid_set_prefix, grid_set_datasets, grid_set_sources, grid_set_resolution))
+
+        return (self.pickle_dir + '/' + self.grid_set_name + '.pkl')
 
     def get_grid_set_v2(self):
-        import gdal
 
-        # Currently only CSK on Rutford
-        redo = 0
-
-        ###########################################
-        # Generate pickle file
-        grid_set_pkl = self.grid_set_name + '_' + str(self.resolution) + '.pkl'
-
-        lat_step_int = self.lat_step_int
-        lon_step_int = self.lon_step_int
-
-        print("step_int: ", lon_step_int, lat_step_int)
-        print("re size (sampling rate): ", self.lon_re, self.lat_re)
-
-        if os.path.exists(grid_set_pkl) and redo == 0:
+        self.grid_set_pkl_name = self.get_grid_set_info()
+        
+        if os.path.exists(self.grid_set_pkl_name):
             print('Loading grid_set...')
 
-            with open(grid_set_pkl,'rb') as f:
+            with open(self.grid_set_pkl_name,'rb') as f:
                 self.grid_set = pickle.load(f)
 
             print('total number of grid points: ', len(self.grid_set))
+
         else:
-            print("Cannot find: ", grid_set_pkl, "or redo is True")
-            print('Calculating grid_set...')
-            grid_set = {}
-
-            # Only use CSK for now
-            satellites = ['csk','s1']
-            #satellites = ['csk']
-
-            directory = {}
-            tracklist = {}
-            offset_id = {}
-
-            directory['csk'] = self.csk_workdir
-
-            tracklist['csk'] = self.csk_tracks
-            if self.proj == "Rutford":
-                offset_id['csk'] = 20190921
-            elif self.proj == "Evans":
-                offset_id['csk'] = 20180712
-
-            directory['s1'] = self.s1_workdir
-
-            # update 20190702
-            tracklist['s1'] = self.s1_tracks
-            #offset_id['s1'] = 20180703
-            offset_id['s1'] = 20200101
-
-            for sate in satellites:
-
-                for track_num in tracklist[sate]:
-
-                    print(sate,track_num)
-
-                    if sate == 'csk' and self.proj == "Rutford":
-                        trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(3)+'_0')
-                    elif sate == "csk" and self.proj == "Evans":
-                        trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(2)+'0')
-                    elif sate == "s1":
-                        trackdir = os.path.join(directory[sate],'track_' + str(track_num))
-                    else:
-                        raise Exception("Undefined")
- 
-                    gc_losfile = os.path.join(trackdir,'merged','geom_master','gc_los_offset_' + str(offset_id[sate]) + '.rdr')
-                    
-                    gc_losvrtfile = gc_losfile + '.vrt'
-                    dataset = gdal.Open(gc_losvrtfile)
-                    geoTransform = dataset.GetGeoTransform()
-                    
-                    lon0 = geoTransform[0]
-                    lon_interval = geoTransform[1]
-        
-                    lat0 = geoTransform[3]
-                    lat_interval = geoTransform[5]
-        
-                    xsize = dataset.RasterXSize
-                    ysize = dataset.RasterYSize
-        
-                    lon_list = np.linspace(lon0, lon0 + lon_interval*(xsize-1), xsize)
-                    lat_list = np.linspace(lat0, lat0 + lat_interval*(ysize-1), ysize)
-
-                    #print(lon_list, lat_list)
-
-                    ## If files not geocoded onto the FULL RESOLUTION grid points,
-                    ## do it here.
-
-                    ## This is closed for now, because rutford offset field have
-                    ## been geocoded to full resolution
-    
-                    ## lat 0.001
-                    ## lon 0.005
-
-                    #lon_list = self.round_to_grid_points(lon_list, self.lon_re)
-                    #lat_list = self.round_to_grid_points(lat_list, self.lat_re)
-                    #######################################################
-
-                    #print(lon_list, lat_list)
-
-                    ### Convert to 5 decimal point integer
-                    lon_list = self.round_int_5dec(lon_list)
-                    lat_list = self.round_int_5dec(lat_list)
-        
-                    #print(lon_list,len(lon_list),xsize)
-                    #print(lat_list,len(lat_list),ysize)
-
-                    # Mesh grid
-                    grid_lon, grid_lat = np.meshgrid(lon_list, lat_list)
-        
-                    # Maskout the invalid
-                    los = dataset.GetRasterBand(1).ReadAsArray()
-                    azi = dataset.GetRasterBand(2).ReadAsArray()
-        
-                    #print(grid_lon)
-                    #print(grid_lon.shape)
-                    #print(los.shape)
-
-                    grid_lon[los == 0] = INT_NAN
-                    grid_lat[los == 0] = INT_NAN
-        
-                    #fig = plt.figure(1)
-                    #ax = fig.add_subplot(111)
-                    #ax.imshow(grid_lat)
-                    #plt.show()
-
-                    # Flatten the grid points        
-                    grid_lon_1d = grid_lon.flatten()
-                    grid_lat_1d = grid_lat.flatten()
-        
-                    # Read the observation vectors
-                    enu_gc_losfile = os.path.join(trackdir,'merged','geom_master','enu_gc_los_offset_' + str(offset_id[sate]) + '.rdr.vrt')
-                    enu_gc_azifile = os.path.join(trackdir,'merged','geom_master','enu_gc_azi_offset_' + str(offset_id[sate]) + '.rdr.vrt')
-                    try:
-                        dataset = gdal.Open(enu_gc_losfile)
-                    except:
-                        raise Exception('geometry file not exist')
-
-                    # Los ENU
-                    elos = dataset.GetRasterBand(1).ReadAsArray()
-                    nlos = dataset.GetRasterBand(2).ReadAsArray()
-                    ulos = dataset.GetRasterBand(3).ReadAsArray()
-        
-                    # Azi ENU
-                    dataset = gdal.Open(enu_gc_azifile)
-                    eazi = dataset.GetRasterBand(1).ReadAsArray()
-                    nazi = dataset.GetRasterBand(2).ReadAsArray()
-                    uazi = dataset.GetRasterBand(3).ReadAsArray()
-        
-                    #print(grid_lon_1d,len(grid_lon_1d))
-                    #print(grid_lat_1d,len(grid_lat_1d))
+            print("grid set file missing: ", self.grid_set_pkl_name)
+            raise Exception()
 
 
-                    # Loop through all grid points   
-                    for kk in range(len(grid_lon_1d)):
-        
-                        ii = kk // xsize
-                        jj = kk - ii * xsize
-        
-                        if grid_lon[ii,jj]==INT_NAN or grid_lat[ii,jj]==INT_NAN:
-                            continue
-
-                        ### Add downsampling here #########
-                        if grid_lon[ii,jj]%lon_step_int!=0 or grid_lat[ii,jj]% lat_step_int!=0:
-                            continue
-
-                        # The element being pushed into the list.
-                        # 1. track number; 2. los (three vectors) 3. azi (three vectors) 4. satellite name.
-                        info = (track_num,(elos[ii,jj],nlos[ii,jj],ulos[ii,jj]),(eazi[ii,jj],nazi[ii,jj],uazi[ii,jj]),sate)
-        
-                        # Push into the grid_set, only add new grid when sate is csk.
-                        if (grid_lon[ii,jj],grid_lat[ii,jj]) not in grid_set.keys():
-                            if sate=='csk':
-                                grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])] = [info]
-                            else:
-                                pass
-                        else:
-                            grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])].append(info)
-
-            #print(grid_set.keys())
-            print("Total number of grid points: ", len(grid_set))
-
-            print("Writing to Pickle file...")
-            with open(grid_set_pkl,'wb') as f:
-                pickle.dump(grid_set,f)
-
-            self.grid_set = grid_set
-
-            print("Done")
-
-        print("Output a test point")
-
-        if self.proj == "Rutford":
-            key = (-8100000,-7900000)
-            print("Test point: ",key)
-            print(self.grid_set[key])
-
-        elif self.proj == "Evans":
-            key = (-7700000, -7680000)
-            print("Test point: ",key)
-            print(self.grid_set[key])
-
-        return 0
 
     def coverage(self): 
 
@@ -784,7 +740,156 @@ class fourdvel(basics):
 
         return 0
 
-    def stack_design_mat_set(self, point_set, design_mat_set, offsetfields_set):
+    def get_timings_info(self):
+
+        fmt = "%Y%m%d"
+        timings_pkl_name = self.pickle_dir + '/' + '_'.join(['timings', 'csk', self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)]) + '.pkl'
+
+        return timings_pkl_name
+
+    def get_timings(self):
+
+        self.timings_pkl_name = self.get_timings_info()
+        timings_pkl_name = self.timings_pkl_name
+        print('timing file: ', timings_pkl_name)
+
+        redo = 1
+        if os.path.exists(timings_pkl_name) and redo == 0:
+            with open(timings_pkl_name, 'rb') as f:
+                self.timings = pickle.load(f)
+        else:
+            # Derive all timings (date + time fraction)
+            self.timings = []
+
+            # CSK
+            for key in self.csk_data.keys():
+                tfrac = self.track_timefraction['csk',key]
+                for the_date in self.csk_data[key]:
+                    self.timings.append((the_date, round(tfrac,4)))
+            # S1
+            for key in self.s1_data.keys():
+                tfrac = self.track_timefraction['s1',key]
+                for the_date in self.s1_data[key]:
+                    self.timings.append((the_date, round(tfrac,4)))
+
+            self.timings = sorted(self.timings)
+            
+            with open(timings_pkl_name,'wb') as f:
+                pickle.dump(self.timings, f)
+
+        return 0
+
+    def get_tidal_model(self):
+
+        print("Get the tidal model ...")
+
+        tide_file = self.external_up_disp
+
+        fid = open(tide_file)
+        lines = fid.readlines()
+        taxis = []
+        data = []
+        for line in lines:
+            t,z = line.split()
+            taxis.append(float(t))
+            data.append(float(z))
+
+        self.tide_taxis = taxis
+        self.tide_data = data
+        self.tide_t_delta = self.tide_taxis[1] - self.tide_taxis[0]
+
+        return
+
+    def get_timings_tide_heights(self):
+
+        # From (date + time fraction) to tide_heights
+        self.timings_tide_heights = {}
+        t_origin = self.t_origin.date()
+        for timing in self.timings:
+            
+            the_date, t_frac = timing
+            relative_time = (the_date - t_origin).days + t_frac
+            #print(relative_time)
+            idx = int((relative_time - self.tide_taxis[0])/self.tide_t_delta)
+            self.timings_tide_heights[timing] = self.tide_data[idx]
+
+        #print(self.timings_tide_heights)
+        #print(stop)
+        return 0
+
+    def get_design_mat_set(self):
+
+        from forward import forward
+        fwd = forward()
+        redo = 1
+        fmt = "%Y%m%d"
+
+        # For modeling
+        # Use the tides set by the parameter file
+        self.model_design_mat_set_pkl = self.pickle_dir +'/' + '_'.join(['model_design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)] + self.modeling_tides ) + '.pkl'
+
+        model_design_mat_set_pkl = self.model_design_mat_set_pkl
+
+        print('Find model_design_mat_set:', model_design_mat_set_pkl)
+
+        if os.path.exists(model_design_mat_set_pkl) and redo==0:
+            with open(model_design_mat_set_pkl,'rb') as f:
+                self.model_design_mat_set = pickle.load(f)
+        else:
+            self.model_design_mat_set = fwd.design_mat_set(self.timings, self.modeling_tides)
+            print("Size of design mat set: ",len(self.model_design_mat_set))
+
+            with open(model_design_mat_set_pkl,'wb') as f:
+                pickle.dump(self.model_design_mat_set,f)
+
+        # For simulation
+        # Use the simulated tides
+        if self.test_mode==1 or self.test_mode==2:
+
+            self.rutford_design_mat_set_pkl = self.pickle_dir +'/'+ '_'.join(['rutford_design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)]) + '.pkl'
+
+            rutford_design_mat_set_pkl = self.rutford_design_mat_set_pkl
+    
+            if os.path.exists(rutford_design_mat_set_pkl) and redo==0:
+                with open(rutford_design_mat_set_pkl, 'rb') as f:
+                    self.rutford_design_mat_set = pickle.load(f)
+    
+            else:
+                rutford_tides = self.simulation_tides
+                self.rutford_design_mat_set = fwd.design_mat_set(self.timings, rutford_tides)
+                print("Size of design mat set: ", len(self.rutford_design_mat_set))
+    
+                with open(rutford_design_mat_set_pkl,'wb') as f:
+                    pickle.dump(self.rutford_design_mat_set,f)
+        return 0
+
+    def get_up_disp_set(self, point_set, offsetfields_set):
+
+        up_disp_set = {}
+        for point in point_set:
+            up_disp_set[point] = self.get_up_disp_for_point(point, offsetfields_set[point])
+
+        return up_disp_set
+
+    def get_up_disp_for_point(self, point, offsetfields):
+
+        tide_height_master = []
+        tide_height_slave = []
+        for i in range(len(offsetfields)):
+            timing_a = (offsetfields[i][0], round(offsetfields[i][4],4))
+            timing_b = (offsetfields[i][1], round(offsetfields[i][4],4))
+
+            # Tide height for the two dates
+            tide_height_master.append(self.timings_tide_heights[timing_a])
+            tide_height_slave.append(self.timings_tide_heights[timing_b])
+
+        tide_height_master = np.asarray(tide_height_master)
+        tide_height_slave = np.asarray(tide_height_slave)
+
+        return (tide_height_master, tide_height_slave)
+
+
+    def get_stack_design_mat_set(self, point_set, design_mat_set, offsetfields_set):
 
         stack_design_mat_set = {}
         for point in point_set:
@@ -800,6 +905,8 @@ class fourdvel(basics):
         stacked_design_mat_EN_tb = []
         stacked_design_mat_U_ta = []
         stacked_design_mat_U_tb = []
+
+        # Note that it is possible that offsetfields is empty
 
         for i in range(len(offsetfields)):
 
@@ -830,119 +937,78 @@ class fourdvel(basics):
 
         return (stacked_design_mat_EN_ta, stacked_design_mat_EN_tb, stacked_design_mat_U_ta, stacked_design_mat_U_tb)
 
-
-    def get_timings(self):
-
-        fmt = "%Y%m%d"
-        timings_pkl = self.pickle_dir + '/' + '_'.join(['timings', 'csk', self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)]) + '.pkl'
-
-        print('timing file: ', timings_pkl)
-
-        redo = 1
-
-        if os.path.exists(timings_pkl) and redo == 0:
-            with open(timings_pkl, 'rb') as f:
-                self.timings = pickle.load(f)
-        else:
-            # Derive all timings (date + time fraction)
-            self.timings = []
-
-            # CSK
-            for key in self.csk_data.keys():
-                tfrac = self.track_timefraction['csk',key]
-                for the_date in self.csk_data[key]:
-                    self.timings.append((the_date, round(tfrac,4)))
-            # S1
-            for key in self.s1_data.keys():
-                tfrac = self.track_timefraction['s1',key]
-                for the_date in self.s1_data[key]:
-                    self.timings.append((the_date, round(tfrac,4)))
-
-            self.timings = sorted(self.timings)
-            
-            with open(timings_pkl,'wb') as f:
-                pickle.dump(self.timings, f)
-
-        #print(self.timings)
-        #print(stop)
- 
-        return 0
-
-    def get_design_mat_set(self):
-
-        from forward import forward
-        fwd = forward()
-
-        redo = 1
-
-        fmt = "%Y%m%d"
-        design_mat_set_pkl = self.pickle_dir +'/' + '_'.join(['design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)] + self.modeling_tides ) + '.pkl'
-
-        print('design_mat_set file:', design_mat_set_pkl)
-
-        if os.path.exists(design_mat_set_pkl) and redo==0:
-            with open(design_mat_set_pkl,'rb') as f:
-                self.design_mat_set = pickle.load(f)
-        else:
-            self.design_mat_set = fwd.design_mat_set(self.timings, self.modeling_tides)
-            print("Size of design mat set: ",len(self.design_mat_set))
-
-            with open(design_mat_set_pkl,'wb') as f:
-                pickle.dump(self.design_mat_set,f)
-
-        # For simulation, we need design mat for all tides
-        if self.test_mode==1 or self.test_mode==2:
-
-            rutford_design_mat_set_pkl = self.pickle_dir +'/'+ '_'.join(['design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt), 'Rutford_full'] ) + '.pkl'
     
-            if os.path.exists(rutford_design_mat_set_pkl) and redo==0:
-                with open(rutford_design_mat_set_pkl, 'rb') as f:
-                    self.rutford_design_mat_set = pickle.load(f)
-    
-            else:
-                rutford_tides = ['K2','S2','M2','K1','P1','O1','Msf','Mf','Mm','Ssa','Sa']
-                self.rutford_design_mat_set = fwd.design_mat_set(self.timings, rutford_tides)
-                print("Size of design mat set: ", len(self.rutford_design_mat_set))
-    
-                with open(rutford_design_mat_set_pkl,'wb') as f:
-                    pickle.dump(self.rutford_design_mat_set,f)
-        return 0
-
     def get_offset_field_stack(self):
     
         self.offsetFieldStack_all = {}
 
+        # Find the necessary tracks
+        skip_this = True
+        if self.test_point is not None and skip_this == False:
+            print(self.test_point)
+            tracks_set = self.grid_set[self.test_point]
+            track_num_set = set()
+            for track in tracks_set:
+                track_num_set.add((track[0],track[3]))
+                
+        else:
+            track_num_set = {}
+
+        track_num_set = sorted(track_num_set)
+        print("necessary tracks: ", track_num_set)
+
         if self.use_csk:
 
-            for track in self.csk_tracks:
-                track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track).zfill(3) + '_0', \
-                                                            "cuDenseOffsets", "offsetFieldStack_20190921_v10.pkl")
+            for track_num in self.csk_tracks:
+
+                if track_num_set and not (track_num,"csk") in track_num_set:
+                    continue
+
+                track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', \
+                                                            "cuDenseOffsets", "offsetFieldStack_" + str(self.csk_id)+ "_" + self.csk_version + ".pkl")
                 if os.path.exists(track_offsetFieldStack_pkl):
                     print("Loading: ", track_offsetFieldStack_pkl)
                     with open(track_offsetFieldStack_pkl,'rb') as f:
                         offsetFieldStack = pickle.load(f)
-                        self.offsetFieldStack_all[("csk", track)] = offsetFieldStack
+                        self.offsetFieldStack_all[("csk", track_num)] = offsetFieldStack
 
 
         if self.use_s1:
 
-            for track in self.s1_tracks:
-                track_offsetFieldStack_pkl = os.path.join(self.s1_workdir, "track_" + str(track), \
+            for track_num in self.s1_tracks:
+
+                if track_num_set and not (track_num, "s1") in track_num_set:
+                    continue
+
+                track_offsetFieldStack_pkl = os.path.join(self.s1_workdir, "track_" + str(track_num), \
                                                             "cuDenseOffsets", "offsetFieldStack_20200101_v10.pkl")
                 if os.path.exists(track_offsetFieldStack_pkl):
                     print("Loading: ", track_offsetFieldStack_pkl)
                     with open(track_offsetFieldStack_pkl,'rb') as f:
                         offsetFieldStack = pickle.load(f)
-                        self.offsetFieldStack_all[("s1", track)] = offsetFieldStack
+                        self.offsetFieldStack_all[("s1", track_num)] = offsetFieldStack
+
+    def point_rounding(self, point):
+
+        point_lon, point_lat = point
+
+        print(self.lon_step_int)
+        print(self.lat_step_int)
+
+        point_lon = point_lon // self.lon_step_int * self.lon_step_int
+        point_lat = point_lat // self.lat_step_int * self.lat_step_int
+
+        return (point_lon, point_lat)
 
     def preparation(self):
 
         # Get pre-defined grid points and the corresponding tracks and vectors.
         self.get_grid_set_v2()
-
-        self.get_grid_set_velo()
         self.get_tile_set()
         self.get_data_uncert()
+
+        # Get reference velocity model for synthetic test
+        self.get_grid_set_velo()
 
         # Show the counts.
         print('Number of total grid points: ', len(self.grid_set.keys()))
@@ -961,8 +1027,17 @@ class fourdvel(basics):
         elif self.use_s1:
             self.get_S1_trackDates()
 
-        # Prepartion G matrix libaray for inversion
+
+        # Prepartion design matrix libaray for inversion
         self.get_timings()
+        
+        # Load external tidal model
+        self.get_tidal_model()
+
+        # Find the tide height for all
+        self.get_timings_tide_heights()
+
+        # Find all the design matrix
         self.get_design_mat_set()
 
         # Load offset field stack data
@@ -1032,20 +1107,6 @@ class fourdvel(basics):
             
             lon,lat = point
 
-            #if not (lon>-81.5 and lon<-80.5 and lat<-76.5):
-            #    return np.nan
-    
-            #if not (lon==-81.24 and (lat==-76.59 or lat==-76.595)):
-            #    return 0
-    
-            #if not (lon==-72.14 and lat==-74.845):
-            #    return -1
-    
-            # Downsampling to save time.
-            #if not (np.round((lon*100)) % 8 == 0) and (np.round((lat*1000) % 20)==0):
-            #    print(point)
-            #    return np.nan
-
         if tracks is None and offsetfields is None:
             print('Please provide data info on this grid point')
             return
@@ -1061,7 +1122,7 @@ class fourdvel(basics):
         # Control the number of offsetfields
         n_offsets = len(offsetfields)
 
-        # No offsetfield in available.
+        # Important: accounting for no offsetfield scenario
         if n_offsets ==0:
             G = np.zeros(shape=(1,1)) + np.nan
             return G 
@@ -1140,7 +1201,6 @@ class fourdvel(basics):
 
         return G
         # End of building.
-
 
     def build_G_ENU_set(self, point_set, offsetfields_set):
         
@@ -1373,9 +1433,8 @@ class fourdvel(basics):
             # E N U
             for t in range(3):
 
-                ### return value is in velocity domain m/d
                 # velo = amp*sin(wt + phi)
-                # velo = amp*sin(phi)coswt + amp*cos(phi)sinwt
+                # velo = amp*sin(phi)*coswt + amp*cos(phi)*sinwt
                 # disp = amp/w*sin(phi)*sinwt - amp/w*cos(phi)*coswt
                 # cos term = -amp/w*cos(phi)
                 # sin term = amp/w*sin(phi)
@@ -1395,7 +1454,6 @@ class fourdvel(basics):
                 param_vec[3+k*6+t+3,0] = sin_term
         
         return param_vec
-
 
     def model_posterior_to_uncertainty_set(self, point_set, tide_vec_set, Cm_p_set):
 
@@ -1581,12 +1639,12 @@ class fourdvel(basics):
                     inv_sigma[k,k] = inf_restrict
 
                 # Control the up on be only short period
-                if not tide_name in ['M2','S2','O1'] and up_short_period and (j==2 or j==5):
+                if not tide_name in self.tide_short_period_members and up_short_period and (j==2 or j==5):
                     inv_sigma[k,k] = inf_restrict
                     #print(tide_name, j)
 
                 # Control the horizontal to be only long period
-                if not tide_name in ['Mf','Msf','Mm'] and horizontal_long_period and (j==0 or j==1 or j==3 or j==4):
+                if not tide_name in self.tide_long_period_members and horizontal_long_period and (j==0 or j==1 or j==3 or j==4):
                     inv_sigma[k,k] = inf_restrict
  
         invCm = np.square(inv_sigma)
@@ -1610,12 +1668,12 @@ class fourdvel(basics):
         invCd = data_prior
         invCm = model_prior
 
-        # No valid G
+        # First of all: Consider invalid G
         if np.isnan(G[0,0]):
             Cm_p = np.zeros(shape=(1,1))+np.nan
             return Cm_p
 
-        # G is valid.
+        # OK, G is valid
         #print('G: ', G.shape)
         #print('invCd: ',invCd.shape)
 
@@ -1719,6 +1777,9 @@ class fourdvel(basics):
         resid_of_tides_set = {}
 
         # Only keep the mean and standard deviation due to disk space.
+        # There are four entries:
+        # range mean, range std, azimuth mean, azimuth std
+
         for point in point_set:
 
             # secular.
@@ -1726,10 +1787,10 @@ class fourdvel(basics):
                                                 data_vec_set[point], model_vec_set[point])
 
             if not np.isnan(resid_of_secular[0,0]):
-                resid_of_secular_set[point] = ( np.mean(resid_of_secular[0:-1:2]),
-                                                np.std (resid_of_secular[0:-1:2]),
-                                                np.mean(resid_of_secular[1:-1:2]),
-                                                np.std (resid_of_secular[1:-1:2]))
+                resid_of_secular_set[point] = ( np.mean(resid_of_secular[0::2]),
+                                                np.std (resid_of_secular[0::2]),
+                                                np.mean(resid_of_secular[1::2]),
+                                                np.std (resid_of_secular[1::2]))
 
                 #print(resid_of_secular_set[point])
 
@@ -1740,17 +1801,12 @@ class fourdvel(basics):
             resid_of_tides = self.resid_of_tides(linear_design_mat_set[point],
                                                 data_vec_set[point], model_vec_set[point])
 
-            # Ouput the residual
-            #if point == self.test_point:
-                #print(resid_of_tides)
-                #print(len(resid_of_tides))
-
             if not np.isnan(resid_of_tides[0,0]):
                 # range and azimuth
-                resid_of_tides_set[point] = ( np.mean(resid_of_tides[0:-1:2]),
-                                                np.std (resid_of_tides[0:-1:2]),
-                                                np.mean(resid_of_tides[1:-1:2]),
-                                                np.std (resid_of_tides[1:-1:2]))
+                resid_of_tides_set[point] = ( np.mean(resid_of_tides[0::2]),
+                                                np.std (resid_of_tides[0::2]),
+                                                np.mean(resid_of_tides[1::2]),
+                                                np.std (resid_of_tides[1::2]))
 
                 #print(resid_of_tides_set[point])
 
@@ -1799,14 +1855,6 @@ class fourdvel(basics):
         pred = np.matmul(G,m)
         resid_of_tides = d - pred
 
-        #print("resid of tides")
-        #print(np.hstack((d, pred, resid_of_tides)))
-        
-        #plt.figure()
-        #plt.plot(resid_of_tides)
-        #plt.savefig('./fig_sim/resid.png',format='png')
-        #plt.close()
-        
         return resid_of_tides
 
     def tide_vec_to_quantity(self, tide_vec, quant_name, point=None, state=None, extra_info=None):
@@ -1893,6 +1941,37 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+        # Msf Up phase. 
+        elif quant_name.startswith('Msf_up_displacement_phase'):
+
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Msf':
+                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    thres = 0.1
+
+                    if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
+                        # Find the phase
+                        value = t_vec[3+k*6+5]
+
+                        if state in [ 'true','est']:
+                            phaseU=self.velo_phase_to_dis_phase(value)
+                            quant = self.rad2deg(phaseU)
+                            quant = self.deg2day(quant, tide_name)
+                            
+                        elif state in ['uq']:
+                            quant = value
+                            quant = self.rad2deg(quant)
+                            quant = self.deg2day(quant, tide_name)
+
+                        else:
+                            raise Exception("Unknown state")
+                    
+                    else:
+                        quant = np.nan
+                else:
+                    k=k+1
+
         elif quant_name == "Msf_horizontal_displacement_group":
 
             # Find the size of vertical tides
@@ -1944,30 +2023,35 @@ class fourdvel(basics):
                     amp_alf = (amp_cos_alf**2 + amp_sin_alf**2)**(1/2)
                     phase_alf = np.arctan2(amp_cos_alf, amp_sin_alf)
 
-                    # ACF rotation
+                    # crf rotation
                     amp_cos_crf = a*np.sin(theta1) + c*np.cos(theta1)
                     amp_sin_crf = b*np.sin(theta1) + d*np.cos(theta1)
 
-                    # ACF amplitude
+                    # crf amplitude
                     amp_crf = (amp_cos_crf**2 + amp_sin_crf**2)**(1/2)
                     phase_crf = np.arctan2(amp_cos_crf, amp_sin_crf)
-
 
                     # Convert unit of phase (use days for Msf)
                     phase_alf = self.rad2deg(phase_alf)
                     phase_alf = self.wrapped_deg(phase_alf)
+
+                    # Record the degree value
+                    phase_alf_in_deg = phase_alf
+
                     phase_alf = self.deg2day(phase_alf, tide_name)
 
                     phase_crf = self.rad2deg(phase_crf)
                     phase_crf = self.wrapped_deg(phase_crf)
-                    phase_crf = self.deg2day(phase_crf, tide_name)
 
+                    # Record the degree value
+                    phase_crf_in_deg = self.rad2deg(phase_crf)
+
+                    phase_crf = self.deg2day(phase_crf, tide_name)
 
                     # Check if the value is valid not
                     ve_model = self.grid_set_velo[point][0]
                     vn_model = self.grid_set_velo[point][1]
                     v_model = (ve_model**2 + vn_model**2)**(1/2)
-
 
                     lon, lat = self.int5d_to_float(point)
 
@@ -1985,8 +2069,11 @@ class fourdvel(basics):
 
                         else:
                             phase_alf = np.nan
+                            phase_alf_in_deg = np.nan
                     else:
                         phase_alf = np.nan
+                        phase_alf_in_deg = np.nan
+
 
                     if v_model > thres_for_v and amp_crf > thres_for_amp:
                         if self.proj == "Rutford" and lat<-77.8:
@@ -1997,21 +2084,26 @@ class fourdvel(basics):
 
                         else:
                             phase_crf = np.nan
+                            phase_crf_in_deg = np.nan
                     else:
                         phase_crf = np.nan
-
+                        phase_crf_in_deg = np.nan
 
                     quant = {}
                     quant["Msf_along_flow_displacement_amplitude"] = amp_alf
                     quant["Msf_along_flow_displacement_phase"] = phase_alf
+                    quant["Msf_along_flow_displacement_phase_in_deg"] = phase_alf_in_deg
+
+
                     quant["Msf_cross_flow_displacement_amplitude"] = amp_crf
                     quant["Msf_cross_flow_displacement_phase"] = phase_crf
+                    quant["Msf_cross_flow_displacement_phase"] = phase_crf_in_deg
+
                     quant["Msf_horizontal_displacement_amplitude"] = amp_full 
                     return quant
 
                 else:
                     k=k+1
-
 
         ############################################
         # Msf East amp.
@@ -2072,6 +2164,48 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+        # Mf up displacement amplitude.
+        elif quant_name == 'Mf_up_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Mf':
+                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    quant = ampU
+                else:
+                    k=k+1
+
+        # Mf Up phase. 
+        elif quant_name.startswith('Mf_up_displacement_phase'):
+
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Mf':
+                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    thres = 0.1
+
+                    if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
+                        # Find the phase
+                        value = t_vec[3+k*6+5]
+
+                        if state in [ 'true','est']:
+                            phaseU=self.velo_phase_to_dis_phase(value)
+                            quant = self.rad2deg(phaseU)
+                            quant = self.deg2day(quant, tide_name)
+                            
+                        elif state in ['uq']:
+                            quant = value
+                            quant = self.rad2deg(quant)
+                            quant = self.deg2day(quant, tide_name)
+
+                        else:
+                            raise Exception("Unknown state")
+                    
+                    else:
+                        quant = np.nan
+                else:
+                    k=k+1
+
+        ################## End of Mf ###########################################
 
         # M2 lumped horizontal displacement amplitude.
         elif quant_name == 'M2_horizontal_displacement_amplitude':
@@ -2157,6 +2291,8 @@ class fourdvel(basics):
                     quant = np.sqrt(ampU**2)
                 else:
                     k=k+1
+
+
         
         # M2 Up phase. 
         # convert to minute
@@ -2174,15 +2310,15 @@ class fourdvel(basics):
 
                         if state in [ 'true','est']:
                             phaseU=self.velo_phase_to_dis_phase(value)
-                            print("phase radian: ", phaseU)
+                            #print("phase radian: ", phaseU)
                             quant = self.rad2deg(phaseU)
-                            print("phase degree: ", quant)
+                            #print("phase degree: ", quant)
                             
                             if quant_name.endswith("in_deg"):
                                 pass
                             else:
                                 quant = self.deg2minute(quant, tide_name)
-                                print("phaseU minute: ", phaseU)
+                                #print("phaseU minute: ", phaseU)
 
                         elif state in ['uq']:
                             quant = value
@@ -2197,9 +2333,111 @@ class fourdvel(basics):
                     
                     else:
                         quant = np.nan
-
                 else:
                     k=k+1
+
+        # N2 Up amplitude.
+        elif quant_name == 'N2_up_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'N2':
+                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    quant = np.sqrt(ampU**2)
+                else:
+                    k=k+1
+        
+        # N2 Up phase. 
+        # convert to minute
+        elif quant_name.startswith('N2_up_displacement_phase'):
+
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'N2':
+                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    thres = 0.1
+
+                    if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
+                        # Find the phase
+                        value = t_vec[3+k*6+5]
+
+                        if state in [ 'true','est']:
+                            phaseU=self.velo_phase_to_dis_phase(value)
+                            #print("phase radian: ", phaseU)
+                            quant = self.rad2deg(phaseU)
+                            #print("phase degree: ", quant)
+                            
+                            if quant_name.endswith("in_deg"):
+                                pass
+                            else:
+                                quant = self.deg2minute(quant, tide_name)
+                                #print("phaseU minute: ", phaseU)
+
+                        elif state in ['uq']:
+                            quant = value
+                            quant = self.rad2deg(quant)
+
+                            if quant_name.endswith("in_deg"):
+                                pass
+                            else:
+                                quant = self.deg2minute(quant,tide_name)
+                        else:
+                            raise Exception("Unknown state")
+                    else:
+                        quant = np.nan
+                else:
+                    k=k+1
+
+        # Q1 Up amplitude.
+        elif quant_name == 'Q1_up_displacement_amplitude':
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Q1':
+                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    quant = np.sqrt(ampU**2)
+                else:
+                    k=k+1
+
+        # Q1 Up phase. 
+        # convert to minute
+        elif quant_name.startswith('Q1_up_displacement_phase'):
+
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'Q1':
+                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    thres = 0.03
+
+                    if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
+                        # Find the phase
+                        value = t_vec[3+k*6+5]
+
+                        if state in [ 'true','est']:
+                            phaseU=self.velo_phase_to_dis_phase(value)
+                            #print("phase radian: ", phaseU)
+                            quant = self.rad2deg(phaseU)
+                            #print("phase degree: ", quant)
+                            
+                            if quant_name.endswith("in_deg"):
+                                pass
+                            else:
+                                quant = self.deg2minute(quant, tide_name)
+                                #print("phaseU minute: ", phaseU)
+
+                        elif state in ['uq']:
+                            quant = value
+                            quant = self.rad2deg(quant)
+
+                            if quant_name.endswith("in_deg"):
+                                pass
+                            else:
+                                quant = self.deg2minute(quant,tide_name)
+                        else:
+                            raise Exception("Unknown state")
+                    else:
+                        quant = np.nan
+                else:
+                    k=k+1
+
         else:
             quant = None
             raise Exception(quant_name, ' is not defined yet!')
@@ -2210,6 +2448,6 @@ def main():
 
     fourD = fourdvel()
     fourD.preparation()
-    
+   
 if __name__=='__main__':
     main()

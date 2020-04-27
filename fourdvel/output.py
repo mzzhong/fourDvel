@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import os
 import sys
 
@@ -7,7 +6,6 @@ import pickle
 import numpy as np
 
 import multiprocessing
-
 from fourdvel import fourdvel
 from display import display
 
@@ -20,27 +18,23 @@ class output(fourdvel):
 
     def __init__(self):
 
-        print(sys.argv)
-        if len(sys.argv)==1:
-            super(output,self).__init__()
-        else:
+        if len(sys.argv)>1:
             super(output,self).__init__(param_file = sys.argv[1])
+        else:
+            print("Input file is required")
+            raise Exception()
 
+        self.get_grid_set_v2()
         self.get_grid_set_velo()
         test_id = self.test_id
 
-        result_folder = '/home/mzzhong/insarRoutines/estimations'
-        self.this_result_folder = os.path.join(result_folder,str(test_id))
+        self.estimation_dir = os.path.join(self.estimations_dir,str(test_id))
 
         self.display = display(sys.argv[1]) 
 
-        #with open(self.this_result_folder + '/' 
-        #            + str(test_id) + '_' + 'grid_set_tide_vec.pkl','rb') as f:
-        #    self.grid_set_tide_vec = pickle.load(f)
+    def output_residual(self):
 
-    def residual(self):
-
-        this_result_folder = self.this_result_folder
+        this_result_folder = self.estimation_dir
         test_id = self.test_id
 
         with open(this_result_folder + '/' 
@@ -73,11 +67,11 @@ class output(fourdvel):
                 # For all available points in grid_set.
                 for point in output_keys:
                 
-                    # Four dim, range_mean, range_std, azimuth_mean, azimuth_std
+                    # Four entries: range_mean(0), range_std(1), azimuth_mean(2), azimuth_std(3)
                     quant = this_grid_set[point]
 
                     if comp == 'range':
-                        grid_set_quant[point] = quant[1] # mean and std
+                        grid_set_quant[point] = quant[1]
                     elif comp == 'azimuth':
                         grid_set_quant[point] = quant[3]
 
@@ -89,7 +83,7 @@ class output(fourdvel):
 
     def load_master_model(self,num,prefix='est'):
 
-        this_result_folder = self.this_result_folder
+        this_result_folder = self.estimation_dir
         # Load all the results.
         if prefix == 'true':
             filename = '/home/mzzhong/insarRoutines/estimations/'+str(num)+'/'+str(num)+'_grid_set_true_tide_vec.pkl'
@@ -102,7 +96,7 @@ class output(fourdvel):
 
     def load_slave_model(self,num,prefix='est'):
 
-        this_result_folder = self.this_result_folder
+        this_result_folder = self.estimation_dir
         # Load all the results.
 
         if prefix == 'true':
@@ -116,7 +110,7 @@ class output(fourdvel):
 
     def load_everything(self):
 
-        this_result_folder = self.this_result_folder
+        this_result_folder = self.estimation_dir
         test_id = self.test_id
 
         # Load all the results.
@@ -139,7 +133,7 @@ class output(fourdvel):
 
         print('Ouput difference...')
 
-        this_result_folder = self.this_result_folder
+        this_result_folder = self.estimation_dir
         test_id = self.test_id
 
         self.load_master_model(test_id)
@@ -174,7 +168,7 @@ class output(fourdvel):
 
     def output_others(self):
 
-        this_result_folder = self.this_result_folder
+        this_result_folder = self.estimation_dir
         test_id = self.test_id
 
         state='est'
@@ -198,13 +192,67 @@ class output(fourdvel):
         xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + quant_name + '.xyz')
         self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
 
+        return 0
+
+    def output_analysis(self):
+
+        this_result_folder = self.estimation_dir
+        test_id = self.test_id
+
+        # Load the pickle file
+        pkl_name = '_'.join((str(test_id), 'grid_set_analysis', self.analysis_name)) + '.pkl'
+
+        with open(this_result_folder + '/' + pkl_name,'rb') as f:
+            this_grid_set = pickle.load(f)
+
+        # Set the quantities for output
+        state='est'
+
+        quant_names = ['best_slr_results', 'best_slr_data_stats','lowest_tide']
+        
+        subquant_names = {}
+        subquant_names['best_slr_results'] = ['slope','intercept','r_value','p_value','min_proxy_tide','track_num']
+        subquant_names['best_slr_data_stats']=['data_mean','data_median','data_std','picked_data_mean','picked_data_median','picked_data_std']
+        subquant_names['lowest_tide']=['height','track_num']
+
+        for quant_name in quant_names:
+
+            for subquant_name in subquant_names[quant_name]:
+
+                print('Output quantity name: ', quant_name +'_' + subquant_name)
+
+                grid_set_quant = {} 
+                output_keys = this_grid_set.keys()
+        
+                for point in output_keys:
+                
+                    point_values = this_grid_set[point]
+                    
+                    # Valid result 
+                    if len(point_values)<20:
+                        #print(point_values)
+                        point_quant_values = point_values[quant_name]
+
+                        # This is not an empty dictionary
+                        if len(point_quant_values)>0:
+                            grid_set_quant[point] = point_quant_values[subquant_name]
+                        else:
+                            grid_set_quant[point] = np.nan
+                    else:
+                        grid_set_quant[point] = np.nan
+        
+                # Write to xyz file.
+                xyz_name = os.path.join(this_result_folder, '_'.join((str(test_id), state, self.analysis_name, quant_name, subquant_name)) + '.xyz')
+                self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
+
+        return 0
 
     def output_estimations(self):
 
         modeling_tides = self.modeling_tides
         n_modeling_tide = self.n_modeling_tides
 
-        this_result_folder = self.this_result_folder
+        this_result_folder = self.estimation_dir
         test_id = self.test_id
 
         self.load_everything()
@@ -257,13 +305,22 @@ class output(fourdvel):
 
                         'M2_up_displacement_amplitude',
                         'M2_up_displacement_phase',
-                        'M2_up_displacement_phase_in_deg',
                         'O1_up_displacement_amplitude',
                         'O1_up_displacement_phase',
-                        'O1_up_displacement_phase_in_deg',
-                   
+                        'N2_up_displacement_amplitude',
+                        'N2_up_displacement_phase',
+                        'Q1_up_displacement_amplitude',
+                        'Q1_up_displacement_phase',
+ 
                         # Msf
-                        "Msf_horizontal_displacement_group" 
+                        "Msf_horizontal_displacement_group",
+                        "Msf_up_displacement_amplitude",
+                        "Msf_up_displacement_phase",
+
+                        # Mf
+                        'Mf_horizontal_displacement_amplitude',
+                        "Mf_up_displacement_amplitude",
+                        "Mf_up_displacement_phase"
                         ]
 
 #        quant_list = [
@@ -332,9 +389,11 @@ class output(fourdvel):
                     if quant_name == "Msf_horizontal_displacement_group":
                         sub_quant_names = ["Msf_along_flow_displacement_amplitude",
                                            "Msf_along_flow_displacement_phase",
+                                           "Msf_along_flow_displacement_phase_in_deg",
+
                                            "Msf_cross_flow_displacement_amplitude", 
                                            "Msf_cross_flow_displacement_phase",
-                                            "Msf_horizontal_displacement_amplitude"]
+                                           "Msf_horizontal_displacement_amplitude"]
 
                         for sub_quant_name in sub_quant_names:
                             grid_set_quant[sub_quant_name] = {}
@@ -386,8 +445,10 @@ class output(fourdvel):
                 ########    End of extraction   #############
 
                 ## Do phase correction for mean phase
-                do_correction = False
-                do_correction_with_true = True
+                do_correction = True
+                ## Do phase correction with the mean phase of true model
+                do_correction_with_true = False
+
                 for sub_quant_name in sub_quant_names:
 
                     if (state=='true' or state=='est') and 'phase' in sub_quant_name:
@@ -399,17 +460,24 @@ class output(fourdvel):
                             if do_correction_with_true ==True and \
                                             sub_quant_name in phase_center and \
                                             state == "est":
-                                print("A: ",sub_quant_name)
+                                print("In phase center: ",sub_quant_name)
                                 center = phase_center[sub_quant_name]
                             else:
+                                print("Calculate th mean phase")
                                 center = np.nansum(values) /count
 
                             # Do correction
-                            if do_correction:
+                            if do_correction and not "in_deg" in sub_quant_name:
+
+                                print("Do mean phase shift")
                                 for point in grid_set_quant[sub_quant_name].keys():
                                     grid_set_quant[sub_quant_name][point] -= center
+                            else:
+                                print("Skip mean phase shift: ", sub_quant_name)
+                                print("The mean phase is: ", center)
 
                             if state=="true":
+                                print("Give the mean phase of true model to phase center dictionary")
                                 phase_center[sub_quant_name] = center
 
                 ########    End of mean phase correction   #####
@@ -427,16 +495,30 @@ def main():
 
     out = output()
 
-    # Analysis the results. 
-    out.output_estimations()
-    # Evans
-    #out.output_differences(compare_id=620, compare_prefix='true')
-    # Rutford
-    #out.output_differences(compare_id=20201000, compare_prefix='true')
+    out_nums = [1,2,3]
+    #out_nums = [3]
+    #out_nums = [11]
 
-    out.residual()
+    # Analysis the results.
+    if 1 in out_nums:
+        out.output_estimations()
+ 
+    if 2 in out_nums:
+        out.output_residual()
 
-    #out.output_others()
+    if 3 in out_nums:
+
+        if out.proj=="Evans":
+            # Evans
+            out.output_differences(compare_id=620, compare_prefix='true')
+        elif out.proj == "Rutford":
+            # Rutford
+            out.output_differences(compare_id=2020104656, compare_prefix='true')
+        else:
+            raise Exception()
+
+    if 11 in out_nums:
+        out.output_analysis()
 
 if __name__=='__main__':
     main()

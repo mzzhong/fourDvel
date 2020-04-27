@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-
 import os
+import sys
 import numpy as np
 
 import gdal
@@ -11,42 +11,327 @@ from matplotlib import cm
 from fourdvel import fourdvel
 
 import pickle
-
-#from Ant_data import Ant_data
-
-# Preparing references for synthetic tests and inversion
-
 class grouping(fourdvel):
 
     def __init__(self):
-        super(grouping,self).__init__()
 
-        # Only need grid set
-        self.get_grid_set_v2()
+        if len(sys.argv)>1:
+            param_file = sys.argv[1]
+        else:
+            print("parameter file is required")
+            raise Exception()
 
-        # for Evans
+        super(grouping,self).__init__(param_file)
+
+        # Find the corresponding grid_set file
+        self.grid_set_pkl_name = self.get_grid_set_info()
+        print("Looking for: ",self.grid_set_pkl_name)
+
+        if not os.path.exists(self.grid_set_pkl_name):
+            self.create_grid_set()
+        else:
+            self.get_grid_set_v2()
+
+        # Auxiliary files for finding ice shelf
+        # For Evans
         self.doub_diff_file ='/net/jokull/nobak/mzzhong/S1-Evans/track_37/cuDenseOffsets/doub_diff.off'
 
         # for Ruford
-        self.shelf_grid_points = "/net/kraken/bak/mzzhong/Ant_Data/GroundingLines/bedmap2_shelf_latlon.xyz"
+        self.rutford_shelf_grid_points = self.Ant_Data_dir + "/GroundingLines/bedmap2_shelf_latlon.xyz"
+
+        # End of __init__
+
+    # Preparing logistics for fourdvel inversion
+    def create_grid_set(self):
+
+        lat_step_int = self.lat_step_int
+        lon_step_int = self.lon_step_int
+
+        print("lon & lat step size (int5d): ", lon_step_int, lat_step_int)
+        print("lon_re & lat_re (sampling rate): ", self.lon_re, self.lat_re)
+
+        grid_set = {}
+
+        directory = {}
+        tracklist = {}
+
+        directory['csk'] = self.csk_workdir
+        directory['s1'] = self.s1_workdir
+
+        tracklist['csk'] = self.csk_tracks
+        tracklist['s1'] = self.s1_tracks
+
+        sources = self.grid_set_sources
+        print(sources)
+        print(self.used_datasets)
+
+        for sate in self.used_datasets:
+
+            for track_num in tracklist[sate]:
+
+                print(sate,track_num)
+
+                # Find the track directory
+                if sate == 'csk' and self.proj == "Rutford":
+                    trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(3)+'_0')
+                elif sate == "csk" and self.proj == "Evans":
+                    trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(2)+'0')
+                elif sate == "s1":
+                    trackdir = os.path.join(directory[sate],'track_' + str(track_num))
+                else:
+                    raise Exception("Undefined")
+
+                # Find the geocoded los file 
+                gc_losfile = os.path.join(trackdir, 'merged','geom_master','gc_los_offset_' + sources[sate] + '.rdr')
+                
+                gc_losvrtfile = gc_losfile + '.vrt'
+
+                # Read in geometry info
+                dataset = gdal.Open(gc_losvrtfile)
+                geoTransform = dataset.GetGeoTransform()
+                
+                lon0 = geoTransform[0]
+                lon_interval = geoTransform[1]
+    
+                lat0 = geoTransform[3]
+                lat_interval = geoTransform[5]
+    
+                xsize = dataset.RasterXSize
+                ysize = dataset.RasterYSize
+
+                # Form the grid points 
+                lon_list = np.linspace(lon0, lon0 + lon_interval*(xsize-1), xsize)
+                lat_list = np.linspace(lat0, lat0 + lat_interval*(ysize-1), ysize)
+
+                # Read in the data
+                los = dataset.GetRasterBand(1).ReadAsArray()
+                azi = dataset.GetRasterBand(2).ReadAsArray()
+
+                ######################################################
+                ## If files not geocoded onto the FULL RESOLUTION grid points,
+                ## do it here.
+
+                ## This is closed for now, because rutford offset field have
+                ## been geocoded to full resolution as follows: 
+                ## lat_step = 0.001
+                ## lon_step = 0.005
+                #######################################################
+
+                ### Convert to 5 decimal point integer
+                lon_list = self.round_int_5dec(lon_list)
+                lat_list = self.round_int_5dec(lat_list)
+
+                # Show the lon & lat lists 
+                #print(lon_list,len(lon_list),xsize)
+                #print(lat_list,len(lat_list),ysize)
+
+                # Mesh grid
+                grid_lon, grid_lat = np.meshgrid(lon_list, lat_list)
+   
+                INT_NAN = self.INT_NAN
+ 
+                grid_lon[los == 0] = INT_NAN
+                grid_lat[los == 0] = INT_NAN
+
+                # Show the grid_lon & grid_lat    
+                #fig = plt.figure(1)
+                #ax = fig.add_subplot(111)
+                #ax.imshow(grid_lat)
+                #plt.show()
+
+                # Flatten the grid points        
+                grid_lon_1d = grid_lon.flatten()
+                grid_lat_1d = grid_lat.flatten()
+
+                #print(grid_lon_1d,len(grid_lon_1d))
+                #print(grid_lat_1d,len(grid_lat_1d))
+    
+                # Read the observation vectors
+                enu_gc_losfile = os.path.join(trackdir,'merged','geom_master','enu_gc_los_offset_' + sources[sate] + '.rdr.vrt')
+                enu_gc_azifile = os.path.join(trackdir,'merged','geom_master','enu_gc_azi_offset_' + sources[sate] + '.rdr.vrt')
+                
+                try:
+                    dataset = gdal.Open(enu_gc_losfile)
+                except:
+                    raise Exception('ENU file does not exist')
+
+                # Los ENU
+                elos = dataset.GetRasterBand(1).ReadAsArray()
+                nlos = dataset.GetRasterBand(2).ReadAsArray()
+                ulos = dataset.GetRasterBand(3).ReadAsArray()
+    
+                # Azi ENU
+                dataset = gdal.Open(enu_gc_azifile)
+                eazi = dataset.GetRasterBand(1).ReadAsArray()
+                nazi = dataset.GetRasterBand(2).ReadAsArray()
+                uazi = dataset.GetRasterBand(3).ReadAsArray()
+    
+                # Loop through all grid points   
+                for kk in range(len(grid_lon_1d)):
+    
+                    ii = kk // xsize
+                    jj = kk - ii * xsize
+    
+                    if grid_lon[ii,jj]==INT_NAN or grid_lat[ii,jj]==INT_NAN:
+                        continue
+
+                    ### Add downsampling here #########
+                    if grid_lon[ii,jj]%lon_step_int!=0 or grid_lat[ii,jj]% lat_step_int!=0:
+                        continue
+
+                    # The element being pushed into the list.
+                    # 1. track number; 2. los (three vectors) 3. azi (three vectors) 4. satellite name.
+                    info = (track_num,(elos[ii,jj],nlos[ii,jj],ulos[ii,jj]),(eazi[ii,jj],nazi[ii,jj],uazi[ii,jj]),sate)
+    
+                    # Push into the grid_set, only add new grid when sate is "csk".
+                    if (grid_lon[ii,jj],grid_lat[ii,jj]) not in grid_set.keys():
+                        if sate=='csk':
+                            grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])] = [info]
+                        else:
+                            pass
+                    else:
+                        grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])].append(info)
+
+            #print(grid_set.keys())
+            print("Total number of grid points: ", len(grid_set))
+
+            print("Writing to Pickle file...")
+            with open(self.grid_set_pkl_name,'wb') as f:
+                pickle.dump(grid_set,f)
+
+            self.grid_set = grid_set
+
+            print("Done")
+
+        print("Output a test point")
+
+        if self.proj == "Rutford":
+            key = (-8100000,-7900000)
+            print("Test point: ",key)
+            print(self.grid_set[key])
+
+        elif self.proj == "Evans":
+            key = (-7700000, -7680000)
+            print("Test point: ",key)
+            print(self.grid_set[key])
+
+        return 0
 
     def rounding(self,x):
         return np.round(x*1000)/1000
 
-    def match_velo_v2_to_grid_set(self):
+    def create_grid_set_tiles(self):
 
         grid_set = self.grid_set
 
+        tile_set_pkl_name = self.get_tile_set_info()
+
+        print(tile_set_pkl_name)
+        redo = 0
+        if os.path.exists(tile_set_pkl_name) and redo==0:
+            print("tile set file exists!")
+            return
+
+        if self.proj=="Rutford":
+
+            ############ Rutford ###############
+            # Rutford bounding box
+            west = self.round_int_5dec(-88)
+            east = self.round_int_5dec(-79)
+            north = self.round_int_5dec(-76.2)
+            south = self.round_int_5dec(-79.4)
+    
+        elif self.proj=="Evans":
+
+            ########## Evans ###################
+            # Evans bounding box.
+            west = self.round_int_5dec(-85)
+            east = self.round_int_5dec(-69)
+            north = self.round_int_5dec(-74.2)
+            south = self.round_int_5dec(-77.6)
+    
+        ################################################
+
+        tile_lon_step = self.tile_lon_step
+        tile_lat_step = self.tile_lat_step
+
+        tile_lon_step_int = self.round_int_5dec(tile_lon_step)
+        tile_lat_step_int = self.round_int_5dec(tile_lat_step)
+
+        tile_lon_num = np.round(tile_lon_step/self.lon_step)
+        tile_lat_num = np.round(tile_lat_step/self.lat_step)
+
+        # Coordinates within a tile 
+        sub_lon_list = np.arange(tile_lon_num) * self.lon_step_int
+        sub_lat_list = np.arange(tile_lat_num) * self.lat_step_int
+
+        print(sub_lon_list, len(sub_lon_list))
+        print(sub_lat_list, len(sub_lat_list))
+    
+        count = 0
+        tile_set = {}
+        
+        for tile_lon in np.arange(west, east+1, tile_lon_step_int):
+            
+            for tile_lat in np.arange(south, north+1, tile_lat_step_int):
+
+                location = (tile_lon,tile_lat)
+                #print(location)
+
+                tile_set[location] = []
+
+                tile_west = tile_lon
+                tile_south = tile_lat
+
+                lon_list = (tile_west + sub_lon_list).astype(int)
+                lat_list = (tile_south + sub_lat_list).astype(int)
+
+                for lon in lon_list:
+                    for lat in lat_list:
+                        
+                        point = (lon, lat)
+                        if point in grid_set.keys():
+                            count = count + 1
+                            tile_set[location].append(point)
+
+        print("total number of points added in tiles: ", count)
+        print("total number of points in grid set: ", len(grid_set))
+        print("total number of tried tiles: ", len(tile_set))
+
+        # Remove empty tiles.
+        empty_tiles = []
+        for tile in tile_set.keys():
+            if len(tile_set[tile])==0:
+                empty_tiles.append(tile)
+
+        for tile in empty_tiles:
+            tile_set.pop(tile)
+
+        print("total number of tiles ", len(tile_set))
+        
+        print("Save the tile set...")
+        
+        with open(tile_set_pkl_name,'wb') as f:
+            pickle.dump(tile_set,f)
+
+        return 0
+
+
+    def create_grid_set_velo_2d(self):
+
+        grid_set = self.grid_set
+
+        ### Part 1: Create matched velo 2d #####
         # Temporary file
-        filename = "./pickles/matched_velo_v2_" + str(self.resolution) +".pkl"
+        filename = self.grid_set_matched_velo_2d_pkl_name
 
         # Generate matched_velo.
-        print('Matching velocity model (v2) to grids set')
+        print('Matching velocity model (v2) to grids set...')
+        print("filename: ", filename)
         
         redo = 0
-
         if not os.path.exists(filename) or redo == 1:
-            velo_dir = '/net/kraken/bak/mzzhong/Ant_Data/velocity_models'
+            velo_dir = self.Ant_Data_dir + '/velocity_models'
             npz_filebasename = 'AntVelo_v2.npz'
 
             npzfile = np.load(os.path.join(velo_dir, npz_filebasename))
@@ -61,7 +346,6 @@ class grouping(fourdvel):
             inds = vel_lon > 180
             vel_lon[inds] = vel_lon[inds] - 360
 
-
             # Rounding latlon to grid points.
             # Floating grid points
             vel_lon = self.round_to_grid_points(vel_lon, self.lon_re)
@@ -71,28 +355,19 @@ class grouping(fourdvel):
             vel_lon = self.round_int_5dec(vel_lon)
             vel_lat = self.round_int_5dec(vel_lat)
 
-            print(vel_lon)
-            print(vel_lat)
-
-            #unique_lons = np.unique(vel_lon[(vel_lon>-80) & (vel_lon<-70) & (vel_lat>-77.5) & (vel_lat<-74)])
-            #print(unique_lons)
-            #print(unique_lons.shape)
-
-            #unique_lats = np.unique(vel_lat[(vel_lon>-80) & (vel_lon<-70) & (vel_lat>-77.5) & (vel_lat<-74)])
-            #print(unique_lats)
-            #print(unique_lats.shape)
-
-            #print(vel_lon)
-            #print(vel_lon.shape)
-            #print(vel_lat.shape)
+            print("vel_lon: ", vel_lon)
+            print("vel_lat: ", vel_lat)
 
             # Match velo to grid_set
             matched_velo = {}
             count = 0
             # Loop through all grid points in the data
             count_out=0
+
             for i in range(vel_lon.shape[0]):
+
                 count_out+=1
+
                 if count_out%1000==0:
                     print(count_out, vel_lon.shape[0])
                 
@@ -127,19 +402,14 @@ class grouping(fourdvel):
         print("length of mached velo: ", len(matched_velo))
         print("length of grid_set: ", len(grid_set))
 
-        return 0
+        #### Part 2: perform interpoltion to get complete 2d reference model ####
 
-    def create_grid_set_velo_2d(self):
-
-        print('Interpolating grid set velocity model...')
-
-        grid_set_velo_name = self.grid_set_velo_name + '_' + str(self.resolution)
-
-        pklname = grid_set_velo_name + '_2d'+'.pkl'
+        pklname = self.grid_set_velo_2d_pkl_name
 
         redo = 0
-
         if not os.path.exists(pklname) or redo == 1:
+            
+            print('Interpolating grid set velocity model...')
 
             grid_set = self.grid_set
             matched_velo = self.matched_velo
@@ -195,11 +465,13 @@ class grouping(fourdvel):
             #print('velocity at: ',key, grid_set_velo_2d[key])
    
             # Save it! 
-            with open(grid_set_velo_name + '_2d'+'.pkl','wb') as f:
+            with open(pklname,'wb') as f:
                 pickle.dump(grid_set_velo_2d,f)
 
         else:
-            with open(grid_set_velo_name + '_2d' + '.pkl','rb') as f:
+            print(pklname, "exists")
+            print("Loading...")
+            with open(pklname,'rb') as f:
                 grid_set_velo_2d = pickle.load(f)
 
         self.grid_set_velo_2d = grid_set_velo_2d
@@ -209,7 +481,7 @@ class grouping(fourdvel):
 
         write_to_file = True
         if write_to_file:
-            xyz_file = '/home/mzzhong/insarRoutines/estimations/grid_set_velo_2d_speed.xyz'
+            xyz_file = self.estimation_dir + '/grid_set_velo_2d_speed.xyz'
             f = open(xyz_file,'w')
 
             count = 0
@@ -231,7 +503,7 @@ class grouping(fourdvel):
         f.close()
         return 0
 
-    def add_verti_evans(self):
+    def create_grid_set_velo_3d_evans(self):
 
         from dense_offset import dense_offset
         from scipy.signal import  medfilt
@@ -368,61 +640,73 @@ class grouping(fourdvel):
 
         return
 
-    def add_verti_rutford(self):
+    def create_grid_set_velo_3d_rutford(self):
 
-        print('Add vertical component to grid set model...')
+        print('Add vertical component to grid set reference velocity model...')
 
-        ###### Load in the ice shelf map with 100m x 100m resolution ####
-        shelf_xyz = "/net/kraken/bak/mzzhong/Ant_Data/GroundingLines/bedmap2_shelf_latlon.xyz"
-        f = open(shelf_xyz,"r")
-        shelf_points = f.readlines()
-
-        ######## Provide the third component.
-        grid_set_velo_2d = self.grid_set_velo_2d
-        grid_set_velo_name = self.grid_set_velo_name
-
-        grid_set_velo_name = grid_set_velo_name + '_' + str(self.resolution)
-
-        print(len(grid_set_velo_2d))
-
-        #test_point = (-76, -76.8)
+        redo = 0
         key = (-8100000,-7900000)
 
-        all_points = grid_set_velo_2d.keys()
-        grid_set_velo_3d = {}
+        if not os.path.exists(self.grid_set_velo_3d_pkl_name) or redo==1:
 
-        # Make a copy of 2d, and set vert to be 0 by default
-        for point in all_points:
-            grid_set_velo_3d[point] = grid_set_velo_2d[point]
-            grid_set_velo_3d[point].append(0)
-        print("total grid points: ", len(grid_set_velo_3d))
+            ###### Load in the ice shelf map with 100m x 100m resolution ####
+            shelf_xyz = self.rutford_shelf_grid_points
+            f = open(shelf_xyz,"r")
+            shelf_points = f.readlines()
     
-        # Loop through all point in shelf
-        count = 0
-        count_out = 0
-        for line in shelf_points:
-            count_out+=1
-            if count_out%10000==0:
-                print(count_out, len(shelf_points))
+            ######## Provide the third component.
+            grid_set_velo_2d = self.grid_set_velo_2d
+            print("Length of grid_set_velo_2d: ", len(grid_set_velo_2d))
+    
+    
+            all_points = grid_set_velo_2d.keys()
+            grid_set_velo_3d = {}
+    
+            # Make a copy of 2d, and set vert to be 0 by default
+            for point in all_points:
+                grid_set_velo_3d[point] = grid_set_velo_2d[point]
+                grid_set_velo_3d[point].append(0)
+            print("total grid points: ", len(grid_set_velo_3d))
+        
+            # Loop through all point in shelf
+            count = 0
+            count_out = 0
+            for line in shelf_points:
+                count_out+=1
+                if count_out%10000==0:
+                    print(count_out, len(shelf_points))
+    
+                lon, lat, vert = [float(x) for x in line.split()]
+    
+                point = (self.round_int_5dec(lon), self.round_int_5dec(lat))
+    
+                # Set the third component
+                if point in grid_set_velo_3d.keys():
+                    grid_set_velo_3d[point][2] = vert
+                    count +=1
+    
+            print("test point: ", key, grid_set_velo_3d[key])
+            print("set vertical count: ", count)
+            print("total grid points: ", len(grid_set_velo_3d))
 
-            lon, lat, vert = [float(x) for x in line.split()]
+            self.grid_set_velo_3d = grid_set_velo_3d
 
-            point = (self.round_int_5dec(lon), self.round_int_5dec(lat))
+            with open(self.grid_set_velo_3d_pkl_name, 'wb') as f:
+                pickle.dump(self.grid_set_velo_3d , f)
 
-            # Set the third component
-            if point in grid_set_velo_3d.keys():
-                grid_set_velo_3d[point][2] = vert
-                count +=1
+        else:
+            print(self.grid_set_velo_3d_pkl_name, "exists.")
+            print("Loading...")
+            with open(self.grid_set_velo_3d_pkl_name, 'rb') as f:
+                grid_set_velo_3d = pickle.load(f)
 
-        print("test point: ", key, grid_set_velo_3d[key])
-        print("set vertical count: ", count)
-        print("total grid points: ", len(grid_set_velo_3d))
+            self.grid_set_velo_3d = grid_set_velo_3d
 
-        with open(grid_set_velo_name + '_3d' + '.pkl', 'wb') as f:
-            pickle.dump(grid_set_velo_3d,f)
-
-        print('Done with 3d velocity fields')
-
+            print("test point: ", key, self.grid_set_velo_3d[key])
+            print("total grid points: ", len(self.grid_set_velo_3d))
+    
+        print('Done with 3d reference velocity model')
+    
         ##################
         write_to_file = True
         if write_to_file:
@@ -436,139 +720,37 @@ class grouping(fourdvel):
                 if not np.isnan(value) and value>0:
                     f.write(str(self.int5d_to_float(lon))+' '+str(self.int5d_to_float(lat))+' '+str(value)+'\n')
 
-        f.close()
+            f.close()
 
-    def velo_model(self):
+        return 0
+
+    def create_grid_set_ref_velo_model(self):
+
+        self.get_grid_set_velo_info()
 
         # 2D
-        self.match_velo_v2_to_grid_set()
         self.create_grid_set_velo_2d()
 
         # 3D
         if self.proj == "Evans":
-            self.add_verti_evans()
+            self.create_grid_set_velo_3d_evans()
 
         if self.proj == "Rutford":
-            self.add_verti_rutford()
+            self.create_grid_set_velo_3d_rutford()
 
     ##############################################
 
-    def grid_tiles(self):
-
-        grid_set = self.grid_set
-
-        if self.proj=="Rutford":
-
-            ############ Rutford ###############
-            # Rutford bounding box
-            west = self.round_int_5dec(-88)
-            east = self.round_int_5dec(-79)
-            north = self.round_int_5dec(-76.2)
-            south = self.round_int_5dec(-79.4)
-    
-            # For 500m resolution
-            if self.resolution == 500:
-                tile_lon_step = 1
-                tile_lat_step = 0.2
-    
-            # For 100m resolution
-            if self.resolution == 100:
-                tile_lon_step = 0.2
-                tile_lat_step = 0.04
-            ##################################
-        
-        elif self.proj=="Evans":
-
-            ########## Evans ###################
-            # Evans bounding box.
-            west = self.round_int_5dec(-85)
-            east = self.round_int_5dec(-69)
-            north = self.round_int_5dec(-74.2)
-            south = self.round_int_5dec(-77.6)
-    
-            # For 500m resolution
-            tile_lon_step = 0.5
-            tile_lat_step = 0.1
-
-        ################################################
-
-        tile_lon_step_int = self.round_int_5dec(tile_lon_step)
-        tile_lat_step_int = self.round_int_5dec(tile_lat_step)
-
-        tile_lon_num = np.round(tile_lon_step/self.lon_step)
-        tile_lat_num = np.round(tile_lat_step/self.lat_step)
-
-        # Coordinates within a tile 
-        sub_lon_list = np.arange(tile_lon_num) * self.lon_step_int
-        sub_lat_list = np.arange(tile_lat_num) * self.lat_step_int
-
-        print(sub_lon_list, len(sub_lon_list))
-        print(sub_lat_list, len(sub_lat_list))
-    
-        count = 0
-        tile_set = {}
-        
-        for tile_lon in np.arange(west, east+1, tile_lon_step_int):
-            
-            for tile_lat in np.arange(south, north+1, tile_lat_step_int):
-
-                location = (tile_lon,tile_lat)
-                #print(location)
-
-                tile_set[location] = []
-
-                tile_west = tile_lon
-                tile_south = tile_lat
-
-                lon_list = (tile_west + sub_lon_list).astype(int)
-                lat_list = (tile_south + sub_lat_list).astype(int)
-
-                for lon in lon_list:
-                    for lat in lat_list:
-                        
-                        point = (lon, lat)
-                        if point in grid_set.keys():
-                            count = count + 1
-                            tile_set[location].append(point)
-
-        print("total number of points added in tiles: ", count)
-        print("total number of points in grid set: ", len(grid_set))
-        print("total number of tried tiles: ", len(tile_set))
-
-        # Remove empty tiles.
-        empty_tiles = []
-        for tile in tile_set.keys():
-            if len(tile_set[tile])==0:
-                empty_tiles.append(tile)
-
-        for tile in empty_tiles:
-            tile_set.pop(tile)
-
-        print("total number of tiles ", len(tile_set))
-        
-        print("Save the tile set...")
-        
-        if self.proj == "Rutford":
-            prefix = "tile_set_csk-r"
-        elif self.proj == "Evans":
-            prefix = "tile_set_csk-e"
-        else:
-            print(stop)
-
-        pkl_name = './pickles/' + prefix + "_" + str(self.resolution) + "_lon_" + str(tile_lon_step) + "_lat_" + str(tile_lat_step) + '.pkl'
-        
-        with open(pkl_name,'wb') as f:
-            pickle.dump(tile_set,f)
 
 def main():
     
     group = grouping()
 
+    # Generate tiles
+    group.create_grid_set_tiles()
+
     # Generate secular velocity model.
-    #group.velo_model()
+    group.create_grid_set_ref_velo_model()
     
-    # Find tiles.
-    group.grid_tiles()
 
 if __name__=='__main__':
     main()

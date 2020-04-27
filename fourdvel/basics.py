@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# Author: Minyan Zhong
+# Development starts in Aug, 2018
+
 import numpy as np
 import datetime
 import math
@@ -8,22 +11,31 @@ class basics():
 
     def __init__(self):
 
+        # Set directories
         self.pickle_dir = '/net/kamb/ssd-tmp1/mzzhong/insarRoutines/pickles'
+        self.estimations_dir = '/net/kamb/ssd-tmp1/mzzhong/insarRoutines/estimations'
+        self.Ant_Data_dir = '/net/kraken/bak/mzzhong/Ant_Data'
 
-        # Time origin
+        self.INT_NAN = -99999
+
+        self.datasets = ["csk","s1"]
+
+        # Time origin (important)
         self.t_origin = datetime.datetime(1992,1,1,0,0,0,0)
 
         # Tides
-        self.tides = ['K2','S2','M2','K1','P1','O1','Mf','Msf','Mm','Ssa','Sa', 'M4', 'S4', 'MS4']
-
         self.tide_periods = {}
         tide_periods = self.tide_periods
         tide_periods['K2'] = 0.49863484
         tide_periods['S2'] = 0.50000000
         tide_periods['M2'] = 0.51752505
+        tide_periods['N2'] = 0.52743115
+
         tide_periods['K1'] = 0.99726967
         tide_periods['P1'] = 1.00274532
         tide_periods['O1'] = 1.07580578
+        tide_periods['Q1'] = 1.11951458
+
         tide_periods['Mf'] = 13.66083078
         tide_periods['Msf'] = 14.76529444
         tide_periods['Mm'] = 27.55463190
@@ -33,6 +45,11 @@ class basics():
         tide_periods['M4'] = tide_periods['M2']/2 
         tide_periods['S4'] = tide_periods['S2']/2
         tide_periods['MS4'] = 1/(1/tide_periods['M2'] + 1/tide_periods['S2'])
+
+        self.tide_short_period_members = ["K2","S2","M2","N2","K1","P1","O1","Q1"]
+        self.tide_long_period_members = ["Mf","Msf","Mm","SSa","Sa"]
+
+        self.tides = list(tide_periods.keys())
 
         self.tide_omegas = {}
         for tide_name in self.tides:
@@ -91,9 +108,16 @@ class basics():
         print(np.asarray(x)/10**5)
         return 0
 
+    def point2str(self, x):
+        lon, lat = x
+        return str(lon)+'_'+str(lat)
+
     def float_lonlat_to_int5d(self,x):
         lon, lat = x
         return (int(round(lon*10**5)), int(round(lat*10**5)))
+
+    def round_to_grid_points(self, x, re):
+        return np.round(x * re)/re
 
     def comp_name(self,comp):
 
