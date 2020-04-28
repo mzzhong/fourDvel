@@ -353,11 +353,13 @@ class simulation(fourdvel):
         tidesRut_params = self.tidesRut_params
         syn_tidesRut = self.syn_tidesRut
 
-        # Secular velcity.
+        # Load information by velolocity model.
+        # Velocity model
         secular_v_e = velo_model[0]
         secular_v_n = velo_model[1]
         secular_v_u = 0
 
+        # Vertical up size
         verti_ratio = velo_model[2]
 
         #print(secular_v_e, secular_v_n)
@@ -603,7 +605,6 @@ class simulation(fourdvel):
 
             model_vec = np.asarray(model_vec)[:,None]
 
-
             # Obtain stacked matrix
             stacked_design_mat_EN_ta, stacked_design_mat_EN_tb, stacked_design_mat_U_ta, stacked_design_mat_U_tb = self.stack_design_mat_set[point]
 
@@ -614,6 +615,9 @@ class simulation(fourdvel):
             velo_model = self.grid_set_velo[point]
             tide_height_master = tide_height_master_model * velo_model[2]
             tide_height_slave = tide_height_slave_model * velo_model[2]
+
+            # Signature 1, grounding
+            grounding_indicator = velo_model[3]
 
             # Note that the stacked design mat/up displacement may be empty 
             # because there is no data.
@@ -655,17 +659,22 @@ class simulation(fourdvel):
                 #print(velo_model)
                 #print(stop)
                    
-    
                 # Grounding
-                dis_U_ta[dis_U_ta < self.grounding] = self.grounding
-                dis_U_tb[dis_U_tb < self.grounding] = self.grounding
+                # When grounding_indicator is 1:
+                if grounding_indicator == 1:
+                    dis_U_ta[dis_U_ta < self.grounding] = self.grounding
+                    dis_U_tb[dis_U_tb < self.grounding] = self.grounding
+                    #print(self.grounding)
+                    #print(stop)
     
                 # Find offset
                 offset_EN = dis_EN_tb - dis_EN_ta
                 offset_U = dis_U_tb - dis_U_ta
-    
+   
+                # Form the 3d offset 
                 offset_ENU = np.vstack((np.transpose(offset_EN.reshape(n_offsets,2)), np.transpose(offset_U)))
     
+                # Add secular components
                 for i in range(n_offsets):
                     t_a = (offsetfields[i][0] - t_origin).days + round(offsetfields[i][4],4)
                     t_b = (offsetfields[i][1] - t_origin).days + round(offsetfields[i][4],4)

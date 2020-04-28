@@ -39,6 +39,14 @@ class grouping(fourdvel):
         # for Ruford
         self.rutford_shelf_grid_points = self.Ant_Data_dir + "/GroundingLines/bedmap2_shelf_latlon.xyz"
 
+        # test_point
+        if self.proj == "Rutford":
+            self.test_point = (-8100000,-7900000)
+        elif self.proj == "Evans":
+            self.test_point = (-7700000, -7680000)
+        else:
+            raise Exception()
+
         # End of __init__
 
     # Preparing logistics for fourdvel inversion
@@ -204,16 +212,8 @@ class grouping(fourdvel):
             print("Done")
 
         print("Output a test point")
-
-        if self.proj == "Rutford":
-            key = (-8100000,-7900000)
-            print("Test point: ",key)
-            print(self.grid_set[key])
-
-        elif self.proj == "Evans":
-            key = (-7700000, -7680000)
-            print("Test point: ",key)
-            print(self.grid_set[key])
+        print("Test point: ",self.test_point)
+        print(self.grid_set[self.test_point])
 
         return 0
 
@@ -591,7 +591,7 @@ class grouping(fourdvel):
 
         print(len(grid_set_velo_2d))
 
-        test_point = (-7600000, -7680000)
+        test_point = self.test_point
         all_points = grid_set_velo_2d.keys()
         grid_set_velo_3d = {}
         for point in all_points:
@@ -645,7 +645,7 @@ class grouping(fourdvel):
         print('Add vertical component to grid set reference velocity model...')
 
         redo = 0
-        key = (-8100000,-7900000)
+        key = self.test_point
 
         if not os.path.exists(self.grid_set_velo_3d_pkl_name) or redo==1:
 
@@ -740,6 +740,66 @@ class grouping(fourdvel):
 
     ##############################################
 
+    def add_signatures_grid_set_ref_velo_model(self):
+        
+        print('Provide additional signatures to the reference velocity model...')
+
+        redo = 1
+        if redo==1:
+
+            grid_set_velo_3d = self.grid_set_velo_3d
+            print("Length of grid_set_velo_3d: ", len(grid_set_velo_3d))
+    
+            all_points = grid_set_velo_3d.keys()
+    
+            # Set the center of grounding zone
+            center = (-82.7956, -78.6127)
+            radius = 10 #km
+            count = 0
+            for point in all_points:
+                # add the 4th component
+                if len(grid_set_velo_3d[point])==3:
+                    grid_set_velo_3d[point].append(0)
+
+                point_float = self.int5d_to_float(point)
+                dist = self.latlon_distance(point_float[0], point_float[1], center[0], center[1])
+
+                if dist < radius:
+                    grid_set_velo_3d[point][3]=1
+                    count+=1
+            
+            print("total_grid points: ", len(grid_set_velo_3d))
+            print("test point: ", self.test_point, grid_set_velo_3d[self.test_point])
+            print("set signature count: ", count)
+            print("total grid points: ", len(grid_set_velo_3d))
+
+            self.grid_set_velo_3d = grid_set_velo_3d
+
+            with open(self.grid_set_velo_3d_pkl_name, 'wb') as f:
+                pickle.dump(self.grid_set_velo_3d , f)
+
+        print('Done with adding signatures to 3d reference velocity model')
+
+        print("test point: ", self.test_point, self.grid_set_velo_3d[self.test_point])
+        print("total grid points: ", len(self.grid_set_velo_3d))
+ 
+    
+        ##################
+        write_to_file = True
+        if write_to_file:
+            xyz_file = '/home/mzzhong/insarRoutines/estimations/grid_set_velo_3d_signature.xyz'
+            f = open(xyz_file,'w')
+            for key in sorted(grid_set_velo_3d.keys()):
+                lon, lat = key
+                value = np.sqrt(grid_set_velo_3d[key][3])
+
+                # Only save values larger than zero.
+                if not np.isnan(value):
+                    f.write(str(self.int5d_to_float(lon))+' '+str(self.int5d_to_float(lat))+' '+str(value)+'\n')
+
+            f.close()
+
+        return 0
 
 def main():
     
@@ -750,6 +810,9 @@ def main():
 
     # Generate secular velocity model.
     group.create_grid_set_ref_velo_model()
+
+    # Add additional signatures to the velo model
+    #group.add_signatures_grid_set_ref_velo_model()
     
 
 if __name__=='__main__':

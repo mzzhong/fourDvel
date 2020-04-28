@@ -687,8 +687,6 @@ class fourdvel(basics):
             print("grid set file missing: ", self.grid_set_pkl_name)
             raise Exception()
 
-
-
     def coverage(self): 
 
         # Show the coverage of grid points. 

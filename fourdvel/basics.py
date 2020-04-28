@@ -55,7 +55,7 @@ class basics():
         for tide_name in self.tides:
             self.tide_omegas[tide_name] = 2*np.pi/tide_periods[tide_name]
 
-    def latlon_distance(self, lon1,lat1,lon2,lat2):
+    def latlon_distance(self,lon1,lat1,lon2,lat2):
         
         R = 6371
         lat1 = np.deg2rad(lat1)
@@ -226,7 +226,7 @@ class basics():
         elif self.proj == "Evans":
 
             # CSK.
-            fid = open('/net/kamb/ssd-tmp1/mzzhong/insarRoutines/csk_times.txt')
+            fid = open('/net/kraken/nobak/mzzhong/CSK-Evans/csk_times.txt')
             csk_times = fid.readlines()
             fid.close()
     
