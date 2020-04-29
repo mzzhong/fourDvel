@@ -246,8 +246,6 @@ class driver_fourdvel():
                 # Count the run tiles
                 count_run = count_run + 1
 
-        self.f.write("count run: " + str(count_run))
-        self.f.write("count tile: " + str(count_tile))
         print("count run: " + str(count_run))
         print("count tile: " + str(count_tile))
 
@@ -271,8 +269,6 @@ class driver_fourdvel():
         tile_set = tasks.tile_set
 
         # Count the number of tiles
-        self.f = open("tile_counter.txt","w")
-
         do_calculation = True
 
         if do_calculation:
@@ -339,8 +335,6 @@ class driver_fourdvel():
             for ip in range(nthreads):
                 jobs[ip].join()
 
-            self.f.close()
-    
             # Convert the results to normal dictionary.
             # Save the results to the class.
             print("Saving the results...")
