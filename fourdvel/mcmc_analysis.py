@@ -11,8 +11,6 @@ import multiprocessing
 from fourdvel import fourdvel
 from display import display
 
-import utm
-
 import matplotlib.pyplot as plt
 import collections
 
@@ -36,7 +34,7 @@ class mcmc_analysis(fourdvel):
         self.get_grid_set_velo()
         test_id = self.test_id
 
-        result_folder = '/home/mzzhong/insarRoutines/estimations'
+        result_folder = self.estimations_dir
         self.this_result_folder = os.path.join(result_folder,str(test_id))
 
         self.display = display(sys.argv[1]) 

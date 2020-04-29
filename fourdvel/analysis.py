@@ -10,13 +10,10 @@ import numpy as np
 import scipy
 import multiprocessing
 from display import display
-import utm
+
 import matplotlib.pyplot as plt
-
 import datetime
-
 import functools
-
 from configure import configure
 
 class analysis(configure):
@@ -40,8 +37,8 @@ class analysis(configure):
 
         test_id = self.test_id
 
-        result_folder = '/home/mzzhong/insarRoutines/estimations'
-        self.this_result_folder = os.path.join(result_folder,str(test_id))
+        result_folder = self.estimations_dir
+        self.this_result_folder = os.path.join(result_folder, str(test_id))
 
         # Load the reuslts
         self.load_everything()

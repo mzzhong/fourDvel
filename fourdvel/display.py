@@ -338,7 +338,7 @@ class display(fourdvel):
             #        cells[ir,ic]._loc = 'center'
             #plt.show()
 
-            fig.savefig(os.path.join('/home/mzzhong/insarRoutines/fig_sim',label+'_'+comp_name[0]+'.png'), format='png')
+            fig.savefig(os.path.join(self.estimation_dir,label+'_'+comp_name[0]+'.png'), format='png')
 
         return 0
 
@@ -353,7 +353,7 @@ class display(fourdvel):
         ax.hist(resid[1:-1:2])
         ax.set_title('azimuth')
 
-        plt.savefig(os.path.join('/home/mzzhong/insarRoutines/fig_sim',label+'_'+'resid.png'), format='png')
+        plt.savefig(os.path.join(self.estimation_dir,label+'_'+'resid.png'), format='png')
 
         plt.close()
 
@@ -389,7 +389,7 @@ class display(fourdvel):
         
             it = it + 1
 
-        fig.savefig('./fig_sim/model_mat.png',format='png')
+        fig.savefig(self.estimation_dir + '/model_mat.png',format='png')
         
         return 0
 

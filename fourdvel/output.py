@@ -9,8 +9,6 @@ import multiprocessing
 from fourdvel import fourdvel
 from display import display
 
-import utm
-
 import matplotlib.pyplot as plt
 import collections
 
@@ -86,9 +84,9 @@ class output(fourdvel):
         this_result_folder = self.estimation_dir
         # Load all the results.
         if prefix == 'true':
-            filename = '/home/mzzhong/insarRoutines/estimations/'+str(num)+'/'+str(num)+'_grid_set_true_tide_vec.pkl'
+            filename = self.estimations_dir +'/'+str(num)+'/'+str(num)+'_grid_set_true_tide_vec.pkl'
         else:
-            filename = '/home/mzzhong/insarRoutines/estimations/'+str(num)+'/'+str(num)+'_grid_set_tide_vec.pkl'
+            filename = self.estimations_dir +'/'+str(num)+'/'+str(num)+'_grid_set_tide_vec.pkl'
            
         with open(filename,'rb') as f:
             self.grid_set_master_model_tide_vec = pickle.load(f)
@@ -100,9 +98,9 @@ class output(fourdvel):
         # Load all the results.
 
         if prefix == 'true':
-            filename = '/home/mzzhong/insarRoutines/estimations/'+str(num)+'/'+str(num)+'_grid_set_true_tide_vec.pkl'
+            filename = self.estimations_dir + '/' + str(num)+'/'+str(num)+'_grid_set_true_tide_vec.pkl'
         else:
-            filename = '/home/mzzhong/insarRoutines/estimations/'+str(num)+'/'+str(num)+'_grid_set_tide_vec.pkl'
+            filename = self.estimations_dir + '/' + str(num)+'/'+str(num)+'_grid_set_tide_vec.pkl'
  
         with open(filename,'rb') as f:
             self.grid_set_slave_model_tide_vec = pickle.load(f)
@@ -247,7 +245,7 @@ class output(fourdvel):
 
         return 0
 
-    def output_estimations(self):
+    def output_estimations(self, output_states):
 
         modeling_tides = self.modeling_tides
         n_modeling_tide = self.n_modeling_tides
@@ -339,8 +337,7 @@ class output(fourdvel):
         # Look through the sets
         phase_center = {}
 
-        for state in ["true","est","uq"]:
-        #for state in ["est"]:
+        for state in output_states:
            
             print("current state: ", state)
             
@@ -495,19 +492,15 @@ def main():
 
     out = output()
 
-    out_nums = [1,2,3]
-    #out_nums = [3]
-    #out_nums = [11]
-
-    # Analysis the results.
-    if 1 in out_nums:
-        out.output_estimations()
+    output_states = []
+    if out.output_true: output_states.append("true")
+    if out.output_est:  output_states.append("est")
+    if out.output_uq:   output_states.append("uq")
+    out.output_estimations(output_states)
  
-    if 2 in out_nums:
-        out.output_residual()
+    if out.output_resid: out.output_residual()
 
-    if 3 in out_nums:
-
+    if out.output_difference:
         if out.proj=="Evans":
             # Evans
             out.output_differences(compare_id=620, compare_prefix='true')
@@ -517,8 +510,7 @@ def main():
         else:
             raise Exception()
 
-    if 11 in out_nums:
-        out.output_analysis()
+    if out.output_analysis: out.output_analysis()
 
 if __name__=='__main__':
     main()

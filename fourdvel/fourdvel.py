@@ -9,6 +9,7 @@ import os
 import sys
 import pickle
 import time
+import pathlib
 
 import numpy as np
 
@@ -158,6 +159,16 @@ class fourdvel(basics):
             except:
                 continue
 
+            if name == 'pickle_dir':
+                self.pickle_dir = value
+                print('pickle_dir',value)
+                pathlib.Path(self.pickle_dir).mkdir(exist_ok=True)
+
+            if name == 'estimations_dir':
+                self.estimations_dir = value
+                print('estimations_dir',value)
+                pathlib.Path(self.estimations_dir).mkdir(exist_ok=True)
+
             if name == 'proj':
                 self.proj = value
                 print('proj',value)
@@ -183,25 +194,17 @@ class fourdvel(basics):
                 test_point_file = value
 
                 f_test_point = open(test_point_file)
-                
                 test_point_lines = f_test_point.readlines()
-
-                #print(test_point_lines)
-                
                 f_test_point.close()
                 
                 for test_point_line in test_point_lines:
-                    #print(test_point_line)
                     try:    
                         name1,value1 = test_point_line.split(':')
-                        #print(name1, value1)
-
                         name1 = name1.strip()
                         value1 = value1.strip()
                     except:
                         continue
 
-                    #print("Hey: ",name1, value1)
                     if name1=="test_point" and value1!="None":
                         the_point = [float(x) for x in value1.split(",")]
                         self.test_point = self.float_lonlat_to_int5d(the_point)
@@ -225,21 +228,9 @@ class fourdvel(basics):
                 self.test_mode = int(value)
                 print('test_mode',value)
 
-            #if name == 'grid_set_name':
-            #    self.grid_set_name = value
-            #    print('grid_set_name: ',value)
-
             if name == 'resolution':
                 self.resolution = int(value)
                 print('resolution: ',value)
-
-            #if name == 'grid_set_velo_name':
-            #    self.grid_set_velo_name = value
-            #    print('grid_set_velo_name: ',value)
-
-            #if name == 'tile_set_name':
-            #    self.tile_set_name = value
-            #    print('tile_set_name: ',value)
 
             if name == 'grid_set_data_uncert_name':
                 self.grid_set_data_uncert_name = value
@@ -249,16 +240,18 @@ class fourdvel(basics):
                 self.data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
                 print('data_uncert_const: ',self.data_uncert_const)
 
-            if name == 'est_dict_name':
-                self.est_dict_name = value
-                print('est_dict_name: ',value)
+            if name == "bbox":
+                borders = [ s.strip() for s in value.split(",") ]
+                self.bbox = [ None if border=="None" else self.float_to_int5d(float(border)) for border in borders]
+                self.bbox_s, self.bbox_n, self.bbox_e, self.bbox_w = self.bbox
+
+                print('bbox: ',self.bbox)
 
             if name == 'use_s1':
                 if value == 'True':
                     self.use_s1 = True
                 else:
                     self.use_s1 = False
-
                 print('use_s1: ',value)
 
             if name == 's1_start':
@@ -356,6 +349,49 @@ class fourdvel(basics):
                 self.analysis_name = value
                 print("analysis_name: ",self.analysis_name)
 
+            ## Output ###
+            if name == "output_true":
+                if value == 'True':
+                    self.output_true = True
+                else:
+                    self.output_true = False
+                print('output_true: ',value)
+
+            if name == "output_est":
+                if value == 'True':
+                    self.output_est = True
+                else:
+                    self.output_est = False
+                print('output_est: ',value)
+
+            if name == "output_uq":
+                if value == 'True':
+                    self.output_uq = True
+                else:
+                    self.output_uq = False
+                print('output_uq: ',value)
+
+            if name == "output_resid":
+                if value == 'True':
+                    self.output_resid = True
+                else:
+                    self.output_resid = False
+                print('output_resid: ',value)
+
+            if name == "output_difference":
+                if value == 'True':
+                    self.output_difference = True
+                else:
+                    self.output_difference = False
+                print('output_difference: ',value)
+
+            if name == "output_analysis":
+                if value == 'True':
+                    self.output_analysis = True
+                else:
+                    self.output_analysis = False
+                print('output_analysis: ',value)
+
         print("Done with reading parameters")
         return 0
             
@@ -371,9 +407,7 @@ class fourdvel(basics):
         csk_end = self.csk_end
 
         # Not all data are available, currently, so I read the files exported from E-GEOS. I will switch to real data
-        #file_folder = '/home/mzzhong/links/kraken-nobak-net/CSKData/data_20171116_20180630'
         file_folder = self.csk_log
-
         data_file = os.path.join(file_folder,'all.csv')
 
         csk = CSK_Utils()

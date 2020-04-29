@@ -34,10 +34,11 @@ class driver_fourdvel():
         else:
             raise Exception("A parameter file is required")
 
-        tasks_tasks = ["tides"]
+        tasks_tasks = ["do_nothing", "tides"]
         analysis_tasks = ["prediction_evaluation"]
 
         # Set the task
+        #self.task_name = "do_nothing"
         self.task_name = "tides"
         #self.task_name = "prediction_evaluation"
 
@@ -59,6 +60,37 @@ class driver_fourdvel():
         self.tasks.param_file = param_file
         
         self.estimation_dir = self.tasks.estimation_dir
+
+    def check_point_set_with_bbox(self, point_set):
+
+        lons = []
+        lats = []
+        for point in point_set:
+            lons.append(point[0])
+            lats.append(point[1])
+
+        lons = np.asarray(lons)
+        lats = np.asarray(lats)
+
+        bbox_s, bbox_n, bbox_e, bbox_w = self.tasks.bbox
+
+        if bbox_s is not None:
+            if np.nanmax(lats)<bbox_s:
+                return False
+            
+        if bbox_n is not None:
+            if np.nanmin(lats)>bbox_n:
+                return False
+ 
+        if bbox_e is not None:
+            if np.nanmin(lons)>bbox_e:
+                return False
+
+        if bbox_w is not None:
+            if np.nanmax(lons)<bbox_w:
+                return False
+ 
+        return True
 
     def driver_serial_tile(self, start_tile=None, stop_tile=None, use_threading = False, all_grid_sets=None, threadId=None):
 
@@ -99,26 +131,17 @@ class driver_fourdvel():
 
             #if ((count_tile >= start_tile) and (count_tile < stop_tile) and (test_point is None)):
         
-            #if ((count_tile >= start_tile) and (count_tile < stop_tile) and (test_point is not None) and (test_point in tile_set[tile])):
-            
-            #if (count_tile >= start_tile and count_tile < stop_tile and 
-            #                                            count_tile % 2 == 1):
-
-            # Debug this tile.
-            #if count_tile >= start_tile and count_tile < stop_tile and f_tile == (-81, -79):
-            # Debug this tile.
-            #if count_tile >= start_tile and count_tile < stop_tile and tile == (-84.0, -76.2):
+            #if (count_tile >= start_tile and count_tile < stop_tile and count_tile % 2 == 1):
 
             # Debug this tile for Rutford
             #if count_tile >= start_tile and count_tile < stop_tile and tile == self.float_lonlat_to_int5d((-83.0, -78.6)):
 
 
             ################################################################################
-
                 #print("Find the tile", tile)
-
                 #print('***  Start a new tile ***')
                 #self.print_int5d([lon, lat])
+
 
                 point_set = tile_set[tile] # A list of tuples
 
@@ -139,7 +162,6 @@ class driver_fourdvel():
                     print("test point: ",test_point)
                     print("point_set[0]: ",point_set[0])
                     print("Test point is provided but doesn't match this tile")
-
                     skip_this_tile = True
                     
 
@@ -151,17 +173,22 @@ class driver_fourdvel():
                 #print('tile coordinates: ', tile)
                 #print('Number of points in this tile: ', len(point_set))
 
-                ## Find the union of tracks 
-                # Only consider track_number and satellite which define the offsetfields.
+                # Check if the point_set is in the bbox
+                if not self.check_point_set_with_bbox(point_set):
+                    print("This point set is not in bbox: ", lon, lat)
+                    skip_this_tile = True
+
+                ## Find tracks_set from point_set
                 tracks_set = {}
                 for point in point_set:
                     tracks_set[point] = grid_set[point]
-
 
                 # Run it
                 # Default is False for recording
                 simple_count = True
                 if simple_count == True and skip_this_tile == False:
+
+                    print("Running tile: ", tile)
 
                     ## Tides ###
                     if task_name == "tides":
@@ -208,6 +235,10 @@ class driver_fourdvel():
                         all_sets = tasks.point_set_prediction_evaluation(point_set = point_set, tracks_set = tracks_set)
 
                         all_grid_sets['grid_set_analysis'].update(all_sets['analysis_set'])
+
+                    elif task_name == "do_nothing":
+
+                        pass
 
                     else:
                         raise Exception("Undefined task_name", task_name)
@@ -353,8 +384,9 @@ class driver_fourdvel():
                 tasks.grid_set_analysis.update(all_sets['analysis_set'])
 
         ## Save the final results in dictionary manager
-        forceSaveTides = True
+        forceSaveTides = False
         forceSaveAnalysis = False
+
         if (task_name == "tides" and tasks.single_point_mode == False) or (forceSaveTides):
 
             print("Write results to disk")

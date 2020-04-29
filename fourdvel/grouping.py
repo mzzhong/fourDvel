@@ -626,7 +626,7 @@ class grouping(fourdvel):
         ##################
         write_to_file = True
         if write_to_file:
-            xyz_file = '/home/mzzhong/insarRoutines/estimations/grid_set_velo_3d_verti.xyz'
+            xyz_file = self.pickle_dir +'/grid_set_velo_3d_verti.xyz'
             f = open(xyz_file,'w')
             for key in sorted(grid_set_velo_3d.keys()):
                 lon, lat = key
@@ -710,7 +710,7 @@ class grouping(fourdvel):
         ##################
         write_to_file = True
         if write_to_file:
-            xyz_file = '/home/mzzhong/insarRoutines/estimations/grid_set_velo_3d_verti.xyz'
+            xyz_file = self.pickle_dir + '/grid_set_velo_3d_verti.xyz'
             f = open(xyz_file,'w')
             for key in sorted(grid_set_velo_3d.keys()):
                 lon, lat = key
@@ -787,7 +787,7 @@ class grouping(fourdvel):
         ##################
         write_to_file = True
         if write_to_file:
-            xyz_file = '/home/mzzhong/insarRoutines/estimations/grid_set_velo_3d_signature.xyz'
+            xyz_file = self.pickle_dir + '/grid_set_velo_3d_signature.xyz'
             f = open(xyz_file,'w')
             for key in sorted(grid_set_velo_3d.keys()):
                 lon, lat = key

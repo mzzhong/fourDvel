@@ -6,17 +6,17 @@
 import numpy as np
 import datetime
 import math
+import pathlib
 
 class basics():
 
     def __init__(self):
 
-        # Set directories
-        self.pickle_dir = '/net/kamb/ssd-tmp1/mzzhong/insarRoutines/pickles'
-        self.estimations_dir = '/net/kamb/ssd-tmp1/mzzhong/insarRoutines/estimations'
-        self.Ant_Data_dir = '/net/kraken/bak/mzzhong/Ant_Data'
-
+        # Set NAN value
         self.INT_NAN = -99999
+
+        # Directory of Antarctic data
+        self.Ant_Data_dir = '/net/kraken/bak/mzzhong/Ant_Data'
 
         self.datasets = ["csk","s1"]
 
@@ -103,6 +103,13 @@ class basics():
             return [num/(10**5) for num in x]
         else:
             return x/(10**5)
+
+    def float_to_int5d(self, x):
+
+        if isinstance(x, list) or isinstance(x, tuple):
+            return [int(round(num*10**5)) for num in x]
+        else:
+            return int(round(x*10**5))
 
     def print_int5d(self,x):
         print(np.asarray(x)/10**5)
