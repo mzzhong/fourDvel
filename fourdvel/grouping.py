@@ -23,6 +23,14 @@ class grouping(fourdvel):
 
         super(grouping,self).__init__(param_file)
 
+        # test_point
+        if self.proj == "Rutford":
+            self.test_point = (-8100000,-7900000)
+        elif self.proj == "Evans":
+            self.test_point = (-7700000, -7680000)
+        else:
+            raise Exception()
+
         # Find the corresponding grid_set file
         self.grid_set_pkl_name = self.get_grid_set_info()
         print("Looking for: ",self.grid_set_pkl_name)
@@ -39,13 +47,6 @@ class grouping(fourdvel):
         # for Ruford
         self.rutford_shelf_grid_points = self.Ant_Data_dir + "/GroundingLines/bedmap2_shelf_latlon.xyz"
 
-        # test_point
-        if self.proj == "Rutford":
-            self.test_point = (-8100000,-7900000)
-        elif self.proj == "Evans":
-            self.test_point = (-7700000, -7680000)
-        else:
-            raise Exception()
 
         # End of __init__
 
