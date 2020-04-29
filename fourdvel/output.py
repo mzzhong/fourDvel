@@ -245,7 +245,7 @@ class output(fourdvel):
 
         return 0
 
-    def output_estimations(self, output_states):
+    def output_estimations(self, output_states, quant_list_name):
 
         modeling_tides = self.modeling_tides
         n_modeling_tide = self.n_modeling_tides
@@ -326,7 +326,22 @@ class output(fourdvel):
 #                        'M2_up_displacement_phase',
 #                        'O1_up_displacement_amplitude',
 #                        'O1_up_displacement_phase']
-#
+
+        if quant_list_name == "BM_2017":
+            quant_list = [  'secular_horizontal_speed',
+                            'secular_up_velocity',
+                            'secular_horizontal_velocity',
+    
+                            'M2_up_displacement_amplitude',
+                            'M2_up_displacement_phase',
+                            'O1_up_displacement_amplitude',
+                            'O1_up_displacement_phase',
+     
+                            # Msf
+                            "Msf_horizontal_displacement_group"
+                            ]
+
+
 
         states = {}
         states['true'] = self.grid_set_true_tide_vec
@@ -496,7 +511,13 @@ def main():
     if out.output_true: output_states.append("true")
     if out.output_est:  output_states.append("est")
     if out.output_uq:   output_states.append("uq")
-    out.output_estimations(output_states)
+
+    if len(sys.argv)==3:
+        quant_list_name = sys.argv[2]
+    else:
+        quant_list_name = None
+
+    out.output_estimations(output_states, quant_list_name)
  
     if out.output_resid: out.output_residual()
 
