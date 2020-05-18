@@ -87,7 +87,7 @@ class simulation(fourdvel):
 
         # Horizontal: assume this corresponds to 1 meter /day.
         self.ref_speed = 1
-        # Vertical: assume the vertical scale.
+        # Vertical: assume the vertical scaling factor
         self.verti_scale = 1
 
         # Models are represented in displacement.
@@ -314,21 +314,19 @@ class simulation(fourdvel):
         
         for point in point_set:
 
+            # Velo model for this point
             velo_model = velo_model_set[point]
 
-            #if point==self.test_point:
-            #    print(velo_model)
-            #    print(stop)
-        
+            # Find parameters for this point using the velo model
             (t_axis, secular_v, v, tide_amp, tide_phase) = self.syn_velocity(
                                                             velo_model = velo_model)
 
+            # Save the parameters in the corresponding dicts
             secular_v_set[point] = secular_v
             v_set[point] = v         
             tide_amp_set[point] = tide_amp
             tide_phase_set[point] = tide_phase
        
-
         # Saved to class
         self.t_axis = t_axis
         self.v_set = v_set
@@ -336,14 +334,10 @@ class simulation(fourdvel):
         # Return parameters.
         return (secular_v_set, tide_amp_set, tide_phase_set)
 
-
     def syn_velocity(self, velo_model):
         
         # Tides.
         tide_periods = self.tide_periods
-
-        #print(velo_model)
-        #print(stop)
 
         # Reference speed to tide amplitudes.
         ref_speed = self.ref_speed
@@ -359,11 +353,14 @@ class simulation(fourdvel):
         secular_v_n = velo_model[1]
         secular_v_u = 0
 
-        # Vertical up size
+        # Vertical component scaling factor from the ref model
+        # max value: 1
         verti_ratio = velo_model[2]
 
-        #print(secular_v_e, secular_v_n)
+        # Speed
         secular_speed = np.sqrt(secular_v_e**2 + secular_v_n**2)
+
+        # Velocity vector
         secular_v = (secular_v_e, secular_v_n, secular_v_u)
 
         # Tides
@@ -612,11 +609,13 @@ class simulation(fourdvel):
             tide_height_master_model, tide_height_slave_model = self.up_disp_set[point]
             
             # Scale the up displacement vector
+            # Scaling factor is normalized
             velo_model = self.grid_set_velo[point]
             tide_height_master = tide_height_master_model * velo_model[2]
             tide_height_slave = tide_height_slave_model * velo_model[2]
 
-            # Signature 1, grounding
+            # Signature 1, grounding indicator
+            # 0: no grounding, 1: grounding
             grounding_indicator = velo_model[3]
 
             # Note that the stacked design mat/up displacement may be empty 
@@ -626,13 +625,9 @@ class simulation(fourdvel):
 
             if point == self.test_point:
                 
-                #print(tide_height_master)
-                #print(tide_height_slave)
                 print("master tide height: ", tide_height_master.shape)
                 print("slave tide height: ", tide_height_slave.shape)
                 print(velo_model)
-                #print(stop)
-
 
             if len(stacked_design_mat_EN_ta)==0:
 
@@ -645,36 +640,29 @@ class simulation(fourdvel):
                 dis_EN_tb = np.matmul(stacked_design_mat_EN_tb, model_vec)
 
                 # Find vertical displacement at timing_a, timing_b
-                # Use model
+                # Use parameterized tide model
                 if not self.external_up_disp: 
                     dis_U_ta = np.matmul(stacked_design_mat_U_ta, model_vec)
                     dis_U_tb = np.matmul(stacked_design_mat_U_tb, model_vec)
-                # Use external data
+                # Use external tide model (plain time series)
                 else:
                     dis_U_ta = tide_height_master.reshape(len(tide_height_master),1)
                     dis_U_tb = tide_height_slave.reshape(len(tide_height_slave),1)
 
-                #print(dis_U_ta_1.shape)
-                #print(dis_U_ta_2.shape)
-                #print(velo_model)
-                #print(stop)
-                   
                 # Grounding
                 # When grounding_indicator is 1:
                 if grounding_indicator == 1:
                     dis_U_ta[dis_U_ta < self.grounding] = self.grounding
                     dis_U_tb[dis_U_tb < self.grounding] = self.grounding
-                    #print(self.grounding)
-                    #print(stop)
     
-                # Find offset
+                # Find tide induced offset
                 offset_EN = dis_EN_tb - dis_EN_ta
                 offset_U = dis_U_tb - dis_U_ta
    
-                # Form the 3d offset 
+                # Form the 3d tide induced offset 
                 offset_ENU = np.vstack((np.transpose(offset_EN.reshape(n_offsets,2)), np.transpose(offset_U)))
     
-                # Add secular components
+                # Add the secular components
                 for i in range(n_offsets):
                     t_a = (offsetfields[i][0] - t_origin).days + round(offsetfields[i][4],4)
                     t_b = (offsetfields[i][1] - t_origin).days + round(offsetfields[i][4],4)

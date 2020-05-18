@@ -23,12 +23,12 @@ from multiprocessing import Value
 from configure import configure
 from display import display
 
-class tasks(configure):
+class estimate(configure):
 
     def __init__(self, param_file=None):
 
         if param_file:
-            super(tasks,self).__init__(param_file)
+            super(estimate,self).__init__(param_file)
 
             # Do the preparation to load data
             self.preparation()

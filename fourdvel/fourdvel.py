@@ -28,6 +28,9 @@ class fourdvel(basics):
 
     def __init__(self, param_file=None):
 
+        print(param_file)
+        #assert(1==2)
+
         super(fourdvel,self).__init__()
 
         if param_file is not None:

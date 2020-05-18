@@ -7,6 +7,7 @@ import os
 import sys
 import pickle
 import pathlib
+import argparse
 
 import numpy as np
 
@@ -22,33 +23,46 @@ from multiprocessing import Value
 
 import time
 
-from tasks import tasks
+# Estimation
+from estimate import estimate
+
+# Analysis
 from analysis import analysis
+
+
+def createParser():
+
+    parser = argparse.ArgumentParser( description='driver of fourdvel')
+    
+    parser.add_argument('-p','--param_file', dest='param_file',type=str,help='parameter file',required=True)
+
+    parser.add_argument('-t','--task_name',dest='task_name',type=str, help='task name', required=True)
+
+    return parser
+
+def cmdLineParse(iargs = None):
+    parser = createParser()
+    return parser.parse_args(args=iargs)
 
 class driver_fourdvel():
 
-    def __init__(self, param_file="params.in"):
+    def __init__(self, inps):
 
-        if len(sys.argv)==2:
-            param_file = sys.argv[1]
-        else:
-            raise Exception("A parameter file is required")
+        self.param_file = inps.param_file
+        self.task_name = inps.task_name
 
-        tasks_tasks = ["do_nothing", "tides"]
-        analysis_tasks = ["prediction_evaluation"]
+        self.estimate_tasks = ["do_nothing", "tides_1", "tides_2"]
+        self.analysis_tasks = ["prediction_evaluation"]
 
         # Set the task
-        #self.task_name = "do_nothing"
-        self.task_name = "tides"
-        #self.task_name = "prediction_evaluation"
+        if self.task_name in self.estimate_tasks:
 
-        if self.task_name in tasks_tasks:
-            
-            self.tasks = tasks(param_file)
+            # Will change the class tasks to estimate 
+            self.tasks = estimate(self.param_file)
         
-        elif self.task_name in analysis_tasks:
+        elif self.task_name in self.analysis_tasks:
             
-            self.tasks = analysis(param_file)
+            self.tasks = analysis(self.param_file)
 
             # Set the analysis name
             self.tasks.set_analysis_name(analysis_name = self.tasks.analysis_name)
@@ -57,8 +71,9 @@ class driver_fourdvel():
             raise Exception()
 
         # Set the basics
-        self.tasks.param_file = param_file
+        self.tasks.param_file = self.param_file
         
+        # Get the basics
         self.estimation_dir = self.tasks.estimation_dir
 
     def check_point_set_with_bbox(self, point_set):
@@ -191,12 +206,15 @@ class driver_fourdvel():
                     print("Running tile: ", tile)
 
                     ## Tides ###
-                    if task_name == "tides":
+                    if task_name in self.estimate_tasks:
 
                         recorded = False
 
-                        all_sets = tasks.point_set_tides(point_set = point_set, tracks_set = tracks_set,
-                                                        inversion_method = tasks.inversion_method)
+                        if task_name == "tides_1":
+                            all_sets = tasks.point_set_tides(point_set = point_set, tracks_set = tracks_set,inversion_method = tasks.inversion_method)
+
+                        else:
+                            raise Exception("Undefined task name")
     
                         # Save the results
                         # Update (only for parallel call)
@@ -230,9 +248,14 @@ class driver_fourdvel():
                             raise Exception()
 
                     ## Prediction evaluiation ###
-                    elif task_name == "prediction_evaluation":
+                    elif task_name in self.analysis_tasks:
 
-                        all_sets = tasks.point_set_prediction_evaluation(point_set = point_set, tracks_set = tracks_set)
+                        if task_name == "prediction_evaluation":
+
+                            all_sets = tasks.point_set_prediction_evaluation(point_set = point_set, tracks_set = tracks_set)
+
+                        else:
+                            raise Exception()
 
                         all_grid_sets['grid_set_analysis'].update(all_sets['analysis_set'])
 
@@ -305,7 +328,7 @@ class driver_fourdvel():
             manager = multiprocessing.Manager()
             
             all_grid_sets = {}
-            # task = point_set_tides
+            ## task = point_set_tides
             all_grid_sets['grid_set_true_tide_vec'] = manager.dict()
             all_grid_sets['grid_set_tide_vec'] = manager.dict()
             all_grid_sets['grid_set_tide_vec_uq'] = manager.dict()
@@ -313,7 +336,7 @@ class driver_fourdvel():
             all_grid_sets['grid_set_resid_of_tides'] = manager.dict()
             all_grid_sets['grid_set_other_1'] = manager.dict()
 
-            # task = prediction_evaluation
+            ## task = prediction_evaluation
             all_grid_sets['grid_set_analysis'] = manager.dict()
     
             jobs=[]
@@ -338,7 +361,6 @@ class driver_fourdvel():
             # Convert the results to normal dictionary.
             # Save the results to the class.
             print("Saving the results...")
-            # task_name = point_set_tides
             tasks.grid_set_true_tide_vec = dict(all_grid_sets['grid_set_true_tide_vec'])
             tasks.grid_set_tide_vec = dict(all_grid_sets['grid_set_tide_vec'])
             tasks.grid_set_tide_vec_uq = dict(all_grid_sets['grid_set_tide_vec_uq'])
@@ -381,7 +403,7 @@ class driver_fourdvel():
         forceSaveTides = False
         forceSaveAnalysis = False
 
-        if (task_name == "tides" and tasks.single_point_mode == False) or (forceSaveTides):
+        if (task_name in self.estimate_tasks and tasks.single_point_mode == False) or (forceSaveTides):
 
             print("Write results to disk")
             print("The task is tides")
@@ -407,7 +429,7 @@ class driver_fourdvel():
 
             print("Done")
 
-        elif (task_name == "prediction_evaluation" and tasks.single_point_mode == False) or (forceSaveAnalysis):
+        elif (task_name in self.analysis_tasks and tasks.single_point_mode == False) or (forceSaveAnalysis):
 
             print("Write results to disk")
             print("The task is prediction evaluation")
@@ -420,19 +442,22 @@ class driver_fourdvel():
             print("Done")
 
         else:
-            print("Do not save the results to disk")
+            print("@@ Do not save the results to disk @@")
             print("task_name: ", task_name)
             print("single point mode: ", tasks.single_point_mode)
 
         return 0
 
-def main():
+def main(iargs=None):
 
     # Timer starts.
     start_time = time.time()
 
+    # Parse the paramters
+    inps = cmdLineParse(iargs)
+
     # Create a driver
-    driver = driver_fourdvel()
+    driver = driver_fourdvel(inps)
     
     # Run with tile set
     #driver.driver_serial_tile()

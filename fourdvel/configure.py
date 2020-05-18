@@ -363,7 +363,7 @@ class configure(fourdvel):
                 # Provide the matrix to simulator
                 fourD_sim.set_stack_design_mat_set(stack_design_mat_set)
 
-                # Find the stack of up displacement for simulation
+                # Extract the stack of up displacement from the tide model
                 up_disp_set = self.get_up_disp_set(point_set, offsetfields_set)
 
                 # Provide the up displacement to the simulator
