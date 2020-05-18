@@ -6,6 +6,7 @@
 import os
 import sys
 import pickle
+import shelve
 import time
 
 import numpy as np
@@ -39,7 +40,7 @@ class estimate(configure):
         else:
             raise Exception("Need to provide parameter file to class inversion")
 
-    def point_set_tides(self, point_set, tracks_set, inversion_method=None):
+    def estimate(self, point_set, tracks_set, task_name, inversion_method=None):
 
         ### Get data either from simulation or real data ###
 
@@ -56,8 +57,15 @@ class estimate(configure):
 
         # All variables are dictionary with point_set as the key.
         # Data set formation.
-        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set)=\
-                                                    self.data_set_formation(point_set, tracks_set, test_mode)
+        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set) = self.data_set_formation(point_set, tracks_set, test_mode)
+
+        # Save the obtained data
+        with shelve.open("tmp_data_set.pkl") as db:
+            db["data_info_set"] = data_info_set
+            db["data_vec_set"] = data_vec_set
+            db["noise_sigma_set"] = noise_sigma_set
+            db["offsetfields_set"] = offsetfields_set
+            db["true_tide_vec_set"] = true_tide_vec_set
 
         #print(data_info_set[self.test_point])
 
@@ -167,9 +175,11 @@ class estimate(configure):
             from solvers import Bayesian_MCMC
 
             BMC = Bayesian_MCMC(self.param_file)
-            # Set the point to work on
+            
+            # Set the point_set to work on
             BMC.set_point_set(point_set)
 
+            # Find the linear design mat
             linear_design_mat_set = self.build_G_set(point_set, offsetfields_set=offsetfields_set)
 
             # Set linear tides
@@ -193,7 +203,7 @@ class estimate(configure):
             BMC.set_offsetfields_set(offsetfields_set)
 
             # Stack the design matrix modeling tides
-            stack_design_mat_set = self.get_stack_design_mat_set(point_set, self.design_mat_set, offsetfields_set)
+            stack_design_mat_set = self.get_stack_design_mat_set(point_set, self.model_design_mat_set, offsetfields_set)
 
             # Provide the matrix to simulator
             BMC.set_stack_design_mat_set(stack_design_mat_set)
@@ -240,7 +250,8 @@ class estimate(configure):
             column_names = ['Secular'] + self.modeling_tides
 
             self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
-            print(stop)
+
+            assert(1==3)
 
         ########### Inversion done ##########################
 
@@ -256,3 +267,4 @@ class estimate(configure):
         all_sets['other_set_1'] = other_set_1
 
         return all_sets
+

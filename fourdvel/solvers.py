@@ -6,11 +6,11 @@ import datetime
 from basics import basics
 from fourdvel import fourdvel
 
-#import theano
-#import theano.tensor as tt
-#import pymc3 as pm
-#import seaborn as sns
+import theano
+import theano.tensor as tt
+import pymc3 as pm
 
+import seaborn as sns
 import pickle
 
 plt.style.use('seaborn-darkgrid')

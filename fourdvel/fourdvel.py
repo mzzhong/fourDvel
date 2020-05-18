@@ -928,11 +928,11 @@ class fourdvel(basics):
 
         stack_design_mat_set = {}
         for point in point_set:
-            stack_design_mat_set[point] = self.stack_design_mat_for_point(point, design_mat_set, offsetfields_set[point])
+            stack_design_mat_set[point] = self.get_stack_design_mat_point(point, design_mat_set, offsetfields_set[point])
 
         return stack_design_mat_set
 
-    def stack_design_mat_for_point(self, point, design_mat_set, offsetfields):
+    def get_stack_design_mat_point(self, point, design_mat_set, offsetfields):
 
         # At point level
         # Stack the design matrix for all pairs

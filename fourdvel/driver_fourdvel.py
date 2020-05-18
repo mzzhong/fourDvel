@@ -210,12 +210,8 @@ class driver_fourdvel():
 
                         recorded = False
 
-                        if task_name == "tides_1":
-                            all_sets = tasks.point_set_tides(point_set = point_set, tracks_set = tracks_set,inversion_method = tasks.inversion_method)
+                        all_sets = tasks.estimate(point_set = point_set, tracks_set = tracks_set, task_name = task_name, inversion_method = tasks.inversion_method)
 
-                        else:
-                            raise Exception("Undefined task name")
-    
                         # Save the results
                         # Update (only for parallel call)
                         if use_threading and tasks.inversion_method == 'Bayesian_Linear':
@@ -328,7 +324,7 @@ class driver_fourdvel():
             manager = multiprocessing.Manager()
             
             all_grid_sets = {}
-            ## task = point_set_tides
+            ## estimate_tasks
             all_grid_sets['grid_set_true_tide_vec'] = manager.dict()
             all_grid_sets['grid_set_tide_vec'] = manager.dict()
             all_grid_sets['grid_set_tide_vec_uq'] = manager.dict()
@@ -336,7 +332,7 @@ class driver_fourdvel():
             all_grid_sets['grid_set_resid_of_tides'] = manager.dict()
             all_grid_sets['grid_set_other_1'] = manager.dict()
 
-            ## task = prediction_evaluation
+            ## analysis_tasks
             all_grid_sets['grid_set_analysis'] = manager.dict()
     
             jobs=[]
