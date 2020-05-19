@@ -23,7 +23,7 @@ class Bayesian_Linear(fourdvel):
 
 class Bayesian_MCMC(fourdvel):
 
-    def __init__(self, param_file="params.in"):
+    def __init__(self, param_file):
 
         super(Bayesian_MCMC, self).__init__(param_file)
 
@@ -65,6 +65,9 @@ class Bayesian_MCMC(fourdvel):
     def set_linear_design_mat_set(self, linear_design_mat_set):
 
         self.linear_design_mat_set = linear_design_mat_set
+
+    def set_up_disp_set(self, up_disp_set):
+        self.up_disp_set = up_disp_set
 
     def run_test0(self):
 
@@ -158,8 +161,6 @@ class Bayesian_MCMC(fourdvel):
             print(a2.shape)
             return 0
            
-
-
             print(dir(trace))
             print('a')
             print(type(a))
@@ -178,7 +179,6 @@ class Bayesian_MCMC(fourdvel):
             a = trace2.get_values('x_3')
             plt.plot(a[:,0,0]) 
             plt.savefig('5.png')
-
 
         return 0
 
@@ -318,39 +318,54 @@ class Bayesian_MCMC(fourdvel):
 
         return 0
 
-    def remove_design_mat_cols(self, G, head_offset=3):
+    def remove_design_mat_cols(self, G, secular_included, remove_tidal_up=False):
+
+        # MCMC_linear: secular_included = True
+        # MCMC: secular_included = False
 
         # Record the parameters that go into the inversion
         self.kept_model_vec_entries = []
-
         cols = []
-        # Secular E and N is included in G
-        if head_offset==3:
-            cols.append(G[:,0:3])
+        secular_index_offset = 3
+
+        # Secular E and N are included in G
+        if secular_included:
+            cols.append(G[:,0:secular_index_offset])
             self.kept_model_vec_entries = [0,1,2]
+            heading_offset = secular_index_offset
+        else:
+            heading_offset = 0
 
         for i, tide_name in enumerate(self.modeling_tides):
             for j in range(6):
 
                 # the index in complete model_vec being subset
-                k = head_offset + i*6 + j
-                if self.up_short_period and tide_name in ['Mf','Msf','Mm'] and (j==2 or j==5):
+                k = heading_offset + i*6 + j
+
+                # Constrain long period up to be small
+                if self.up_short_period and tide_name in self.tide_long_period_members and (j==2 or j==5):
                     # Not include this parameter
                     pass
 
-                elif self.horizontal_long_period and tide_name in ['M2','S2','K2','O1','K1','P1'] and (j==0 or j==1 or j==3 or j==4):
+                # Constrain short period horizontal to be small
+                elif self.horizontal_long_period and tide_name in self.tide_short_period_members and (j==0 or j==1 or j==3 or j==4):
 
                     # Not include this parameter
                     pass
+
+                elif remove_tidal_up and (j==2 or j==5):
+
+                    # Not include this parameter
+                    pass
+
                 else:
                     #print(tide_name, j)
                     cols.append(G[:,k][:,None])
-                    # recored this parameters
-                    if head_offset==0:
-                        self.kept_model_vec_entries.append(k+3)
-                    else:
+                    # Record the index of the parameter
+                    if secular_included:
                         self.kept_model_vec_entries.append(k)
-
+                    else:
+                        self.kept_model_vec_entries.append(k + secular_index_offset)
 
         new_G = np.hstack(cols)
 
@@ -371,7 +386,7 @@ class Bayesian_MCMC(fourdvel):
             linear_design_mat = self.linear_design_mat_set[point]
 
             # Subset the design matrix to remove some parameters
-            linear_design_mat = self.remove_design_mat_cols(linear_design_mat)
+            linear_design_mat = self.remove_design_mat_cols(G=linear_design_mat, secular_included=True)
 
             # Print
             #print(linear_design_mat[:,2].tolist())
@@ -445,47 +460,44 @@ class Bayesian_MCMC(fourdvel):
                 pred = pm.math.dot(tt_linear_G, model_vec)
                 pm.Normal('obs', mu = pred, sigma=0.2, observed = data_vec)
 
-
                 # Find the MAP solution
                 map_estimate = pm.find_MAP(model=model)
 
                 # Get model vec that satisfy to original definition
-                model_vec = self.pad_to_model_vec(map_estimate, mode="linear")
+                model_vec = self.pad_to_orig_model_vec(map_estimate, mode="linear")
+                
                 # Save the MAP solution
-                pkl_name = "_".join([self.estimation_dir+"/map_estimate",str(point[0]),str(point[1]),suffix])
+                pkl_name = "_".join([self.estimation_dir+"/map_estimate_BMC_linear",str(point[0]),str(point[1]),suffix])
                 with open(pkl_name + ".pkl","wb") as f:
                     pickle.dump(map_estimate,f)
 
-                #step = pm.Metropolis()
-                #N_draws = 500000
-                #trace = pm.sample(draws=N_draws, step=step, tune=N_draws//2, discard_tuned_samples=True)
-
+                # MCMC Samping
                 N_draws = 4000
                 trace = pm.sample(draws=N_draws, tune=4000)
 
-                ## True model vec
+                # Find the true model vec
                 if true_model_vec_set is not None:
+
+                    # Include both secular & tidal components
                     true_model_vec = true_model_vec_set[point]
 
-                    compressed_true_model_vec = []
-                    # secular & tidal
+                    # Get the compressed model_vec by removing the components
+                    # constrained to be small
+                    compressed_true_model_vec = [] 
                     for ind in self.kept_model_vec_entries:
                         compressed_true_model_vec.append(true_model_vec[ind,0])
 
                     trace.true_model_vec = np.asarray(compressed_true_model_vec)
                 else:
                     trace.true_model_vec = None
-                ## End ##
 
-                ## Save the trace to disk
-                pkl_name = "_".join([self.estimation_dir+"/samples_BMCL",str(point[0]),str(point[1]),suffix])
+                # Save the trace to disk
+                pkl_name = "_".join([self.estimation_dir+"/samples_BMC_linear",str(point[0]),str(point[1]),suffix])
                 with open(pkl_name + ".pkl","wb") as f:
                     pickle.dump(trace,f)
 
-                ##
-
                 pm.traceplot(trace)
-                plt.savefig('2.png')
+                plt.savefig('MCMC_linear.png')
                 
                 # Show the true model vec
                 if true_model_vec_set is not None:
@@ -494,7 +506,7 @@ class Bayesian_MCMC(fourdvel):
 
         return model_vec
 
-    def pad_to_model_vec(self, map_estimate, mode):
+    def pad_to_orig_model_vec(self, map_estimate, mode):
 
         if not mode in ["linear","nonlinear"]:
             raise Exception("Undefined mode")
@@ -524,8 +536,8 @@ class Bayesian_MCMC(fourdvel):
             compressed_model_vec = map_estimate['x']
             model_vec = np.zeros(shape=(self.n_params,1))
 
-            print(compressed_model_vec.shape)
-            print(model_vec.shape)
+            #print(compressed_model_vec.shape)
+            #print(model_vec.shape)
 
             i=0
             print("kept entries: ", self.kept_model_vec_entries)
@@ -535,10 +547,10 @@ class Bayesian_MCMC(fourdvel):
 
             return model_vec
         
+    def run_MCMC(self, run_point, true_model_vec_set=None, task_name=None, suffix=None):
 
-    def run_MCMC(self, run_point, true_model_vec_set=None, suffix=None):
-
-        print('Running Bayesian MCMC...')
+        print("Running Bayesian MCMC...")
+        print("task_name: ", task_name)
 
         for point in self.point_set:
 
@@ -554,16 +566,18 @@ class Bayesian_MCMC(fourdvel):
             # U:  1 * num of offset fields
             d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb = self.stack_design_mat_set[point]
 
-            # Subset the design matrix to remove some parameters according to prior 
-            d_mat_EN_ta = self.remove_design_mat_cols(d_mat_EN_ta, head_offset=0)
-            d_mat_EN_tb = self.remove_design_mat_cols(d_mat_EN_tb, head_offset=0)
-            d_mat_U_ta = self.remove_design_mat_cols(d_mat_U_ta, head_offset=0)
-            d_mat_U_tb = self.remove_design_mat_cols(d_mat_U_tb, head_offset=0)
+            if task_name == "tides_1":
+                remove_tidal_up = False
+            elif task_name == "tides_2":
+                remove_tidal_up = True
+            else:
+                raise Exception()
 
-            #print(d_mat_EN_ta.shape)
-            #print(d_mat_EN_tb.shape)
-            #print(d_mat_U_ta.shape)
-            #print(d_mat_U_tb.shape)
+            # Subset the design matrix to remove some parameters according to prior 
+            d_mat_EN_ta = self.remove_design_mat_cols(G=d_mat_EN_ta, secular_included=False, remove_tidal_up = remove_tidal_up)
+            d_mat_EN_tb = self.remove_design_mat_cols(G=d_mat_EN_tb, secular_included=False, remove_tidal_up = remove_tidal_up)
+            d_mat_U_ta = self.remove_design_mat_cols(G=d_mat_U_ta, secular_included=False, remove_tidal_up = remove_tidal_up)
+            d_mat_U_tb = self.remove_design_mat_cols(G=d_mat_U_tb, secular_included=False, remove_tidal_up = remove_tidal_up)
 
             # Obtain data vector
             data_vec = self.data_vec_set[point]
@@ -578,7 +592,7 @@ class Bayesian_MCMC(fourdvel):
             # Obtain offsetfields
             offsetfields = self.offsetfields_set[point]
 
-            # Form the vectors
+            # Form the necessary vectors
             vecs = np.zeros(shape=(N_data, 3))
             delta_t = np.zeros(shape=(N_offsets,1))
             t_origin = self.t_origin.date()
@@ -615,18 +629,31 @@ class Bayesian_MCMC(fourdvel):
             tt_d_mat_U_ta = theano.shared(d_mat_U_ta)
             tt_d_mat_U_tb = theano.shared(d_mat_U_tb)
 
+            # Up displacement model
+            up_scale = 1
+            tide_height_master_model, tide_height_slave_model = self.up_disp_set[point]
+
+            tide_height_master = tide_height_master_model * up_scale
+            tide_height_slave = tide_height_slave_model * up_scale
+
+            dis_U_ta = tide_height_master.reshape(len(tide_height_master),1)
+            dis_U_tb = tide_height_slave.reshape(len(tide_height_slave),1)
+
+            tt_dis_U_ta = theano.shared(dis_U_ta)
+            tt_dis_U_tb = theano.shared(dis_U_tb)
+
             # Construct the parameter vector
             self.bmc_model = pm.Model()
             with self.bmc_model as model:
 
-                # The model vector
+                # Find the number of tidal model parameters
                 _ , P = d_mat_EN_ta.shape
     
                 # E, N, U
-                self.model_vec_secular = pm.Normal('secular', mu=0, sigma=10, shape=(1,3))
+                self.model_vec_secular = pm.Normal('secular', mu=0, sigma=2, shape=(1,3))
     
                 # Tidal components
-                self.model_vec_tidal = pm.Normal('tidal', mu=0, sigma=10, shape=(P,1))
+                self.model_vec_tidal = pm.Normal('tidal', mu=0, sigma=2, shape=(P,1))
 
                 # Tidal components
                 self.grounding = pm.Normal('grounding', mu=-1, sigma=2, shape=(1,1))
@@ -634,15 +661,25 @@ class Bayesian_MCMC(fourdvel):
                 dis_EN_ta = tt_d_mat_EN_ta.dot(self.model_vec_tidal)
                 dis_EN_tb = tt_d_mat_EN_tb.dot(self.model_vec_tidal)
 
-                dis_U_ta = tt_d_mat_U_ta.dot(self.model_vec_tidal)
-                dis_U_tb = tt_d_mat_U_tb.dot(self.model_vec_tidal)
+                if task_name == "tides_1":
+                    # Based on parameters
+                    dis_U_ta = tt_d_mat_U_ta.dot(self.model_vec_tidal)
+                    dis_U_tb = tt_d_mat_U_tb.dot(self.model_vec_tidal)
+                elif task_name == "tides_2":
+                    # Based on external time series
+                    dis_U_ta = tt_dis_U_ta 
+                    dis_U_tb = tt_dis_U_tb
+                else:
+                    raise Exception()
 
                 # Clipping U here
                 dis_U_ta = tt.clip(dis_U_ta, self.grounding, 100)
                 dis_U_tb = tt.clip(dis_U_tb, self.grounding, 100)
 
-                # Find offset
+                # Find E & N offset
                 offset_EN = dis_EN_tb - dis_EN_ta
+
+                # Find U offset
                 offset_U = dis_U_tb - dis_U_ta
 
                 # Form 2d displacement
@@ -672,31 +709,29 @@ class Bayesian_MCMC(fourdvel):
                 # Observation
                 obs = pm.Normal('obs', mu=pred_vec, sigma=self.sampling_data_sigma, observed=data_vec)
 
-                print('Model is built')
+                print('Model compilaion is done')
                 
                 MAP_or_Sample = "Sample"
                 
-                # MAP solution
+                # Find MAP solution
                 map_estimate = pm.find_MAP(model=model)
 
                 # Get model vec that satisfy to original definition
-                model_vec, grounding = self.pad_to_model_vec(map_estimate, mode="nonlinear")
+                model_vec, grounding = self.pad_to_orig_model_vec(map_estimate, mode="nonlinear")
 
                 # Save the MAP solution
                 pkl_name = "_".join([self.estimation_dir+"/map_estimate_BMC",str(point[0]),str(point[1]),suffix])
                 with open(pkl_name + ".pkl","wb") as f:
                     pickle.dump(map_estimate,f)
 
-                #return (model_vec, grounding)
-
+                # Perform MCMC smapling
                 n_steps = 6000
+                #n_steps = 100
                 if MAP_or_Sample == 'Sample':
-                    #step = pm.Metropolis()
-                    #step = pm.HamiltonianMC()
                     #step = pm.NUTS()
                     trace = pm.sample(n_steps, tune=n_steps,chains=3)
 
-                    ## True model vec
+                    # Save the true model vec to the trace object
                     if true_model_vec_set is not None:
                         true_model_vec = true_model_vec_set[point]
 
@@ -710,21 +745,20 @@ class Bayesian_MCMC(fourdvel):
                         trace.true_model_vec = np.asarray(compressed_true_model_vec)
                     else:
                         trace.true_model_vec = None
-                    ## End ##
 
-                    ## Save the trace to disk
+                    # Save the trace to disk
                     pkl_name = "_".join([self.estimation_dir+"/samples_BMC",str(point[0]),str(point[1]),suffix])
                     with open(pkl_name + ".pkl","wb") as f:
                         pickle.dump(trace,f)
 
+                    # Plot the trace
                     pm.traceplot(trace)
-                    plt.savefig(self.estimation_dir+'/bayes_10.png')
-                    #plt.savefig('bayes_9.pdf')
-                    #print(trace)
+                    plt.savefig(self.estimation_dir+'/MCMC_trace.png')
 
-            # Only do the first point in the point set
+            # Only do the test point in the point set
             return (model_vec, grounding)
 
+    #### Below are pure optimization using scipy ############
     def construct_bounds(self, point):
 
         self.bmc_model = pm.Model()

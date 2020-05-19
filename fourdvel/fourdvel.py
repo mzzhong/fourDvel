@@ -1462,8 +1462,8 @@ class fourdvel(basics):
             
             tide_name = modeling_tides[k]
 
-            # Model_vec terms: cosE, cosN, cosU, sinE, sinN, sinU.
-            # Tide_vec terms:, ampE, ampN, ampU, phaseE, phaseN, phaseU
+            # Model_vec terms: cosE, cosN, cosU, sinE, sinN, sinU. (displacement)
+            # Tide_vec terms:, ampE, ampN, ampU, phaseE, phaseN, phaseU (velocity)
             
             # E N U
             for t in range(3):
@@ -1475,6 +1475,7 @@ class fourdvel(basics):
                 # sin term = amp/w*sin(phi)
 
                 # amp term.
+                #print(tide_vec.shape, 3+k*6+t)
                 amp = tide_vec[3+k*6+t]
 
                 # phase term.

@@ -237,7 +237,8 @@ class configure(fourdvel):
             # Provide the matrix to the simulator
             fourD_sim.set_stack_design_mat_set(stack_design_mat_set)
 
-            # Find the stack of up displacement for simulation
+            # Find the stack of up displacement
+            # Use it for simulation
             up_disp_set = self.get_up_disp_set(point_set, offsetfields_set)
 
             # Provide the up displacement to the simulator
@@ -381,7 +382,7 @@ class configure(fourdvel):
 
                 # True tidal params. (Every point has the value)
                 # velocity domain m/d
-                true_tide_vec_set = fourD_sim.true_tide_vec_set(point_set,secular_v_set,                                    self.modeling_tides, tide_amp_set, tide_phase_set)
+                true_tide_vec_set = fourD_sim.true_tide_vec_set(point_set,secular_v_set,self.modeling_tides, tide_amp_set, tide_phase_set)
 
             # Just use the obtained data
             elif test_mode == 3:

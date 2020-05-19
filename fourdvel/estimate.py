@@ -57,17 +57,20 @@ class estimate(configure):
 
         # All variables are dictionary with point_set as the key.
         # Data set formation.
-        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set) = self.data_set_formation(point_set, tracks_set, test_mode)
+        redo_dataset_formation = 1
+        tmp_dataset_pkl_name = "tmp_point_set_dataset.pkl"
+        if redo_dataset_formation:
 
-        # Save the obtained data
-        with shelve.open("tmp_data_set.pkl") as db:
-            db["data_info_set"] = data_info_set
-            db["data_vec_set"] = data_vec_set
-            db["noise_sigma_set"] = noise_sigma_set
-            db["offsetfields_set"] = offsetfields_set
-            db["true_tide_vec_set"] = true_tide_vec_set
+            all_data_set = self.data_set_formation(point_set, tracks_set, test_mode)
+            # Save the obtained data set
+            with open(tmp_dataset_pkl_name,"wb") as f:
+                pickle.dump(all_data_set,f)
+        else:
+            # Load the obtained data set
+            with open(tmp_dataset_pkl_name,"rb") as f:
+                all_data_set = pickle.load(f)
 
-        #print(data_info_set[self.test_point])
+        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set) = all_data_set
 
         print("Data set formation Done")
 
@@ -189,9 +192,9 @@ class estimate(configure):
             BMC.set_modeling_tides(self.modeling_tides)
             
             # Provide model priors
-            self.up_lower = -10
-            self.up_upper = 10
-            BMC.set_model_priors(model_prior_set=true_tide_vec_set, no_secular_up = self.no_secular_up, up_short_period = self.up_short_period, horizontal_long_period = self.horizontal_long_period, up_lower = self.up_lower, up_upper = self.up_upper)
+            self.up_lower = -4
+            self.up_upper = 0
+            BMC.set_model_priors(model_prior_set = true_tide_vec_set, no_secular_up = self.no_secular_up, up_short_period = self.up_short_period, horizontal_long_period = self.horizontal_long_period, up_lower = self.up_lower, up_upper = self.up_upper)
 
             # Provide data priors
             BMC.set_noise_sigma_set(noise_sigma_set)
@@ -208,15 +211,16 @@ class estimate(configure):
             # Provide the matrix to simulator
             BMC.set_stack_design_mat_set(stack_design_mat_set)
 
+            # Obtain the up displacement
+            up_disp_set = self.get_up_disp_set(point_set, offsetfields_set)
+
+            # Provide the up displacement to the solver
+            BMC.set_up_disp_set(up_disp_set)
+
             # Obtain true model vec from true tide vec
             if self.test_mode in [1,2]:
 
                 true_model_vec_set = self.tide_vec_set_to_model_vec_set(point_set, true_tide_vec_set)
-                # For test
-                #true_tide_vec_set2 = self.model_vec_set_to_tide_vec_set(point_set, true_model_vec_set)
-                #print(true_tide_vec_set[self.test_point])
-                #print(true_tide_vec_set2[self.test_point])
-                #print(stop)
 
             else:
                 true_model_vec_set = None
@@ -224,7 +228,7 @@ class estimate(configure):
             # Run inversion
             est_grounding = None
             if inversion_method=="Bayesian_MCMC":
-                model_vec, est_grounding = BMC.run_MCMC(run_point = self.test_point, true_model_vec_set=true_model_vec_set, suffix=str(self.test_mode))
+                model_vec, est_grounding = BMC.run_MCMC(run_point = self.test_point, true_model_vec_set=true_model_vec_set, task_name = task_name, suffix=str(self.test_mode))
                 print("*** Result of Bayesian MCMC")
                 print(model_vec)
 
@@ -234,22 +238,45 @@ class estimate(configure):
                 print("*** Result of Bayesian MCMC Linear")
                 print(model_vec)
 
-            print("Compare model vec")
-            true_model_vec = true_model_vec_set[self.test_point]
-            print(np.hstack((true_model_vec,bl_model_vec, model_vec)), est_grounding)
+            # Compare model vec and tide_vec
+            stacked_model_vecs = []
+            stacked_tide_vecs = []
+            row_names = []
+            # True model
+            if true_model_vec_set is not None:
+                true_model_vec = true_model_vec_set[self.test_point]
+                true_tide_vec = true_tide_vec_set[self.test_point]
 
-            print("Compare tide vec")
-            true_tide_vec = true_tide_vec_set[self.test_point]
-            bl_tide_vec = self.model_vec_to_tide_vec(bl_model_vec)
+                stacked_model_vecs.append(true_model_vec)
+                stacked_tide_vecs.append(true_tide_vec)
+                row_names.append("Input")
+
+            # Linear model
+            if bl_model_vec.shape[0]>1:
+                bl_tide_vec = self.model_vec_to_tide_vec(bl_model_vec)
+
+                stacked_model_vecs.append(bl_model_vec)
+                stacked_tide_vecs.append(bl_tide_vec)
+                row_names.append("Linear")
+
+            # Non-linear model
             tide_vec = self.model_vec_to_tide_vec(model_vec)
-            print(np.hstack((true_tide_vec,bl_tide_vec, tide_vec)), est_grounding)
 
-            # Display these two
-            stacked_vecs = np.hstack((true_tide_vec, tide_vec))
-            row_names = ['Input','Estimated']
+            stacked_model_vecs.append(model_vec)
+            stacked_tide_vecs.append(tide_vec)
+            row_names.append("Nonlinear")
+
+            print("Compare model vecs")
+            print(np.hstack(stacked_model_vecs))
+            print("Compare tide vec")
+            print(np.hstack(stacked_tide_vecs))
+
+            print("@@ Estimated grounding level @@", est_grounding)
+
+            # Visualize the models in a table
+            stacked_vecs = stacked_tide_vecs
             column_names = ['Secular'] + self.modeling_tides
-
-            self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
+            self.display.display_vecs(stacked_vecs, row_names,column_names, test_id)
 
             assert(1==3)
 
