@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Author: Minyan Zhong
+# Development started in June, 2019
 
 import numpy as np
 import matplotlib.pyplot as plt

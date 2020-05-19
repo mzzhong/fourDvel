@@ -1,71 +1,76 @@
 #!/usr/bin/env python3
 # Author: Minyan Zhong
-# Development starts in July, 2019
+# Development started in July, 2019
 
 import os
-import sys
-
 import pickle
-import numpy as np
-
-import multiprocessing
-
-from fourdvel import fourdvel
-from display import display
-
-import matplotlib.pyplot as plt
 import collections
+
+import numpy as np
+import matplotlib.pyplot as plt
 
 import pymc3 as pm
 
 from scipy.optimize import curve_fit
 from scipy.interpolate import splrep, splev
 
-import sys
+from fourdvel import fourdvel
+from display import display
+
+def createParser():
+
+    parser = argparse.ArgumentParser( description='driver of fourdvel')
+    
+    parser.add_argument('-p','--param_file', dest='param_file',type=str,help='parameter file',required=True)
+
+    parser.add_argument('-t','--true_exist', dest='true_exist',type=bool,help='whether or not true values exist',default=False)
+ 
+    return parser
+
+def cmdLineParse(iargs = None):
+    parser = createParser()
+    return parser.parse_args(args=iargs)
 
 class mcmc_analysis(fourdvel):
 
-    def __init__(self):
+    def __init__(self, inps):
 
-        if len(sys.argv)==1:
-            super(mcmc_analysis,self).__init__()
-        else:
-            print("param file to read: ", sys.argv[1])
-            super(mcmc_analysis,self).__init__(sys.argv[1])
+        param_file = inps.param_file
+        self.true_exist = inps.true_exist
 
+        super(mcmc_analysis,self).__init__(param_file)
+
+        self.get_grid_set_v2()
         self.get_grid_set_velo()
         test_id = self.test_id
 
         result_folder = self.estimations_dir
         self.this_result_folder = os.path.join(result_folder,str(test_id))
 
-        self.display = display(sys.argv[1]) 
-
-        #with open(self.this_result_folder + '/' 
-        #            + str(test_id) + '_' + 'grid_set_tide_vec.pkl','rb') as f:
-        #    self.grid_set_tide_vec = pickle.load(f)
+        self.display = display(param_file) 
 
     def run_map_estimate(self):
 
         point = self.test_point
-        map_estimate_pkl = "_".join(["./estimations/map_estimate_BMC",str(point[0]),str(point[1]),str(self.test_mode)])
-        print(map_estimate_pkl)
+        map_estimate_pkl = "_".join([self.this_result_folder + "/map_estimate_BMC",str(point[0]),str(point[1]),str(self.test_mode)])
+        print("map_estimate_pkl: ", map_estimate_pkl)
 
+        # Load the map results
         with open(map_estimate_pkl + '.pkl', "rb") as f:
-
             map_estimate = pickle.load(f)
 
         secular = map_estimate['secular'][0]
         tidal = map_estimate['tidal'][:,0]
         grounding = map_estimate['grounding'][0]
 
-        amp = 0
-        for i in range((len(tidal)-4)//2):
-            amp += (tidal[2*i]**2 + tidal[2*i+1]**2)**(1/2)
-            print(amp)
+        #amp = 0
+        #for i in range((len(tidal)-4)//2):
+        #    amp += (tidal[2*i]**2 + tidal[2*i+1]**2)**(1/2)
+        #    print(amp)
         
-        print(secular, tidal)
-        print(amp, grounding)
+        print("secular: ",secular)
+        print("tidal: ", tidal)
+        print("grounding: ", grounding)
 
     def axis_config_secular(self, ax):
         pass
@@ -75,14 +80,12 @@ class mcmc_analysis(fourdvel):
 
     def run_samples(self):
 
-        if len(sys.argv)>=3:
-            true_exist=int(sys.argv[2])
-        else:
-            true_exist=1
+        true_exist = self.true_exist
 
         point = self.test_point
         trace_pkl = "_".join([self.estimation_dir+"/samples_BMC",str(point[0]),str(point[1]),str(self.test_mode)])
-        print(trace_pkl)
+        
+        print("trace pickle file: ", trace_pkl)
 
         with open(trace_pkl + '.pkl', "rb") as f:
             trace = pickle.load(f)
