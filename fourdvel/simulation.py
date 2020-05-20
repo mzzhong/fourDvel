@@ -91,11 +91,33 @@ class simulation(fourdvel):
         self.verti_scale = 1
 
         # Models are represented in displacement.
-        model_num = 1
+        model_num = 12
 
         if model_num == 1:
 
             # Model 1
+            # Original
+            # Displacement.        
+            tidesRut_params['K2'] =    [0.31,  163,    29.1,   99]
+            tidesRut_params['N2'] =    [0.32,   163,    30.5,   20]
+            tidesRut_params['S2'] =    [0.363, 184,    101.6,  115]
+            tidesRut_params['M2'] =    [0.259, 177,    156.3,  70]  # M2
+
+            tidesRut_params['K1'] =    [0.19,  79,     49,     73]
+            tidesRut_params['P1'] =    [0.24,  77.0,   16.6,   64]
+
+            tidesRut_params['O1'] =    [0.264, 81.0,   43,     54]  # O1
+            tidesRut_params['Mf'] =    [15.00,  250.0,  2.9,    163] # Mf
+            tidesRut_params['Msf'] =   [40.00, 18.8,   0.3,    164] # Msf
+
+            tidesRut_params['Mm'] =    [5.04,  253.0,  1.6,    63]
+            tidesRut_params['Ssa'] =   [26.74, 256.0,  1.5,    179]
+            tidesRut_params['Sa'] =    [19.18, 273.0,  0.2,    179]
+
+        # Same as model 1 except changing Msf to the realistic value
+        if model_num == 11:
+
+            # Model 11
             # Original
             # Displacement.        
             tidesRut_params['K2'] =    [0.31,  163,    29.1,   99]
@@ -114,6 +136,29 @@ class simulation(fourdvel):
             tidesRut_params['Mm'] =    [5.04,  253.0,  1.6,    63]
             tidesRut_params['Ssa'] =   [26.74, 256.0,  1.5,    179]
             tidesRut_params['Sa'] =    [19.18, 273.0,  0.2,    179]
+
+        # Same as model 11, but setting Msf as the only horizontal variation
+        if model_num == 12:
+
+            # Model 11
+            # Original
+            # Displacement.        
+            tidesRut_params['K2'] =    [0,  163,    29.1,   99]
+            tidesRut_params['N2'] =    [0,   163,    30.5,   20]
+            tidesRut_params['S2'] =    [0, 184,    101.6,  115]
+            tidesRut_params['M2'] =    [0, 177,    156.3,  70]  # M2
+
+            tidesRut_params['K1'] =    [0,  79,     49,     73]
+            tidesRut_params['P1'] =    [0,  77.0,   16.6,   64]
+
+            tidesRut_params['O1'] =    [0, 81.0,   43,     54]  # O1
+            tidesRut_params['Mf'] =    [0,  250.0,  2.9,    163] # Mf
+            #tidesRut_params['Msf'] =   [40.00, 18.8,   0.3,    164] # Msf
+            tidesRut_params['Msf'] =   [35.00, 260,   0.3,    164] # New Msf
+
+            tidesRut_params['Mm'] =    [0,  253.0,  1.6,    63]
+            tidesRut_params['Ssa'] =   [0, 256.0,  1.5,    179]
+            tidesRut_params['Sa'] =    [0, 273.0,  0.2,    179]
 
         if model_num == 2:
 

@@ -5,6 +5,7 @@
 import os
 import pickle
 import collections
+import argparse
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -78,11 +79,19 @@ class mcmc_analysis(fourdvel):
     def axis_config_tidal(self, ax):
         pass
 
+    def find_envelope(self, bin_centers, hist_values):
+        bspl = splrep(bin_centers, hist_values, s=1)
+        n_smooth = splev(bin_centers, bspl)
+
+        return n_smooth
+
     def run_samples(self):
 
         true_exist = self.true_exist
 
         point = self.test_point
+
+        # Load the trace object
         trace_pkl = "_".join([self.estimation_dir+"/samples_BMC",str(point[0]),str(point[1]),str(self.test_mode)])
         
         print("trace pickle file: ", trace_pkl)
@@ -90,23 +99,18 @@ class mcmc_analysis(fourdvel):
         with open(trace_pkl + '.pkl', "rb") as f:
             trace = pickle.load(f)
 
-        print(trace)
+        #print(dir(trace))
         print(trace.stat_names)
+        print(trace.varnames)
+        #print(stop)
 
         if true_exist:  
             true_model_vec_secular = trace.true_model_vec[:3]
             true_model_vec_tidal = trace.true_model_vec[3:]
         
-        plt.figure(11, figsize=(10,10))
-        plt.plot(trace['step_size_bar'])
-        plt.savefig("11.png")
-
-        secular = trace.get_values("secular")
-        tidal = trace.get_values('tidal')
-        grounding = trace.get_values('grounding')
-
-        print(secular.shape)
         # Display secular parameters
+        secular = trace.get_values("secular")
+
         fig = plt.figure(1, figsize=(15,10))
         #fig, axs = plt.subplots(1,3, sharex=False, sharey=True, figsize=(15,10))
 
@@ -115,15 +119,14 @@ class mcmc_analysis(fourdvel):
             ax = fig.add_subplot(1,3, i+1)
             #ax = axs[i]
             
-            n, bin_borders, patches = ax.hist(values, bins=40, density=True, fc=(0, 0, 1, 1))
+            hist_values, bin_borders, patches = ax.hist(values, bins=40, density=True, fc=(0, 0, 1, 1))
 
             bin_centers = bin_borders[:-1] + np.diff(bin_borders)/2
-            bspl = splrep(bin_centers, n, s=1)
-            n_smooth = splev(bin_centers, bspl)
-            #ax.plot(bin_centers,n_smooth,linewidth=3,color="black")
+            n_smooth = self.find_envelope(bin_centers, hist_values)
+            ax.plot(bin_centers,n_smooth,linewidth=3,color="black")
 
             if true_exist: 
-                ax.plot( [true_model_vec_secular[i],true_model_vec_secular[i]], [0,np.max(n)],linewidth=3, color="red" )
+                ax.plot( [true_model_vec_secular[i],true_model_vec_secular[i]], [0,np.max(hist_values)],linewidth=3, color="red" )
 
             ax.set_xlabel("m/d",fontsize=15)
             ax.tick_params(labelsize=15)
@@ -156,30 +159,34 @@ class mcmc_analysis(fourdvel):
                 ax.set_title("Secular Up Velocity",fontsize=15)
 
 
-        fig.savefig(self.estimation_dir+"/secular.png", transparent=False, bbox_inches='tight')
+        fig.savefig(self.estimation_dir+"/dist_secular.png", transparent=False, bbox_inches='tight')
 
-        # Display the tidal parameters
+        ##  Display the tidal parameters
+
+        tidal = trace.get_values('tidal')
+
         fig = plt.figure(2,figsize=(20,10))
         N, P,_ = tidal.shape
         print(tidal.shape)
 
-        tidal_names = ['M_2', 'S_2', 'K_2', 'O_1', 'K_1', 'P_1']
+        tidal_names = self.modeling_tides
         comps = ['cos','sin']
 
         msf_comps = ['cos east','cos north','sin east','sin north']
 
+        # vertical tides: 0:P-4
+        # Msf: P-4:P
         for i in range(P):
             values = tidal[:,i,0]
             ax = fig.add_subplot(2,P//2, i+1)
-            n, bin_borders, patches = ax.hist(values, bins=40, density=True, fc=(0,1,0,1))
+            hist_values, bin_borders, patches = ax.hist(values, bins=40, density=True, fc=(0,1,0,1))
 
             bin_centers = bin_borders[:-1] + np.diff(bin_borders)/2
-            bspl = splrep(bin_centers, n, s=1)
-            n_smooth = splev(bin_centers, bspl)
+            n_smooth = self.find_envelope(bin_centers, hist_values)
             #ax.plot(bin_centers,n_smooth,linewidth=3,color="black")
 
             if true_exist:
-                ax.plot( [true_model_vec_tidal[i],true_model_vec_tidal[i]], [0,np.max(n)],linewidth=3, color="red" )
+                ax.plot( [true_model_vec_tidal[i],true_model_vec_tidal[i]], [0,np.max(hist_values)],linewidth=3, color="red" )
 
             if i>=P//2:
                 ax.set_xlabel("m",fontsize=15)
@@ -208,25 +215,26 @@ class mcmc_analysis(fourdvel):
 #            ax.set_xticks(xticks)
  
             #break
-        fig.savefig(self.estimation_dir+"/tidal.png", bbox_inches='tight')
+        fig.savefig(self.estimation_dir+"/dist_tide.png", bbox_inches='tight')
 
 
-        # Display the grounding parameters
+        ##  Display the grounding parameters
+        grounding = trace.get_values('grounding')
+
         fig = plt.figure(3,figsize=(10,10))
         print(grounding.shape)
-        true_grounding_level = -1.5
+        true_grounding_level = self.grounding
         for i in range(1):
             values = grounding[:,0,0]
             ax = fig.add_subplot(111)
-            n, bin_borders, patches = ax.hist(values, bins=80, density=True, fc=(0,1,1,1))
+            hist_values, bin_borders, patches = ax.hist(values, bins=80, density=True, fc=(0,1,1,1))
 
             bin_centers = bin_borders[:-1] + np.diff(bin_borders)/2
-            bspl = splrep(bin_centers, n, s=1)
-            n_smooth = splev(bin_centers, bspl)
+            n_smooth = self.find_envelope(bin_centers, hist_values)
             #ax.plot(bin_centers,n_smooth,linewidth=3,color="black")
 
             if true_exist:
-                ax.plot([true_grounding_level,true_grounding_level], [0,np.max(n)],linewidth=3, color="red")
+                ax.plot([true_grounding_level,true_grounding_level], [0,np.max(hist_values)],linewidth=3, color="red")
 
             ax.set_xlim([-2.5,-0.5])
             ax.set_xlabel("m",fontsize=15)
@@ -238,11 +246,45 @@ class mcmc_analysis(fourdvel):
             # title
             ax.set_title('Grounding Level', fontsize=15)
 
-        fig.savefig(self.estimation_dir+"/grounding.png",bbox_inches='tight')
+        fig.savefig(self.estimation_dir+"/dist_grounding.png",bbox_inches='tight')
 
-def main():
+        # Display the up scale
+        up_scale = trace.get_values('up_scale')
 
-    mcmc = mcmc_analysis()
+        fig = plt.figure(4,figsize=(10,10))
+        print(grounding.shape)
+        true_grounding_level = self.grounding
+        for i in range(1):
+            values = up_scale[:,0,0]
+            ax = fig.add_subplot(111)
+            hist_values, bin_borders, patches = ax.hist(values, bins=80, density=True, fc=(0,1,1,1))
+
+            bin_centers = bin_borders[:-1] + np.diff(bin_borders)/2
+            n_smooth = self.find_envelope(bin_centers, hist_values)
+            #ax.plot(bin_centers,n_smooth,linewidth=3,color="black")
+
+            true_up_scale = 1
+            if true_exist:
+                ax.plot([true_up_scale,true_up_scale], [0,np.max(hist_values)],linewidth=3, color="red")
+
+            ax.set_xlim([0.5,1.5])
+            ax.set_xlabel("ratio",fontsize=15)
+            ax.tick_params(labelsize=15)
+            ax.get_yaxis().set_ticks([])
+            ax.set_ylim(bottom=0)
+            ax.set_ylabel("Probability Density", fontsize=15)
+
+            # title
+            ax.set_title('Up scale', fontsize=15)
+
+        fig.savefig(self.estimation_dir+"/dist_up_scale.png",bbox_inches='tight')
+
+
+def main(iargs=None):
+
+    inps = cmdLineParse(iargs)
+
+    mcmc = mcmc_analysis(inps)
     #mcmc.run_map_estimate()
     mcmc.run_samples()
 

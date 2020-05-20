@@ -267,9 +267,12 @@ class estimate(configure):
             row_names.append("Nonlinear")
 
             print("Compare model vecs")
-            print(np.hstack(stacked_model_vecs))
+            stacked_model_vecs = np.hstack(stacked_model_vecs)
+            print(stacked_model_vecs)
+
             print("Compare tide vec")
-            print(np.hstack(stacked_tide_vecs))
+            stacked_tide_vecs = np.hstack((stacked_tide_vecs))
+            print(stacked_tide_vecs)
 
             print("@@ Estimated grounding level @@", est_grounding)
 
@@ -277,8 +280,6 @@ class estimate(configure):
             stacked_vecs = stacked_tide_vecs
             column_names = ['Secular'] + self.modeling_tides
             self.display.display_vecs(stacked_vecs, row_names,column_names, test_id)
-
-            assert(1==3)
 
         ########### Inversion done ##########################
 

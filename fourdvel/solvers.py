@@ -644,6 +644,9 @@ class Bayesian_MCMC(fourdvel):
             tt_dis_U_ta = theano.shared(dis_U_ta)
             tt_dis_U_tb = theano.shared(dis_U_tb)
 
+            # Flag to use up scale or not
+            use_up_scale = True
+
             # Construct the parameter vector
             self.bmc_model = pm.Model()
             with self.bmc_model as model:
@@ -657,8 +660,12 @@ class Bayesian_MCMC(fourdvel):
                 # Tidal components
                 self.model_vec_tidal = pm.Normal('tidal', mu=0, sigma=2, shape=(P,1))
 
-                # Tidal components
+                # Grounding level
                 self.grounding = pm.Normal('grounding', mu=-1, sigma=2, shape=(1,1))
+
+                # Vertical displacement scaling
+                if use_up_scale:
+                    self.up_scale = pm.Normal('up_scale', mu=0, sigma=0.1, shape=(1,1))
 
                 dis_EN_ta = tt_d_mat_EN_ta.dot(self.model_vec_tidal)
                 dis_EN_tb = tt_d_mat_EN_tb.dot(self.model_vec_tidal)
@@ -669,8 +676,13 @@ class Bayesian_MCMC(fourdvel):
                     dis_U_tb = tt_d_mat_U_tb.dot(self.model_vec_tidal)
                 elif task_name == "tides_2":
                     # Based on external time series
-                    dis_U_ta = tt_dis_U_ta 
-                    dis_U_tb = tt_dis_U_tb
+
+                    if not use_up_scale:
+                        dis_U_ta = tt_dis_U_ta
+                        dis_U_tb = tt_dis_U_tb
+                    else:
+                        dis_U_ta = tt_dis_U_ta * self.up_scale
+                        dis_U_tb = tt_dis_U_tb * self.up_scale
                 else:
                     raise Exception()
 
@@ -727,7 +739,7 @@ class Bayesian_MCMC(fourdvel):
                     pickle.dump(map_estimate,f)
 
                 # Perform MCMC smapling
-                n_steps = 6000
+                n_steps = 4000
                 #n_steps = 100
                 if MAP_or_Sample == 'Sample':
                     #step = pm.NUTS()
