@@ -43,11 +43,14 @@ class analysis(configure):
         # Load the reuslts
         self.load_everything()
 
-    def set_analysis_name(self, analysis_name):
-
-        self.analysis_name = analysis_name
+        # Find the slr_name
+        analysis_name = self.analysis_name
         if analysis_name.startswith("slr"):
             self.slr_name = analysis_name.split('_',1)[1]
+
+    def set_task_name(self, task_name):
+
+        self.task_name = task_name
 
     def load_everything(self):
 
@@ -854,7 +857,10 @@ class analysis(configure):
                 fig = plt.figure(idx+1, figsize=(12,8))
                 ax1 = fig.add_subplot(121)
                 ax2 = fig.add_subplot(122)
-    
+
+                label_A = "tide A > tide B" 
+                label_B = "tide A < tide B"
+
                 for it in range(len(this_tide_proxy_merged)):
     
                     trk = track_tide_proxy_merged[it]
@@ -890,10 +896,25 @@ class analysis(configure):
                     ax1.plot(x,self.slr_data_convert(y, slr_name),'k.',markersize=15)
     
                     # Right figure
-                    if mt>=st or mt<st:
-                        ax2.plot(x,data,'r.',markersize=15)
-                        ax2.plot(x,data_pred,'b.',markersize=15)
+                    # Data
+                    #ax2.plot(x,data,'r.',markersize=15)
+
+                    # Prediction
+                    #ax2.plot(x,data_pred,'b.',markersize=15)
+
+                    # Residual
+                    together = False
+                    # together
+                    if together:
                         ax2.plot(x,y,'k.',markersize=15)
+                    else:
+                        if mt>=st:
+                            ax2.plot(x,y,'r.',markersize=15, label=label_A)
+                            label_A = None
+                        else:
+                            ax2.plot(x,y,'b.',markersize=15, label=label_B)
+                            label_B = None
+                       
     
                     y_shift = np.random.uniform()/4
                     if mt<st:
@@ -901,8 +922,8 @@ class analysis(configure):
                     rand_color = np.random.rand(3,)/2
                 
                     # Plot the data logistics    
-                    ax2.text(x,y+y_shift, "_".join((d1,d2,str(mt),str(st))),color=rand_color,fontsize=8, horizontalalignment='left')
-                    ax2.plot([x,x],[y, y+y_shift],color=rand_color)
+                    #ax2.text(x,y+y_shift, "_".join((d1,d2,str(mt),str(st))),color=rand_color,fontsize=8, horizontalalignment='left')
+                    #ax2.plot([x,x],[y, y+y_shift],color=rand_color)
 
                 # Load the SLR results
                 slr_slope = slr_results[(track_name, slr_name)][0]
@@ -917,12 +938,16 @@ class analysis(configure):
                 # Configure the figure
                 ax1.set_xlim([-3,3])
                 ax1.set_ylim([-1,1])
-                ax1.set_xlabel("tide_height_at_master_scene (m) ")
+                #ax1.set_xlabel("tide_height_at_master_scene (m) ")
+                ax1.set_xlabel("min(tide_height_at_master, tide_height_at_slave) (m)")
+
                 ax1.set_ylabel("abs(data - model prediction) (m)")
+
+                ax2.legend()
                 ax2.set_xlim([-3,3])
                 ax2.set_ylim([-1,1])
-                #ax2.set_xlabel("min(tide_height_at_master, tide_height_at_slave) (m)")
-                ax2.set_xlabel("tidal_height_at_master_scene (m)")
+                ax2.set_xlabel("min(tide_height_at_master, tide_height_at_slave) (m)")
+                #ax2.set_xlabel("tidal_height_at_master_scene (m)")
                 ax2.set_ylabel("residual (m)")
    
                 # Save the figure 
@@ -930,7 +955,7 @@ class analysis(configure):
                 fig.savefig(self.this_result_folder + '/' + figname)
 
 
-            #######  Show the proxy tide ###############
+            #######  Show the proxy tide for different tracks ###############
 
             fig = plt.figure(102, figsize=(7,7))
             ax = fig.add_subplot(111)
@@ -942,16 +967,16 @@ class analysis(configure):
 
                 randcolor = np.random.rand(3,)/2
 
-                ax.plot(low_tide_proxy_list[idx], np.zeros(shape=(data_num_list[idx],))+idx+1, color=randcolor, markersize=15, marker=".", linestyle="None")
+                ax.plot(np.zeros(shape=(data_num_list[idx],))+idx+1, low_tide_proxy_list[idx], color=randcolor, markersize=15, marker=".", linestyle="None")
 
-                ax.text(-2, idx+1+0.5, "track " + str(track_num), fontsize=15, color=randcolor)
+                ax.text(idx + 1, 2.8, "track " + str(track_num), fontsize=12, color=randcolor)
 
             # Configuration
-            ax.set_xlim([-3,3])
-            ax.set_xlabel("m", fontsize=15)
-            ax.set_ylim([0,len(unique_tracks)+1])
-            ax.set_ylabel("track", fontsize=15)
-            ax.yaxis.set_ticklabels([])
+            ax.set_xlim([0,len(unique_tracks)+1])
+            ax.set_xlabel("track", fontsize=15)
+            ax.set_ylim([-3,3])
+            ax.set_ylabel("m", fontsize=15)
+            ax.xaxis.set_ticklabels([])
 
             figname="_".join((self.point2str(point), slr_name, 'proxy_tide_height')) + ".png"
             fig.savefig(self.this_result_folder + '/' + figname)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
+import copy
 import numpy as np
 
 import gdal
@@ -42,7 +43,7 @@ class grouping(fourdvel):
 
         # Auxiliary files for finding ice shelf
         # For Evans
-        self.doub_diff_file ='/net/jokull/nobak/mzzhong/S1-Evans/track_37/cuDenseOffsets/doub_diff.off'
+        self.doub_diff_file ='/net/kraken/nobak/mzzhong/S1-Evans/track_37/cuDenseOffsets/doub_diff.off'
 
         # for Ruford
         self.rutford_shelf_grid_points = self.Ant_Data_dir + "/GroundingLines/bedmap2_shelf_latlon.xyz"
@@ -70,10 +71,12 @@ class grouping(fourdvel):
         tracklist['csk'] = self.csk_tracks
         tracklist['s1'] = self.s1_tracks
 
+        # Find the sources (the assigned runid and version set for generating grid set)
         sources = self.grid_set_sources
-        print(sources)
-        print(self.used_datasets)
+        print('sources: ', sources)
 
+        # Find the used datasets
+        print("used datasets: ", self.used_datasets)
         for sate in self.used_datasets:
 
             for track_num in tracklist[sate]:
@@ -192,29 +195,55 @@ class grouping(fourdvel):
                     # 1. track number; 2. los (three vectors) 3. azi (three vectors) 4. satellite name.
                     info = (track_num,(elos[ii,jj],nlos[ii,jj],ulos[ii,jj]),(eazi[ii,jj],nazi[ii,jj],uazi[ii,jj]),sate)
     
-                    # Push into the grid_set, only add new grid when sate is "csk".
+                    # Push into the grid_set.
+                    # This is a new key
                     if (grid_lon[ii,jj],grid_lat[ii,jj]) not in grid_set.keys():
-                        if sate=='csk':
+                        # if use_csk is turned on, only csk has the right to
+                        # set a new key
+                        if self.use_csk == True and sate=='csk':
+                            grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])] = [info]
+                        elif self.use_csk == False and sate == 's1':
                             grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])] = [info]
                         else:
                             pass
                     else:
                         grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])].append(info)
 
-            #print(grid_set.keys())
-            print("Total number of grid points: ", len(grid_set))
+        # End of creating points
 
-            print("Writing to Pickle file...")
-            with open(self.grid_set_pkl_name,'wb') as f:
-                pickle.dump(grid_set,f)
+        #print(grid_set.keys())
+        print("Total number of grid points: ", len(grid_set))
 
-            self.grid_set = grid_set
+        # Filter the grid set for Evans project
+        if self.proj == "Evans":
+            count=0
+            grid_set_copy = copy.deepcopy(grid_set)
+            for point in grid_set_copy.keys():
+                info = grid_set[point]
+                # If less than three tracks, remove it.
+                if len(info)<3:
+                    count+=1
+                    grid_set.pop(point)
+            print("Deleted number of grid points: ", count)
 
-            print("Done")
+        print("Total number of grid points: ", len(grid_set))
+
+        self.grid_set = grid_set
+
+        print("Writing to Pickle file...")
+        with open(self.grid_set_pkl_name,'wb') as f:
+            pickle.dump(grid_set,f)
+
+
+        print("Done")
 
         print("Output a test point")
         print("Test point: ",self.test_point)
-        print(self.grid_set[self.test_point])
+        try:
+            print(self.grid_set[self.test_point])
+        except:
+            pass
+
 
         return 0
 
@@ -228,28 +257,53 @@ class grouping(fourdvel):
         tile_set_pkl_name = self.get_tile_set_info()
 
         print(tile_set_pkl_name)
-        redo = 0
-        if os.path.exists(tile_set_pkl_name) and redo==0:
+        redo_tile = 1
+        if os.path.exists(tile_set_pkl_name) and redo_tile==0:
             print("tile set file exists!")
+        
+            with open(tile_set_pkl_name,'rb') as f:
+                tile_set = pickle.load(f)
+
+            print("total number of tiles ", len(tile_set))
+
             return
 
         if self.proj=="Rutford":
 
             ############ Rutford ###############
             # Rutford bounding box
-            west = self.round_int_5dec(-88)
-            east = self.round_int_5dec(-79)
-            north = self.round_int_5dec(-76.2)
-            south = self.round_int_5dec(-79.4)
-    
+            #west = self.round_int_5dec(-88)
+            #east = self.round_int_5dec(-79)
+            #north = self.round_int_5dec(-76.2)
+            #south = self.round_int_5dec(-79.4)
+
+            all_lons = [ point[0] for point in grid_set.keys()]
+            all_lats = [ point[1] for point in grid_set.keys()]
+
+            west = np.nanmin(all_lons)
+            east = np.nanmax(all_lons)
+            south = np.nanmin(all_lats)
+            north = np.nanmax(all_lats)
+            print("WESN: ", west, east, south, north)
+
         elif self.proj=="Evans":
 
             ########## Evans ###################
             # Evans bounding box.
-            west = self.round_int_5dec(-85)
-            east = self.round_int_5dec(-69)
-            north = self.round_int_5dec(-74.2)
-            south = self.round_int_5dec(-77.6)
+            #west = self.round_int_5dec(-85)
+            #east = self.round_int_5dec(-69)
+            #south = self.round_int_5dec(-77.6)
+            #north = self.round_int_5dec(-74.2)
+
+            all_lons = [ point[0] for point in grid_set.keys()]
+            all_lats = [ point[1] for point in grid_set.keys()]
+
+            west = np.nanmin(all_lons)
+            east = np.nanmax(all_lons)
+            south = np.nanmin(all_lats)
+            north = np.nanmax(all_lats)
+            print("WESN: ", west, east, south, north)
+            #print(stop)
     
         ################################################
 
@@ -262,42 +316,59 @@ class grouping(fourdvel):
         tile_lon_num = np.round(tile_lon_step/self.lon_step)
         tile_lat_num = np.round(tile_lat_step/self.lat_step)
 
+        print(tile_lon_step, self.lon_step, tile_lon_num)
+        print(self.lon_step_int)
+
         # Coordinates within a tile 
         sub_lon_list = np.arange(tile_lon_num) * self.lon_step_int
         sub_lat_list = np.arange(tile_lat_num) * self.lat_step_int
 
         print(sub_lon_list, len(sub_lon_list))
         print(sub_lat_list, len(sub_lat_list))
-    
+   
+        # Initialization 
         count = 0
+        count_try = 0
         tile_set = {}
-        
+
+        #print(west, east+1, tile_lon_step_int)
+        #print(south, north+1, tile_lat_step_int)
+
+        # Assumes that tile_lon and tile_lat is in the grid_set.keys() 
         for tile_lon in np.arange(west, east+1, tile_lon_step_int):
-            
             for tile_lat in np.arange(south, north+1, tile_lat_step_int):
 
+                count_try+=1
+
                 location = (tile_lon,tile_lat)
-                #print(location)
-
-                tile_set[location] = []
-
+                
                 tile_west = tile_lon
                 tile_south = tile_lat
 
                 lon_list = (tile_west + sub_lon_list).astype(int)
                 lat_list = (tile_south + sub_lat_list).astype(int)
 
+                #print("lon_list: ", lon_list)
+                #print("lat_list: ", lat_list)
+                #print(lon_list[0], lon_list[-1])
+
+                tmp_tile_set = []
                 for lon in lon_list:
                     for lat in lat_list:
                         
                         point = (lon, lat)
                         if point in grid_set.keys():
                             count = count + 1
-                            tile_set[location].append(point)
+                            tmp_tile_set.append(point)
 
+                if len(tmp_tile_set)>0:
+                    tile_set[location] = tmp_tile_set
+
+        #print(stop)
         print("total number of points added in tiles: ", count)
         print("total number of points in grid set: ", len(grid_set))
-        print("total number of tried tiles: ", len(tile_set))
+        print("total number of tiles: ", len(tile_set))
+        print("total number of tried tiles: ", count_try)
 
         # Remove empty tiles.
         empty_tiles = []
@@ -309,7 +380,7 @@ class grouping(fourdvel):
             tile_set.pop(tile)
 
         print("total number of tiles ", len(tile_set))
-        
+
         print("Save the tile set...")
         
         with open(tile_set_pkl_name,'wb') as f:
@@ -511,120 +582,150 @@ class grouping(fourdvel):
 
         print('Add vertical component to grid set model...')
 
-        # Load the double difference data. 
-        stack = 'tops'
-        workdir = '/net/jokull/nobak/mzzhong/S1-Evans'
-        track_num = 37
-        name = 'track_' + str(track_num)
-        runid = 20180703
+        redo = 0
+        key = self.test_point
 
-        offset = dense_offset(stack=stack, workdir=workdir, runid=runid)
-        offset.initiate(trackname = name)
+        if not os.path.exists(self.grid_set_velo_3d_pkl_name) or redo==1:
 
-        doub_diff_file = self.doub_diff_file
+            # Load the double difference data. 
+            stack = 'tops'
+            workdir = '/net/kraken/nobak/mzzhong/S1-Evans'
+            track_num = 37
+            name = 'track_' + str(track_num)
+            runid = 20180703
+    
+            offset = dense_offset(stack=stack, workdir=workdir, runid=runid)
+            offset.initiate(trackname = name)
+    
+            doub_diff_file = self.doub_diff_file
+    
+            # Read in the double difference file.
+            dataset = gdal.Open(doub_diff_file)
+            doub_diff_map = dataset.GetRasterBand(1).ReadAsArray()
+    
+            # Remove the invalid.
+            doub_diff_map[np.isnan(doub_diff_map)] = 0
+            #doub_diff_map[doub_diff_map==0]=np.nan
+    
+            # Set the maxvalue, and do normalization.
+            maxval = 0.4
+            doub_diff_map[doub_diff_map<0] = 0
+            doub_diff_map[doub_diff_map>maxval] = maxval
+            doub_diff_map = doub_diff_map/maxval
+    
+            # Remove noise manually.
+            p1 = (160,0)
+            p2 = (550,800)
+            k = (p2[1]-p1[1])/(p2[0]-p1[0])
+            b = p1[1] - p1[0]*k
+    
+            for y in range(doub_diff_map.shape[0]):
+                for x in range(doub_diff_map.shape[1]):
+                    if y == np.round(k*x+b):
+                        doub_diff_map[y,x] = 1
+                    if y >= np.round(k*x+b):
+                        doub_diff_map[y,x] = 0
+    
+            p1 = (0,800)
+            p2 = (700,0)
+            k = (p2[1]-p1[1])/(p2[0]-p1[0])
+            b = p1[1] - p1[0]*k
+    
+            for y in range(doub_diff_map.shape[0]):
+                for x in range(doub_diff_map.shape[1]):
+                    if y == np.round(k*x+b):
+                        doub_diff_map[y,x] = 1
+                    if y <= np.round(k*x+b):
+                        doub_diff_map[y,x] = 0
+    
+            c = (550,420)
+            r = 70
+            
+            for y in range(doub_diff_map.shape[0]):
+                for x in range(doub_diff_map.shape[1]):
+                    if r == np.round(np.sqrt((x-c[0])**2 + (y-c[1])**2)):
+                        doub_diff_map[y,x] = 1
+                    if r >= np.round(np.sqrt((x-c[0])**2 + (y-c[1])**2)):
+                        doub_diff_map[y,x] = 0
+    
+    
+            # Median filter
+            doub_diff_map = medfilt(doub_diff_map, kernel_size = 7)
+           
+            # Plot it.
+            #fig = plt.figure(figsize=(10,10))
+            #ax = fig.add_subplot(111)
+            #im = ax.imshow(doub_diff_map)
+            #fig.colorbar(im)
+            #fig.savefig('./fig_sim/double_diff.png',format='png')
+    
+            ######## Provide the third component.
+            grid_set_velo_2d = self.grid_set_velo_2d
+            print("Number of points in 2d grid set: ", len(grid_set_velo_2d))
+    
+            test_point = self.test_point
+            all_points = grid_set_velo_2d.keys()
+    
+            # Create grid_set_velo_3d
+            grid_set_velo_3d = {}
+            count = 0
+            for point in all_points:
+                ind_x, ind_y = offset.point_index(point)
+    
+                #if point == test_point:
+                #    print(ind_x,ind_y)
+                #    print(grid_set_velo_2d[point])
+                #    print(doub_diff_map[ind_y, ind_x])
+                #    print(doub_diff_map.shape)
+                #    print(type(doub_diff_map))
+    
+                velo_2d = grid_set_velo_2d[point]
+                if ind_x is not None and ind_y is not None:
+                    try:
+                        velo_up = [doub_diff_map[ind_y, ind_x]]
+                        count+=1
+                    except:
+                        velo_up = [0]
+                else:
+                    velo_up = [0]
+                velo_3d = velo_2d + velo_up
+    
+                grid_set_velo_3d[point] = velo_3d
+    
+            # Done with creating 3d grid set
 
-        # Read in the double difference file.
-        dataset = gdal.Open(doub_diff_file)
-        doub_diff_map = dataset.GetRasterBand(1).ReadAsArray()
+            try: 
+                print("test point: ", key, grid_set_velo_3d[key])
+            except:
+                pass
 
+            print("set vertical count: ", count)
+            print("total grid points: ", len(grid_set_velo_3d))
+    
+            self.grid_set_velo_3d = grid_set_velo_3d
+    
+            with open(self.grid_set_velo_3d_pkl_name, 'wb') as f:
+                pickle.dump(self.grid_set_velo_3d , f)
 
-        # Remove the invalid.
-        doub_diff_map[np.isnan(doub_diff_map)] = 0
-        #doub_diff_map[doub_diff_map==0]=np.nan
+        else:
+            print(self.grid_set_velo_3d_pkl_name, "exists.")
+            print("Loading...")
+            with open(self.grid_set_velo_3d_pkl_name, 'rb') as f:
+                grid_set_velo_3d = pickle.load(f)
 
-        # Set the maxvalue, and do normalization.
-        maxval = 0.4
-        doub_diff_map[doub_diff_map<0] = 0
-        doub_diff_map[doub_diff_map>maxval] = maxval
-        doub_diff_map = doub_diff_map/maxval
+            self.grid_set_velo_3d = grid_set_velo_3d
 
-        # Remove noise manually.
-        p1 = (160,0)
-        p2 = (550,800)
-        k = (p2[1]-p1[1])/(p2[0]-p1[0])
-        b = p1[1] - p1[0]*k
+            try:
+                print("test point: ", key, self.grid_set_velo_3d[key])
+            except:
+                pass
 
-        for y in range(doub_diff_map.shape[0]):
-            for x in range(doub_diff_map.shape[1]):
-                if y == np.round(k*x+b):
-                    doub_diff_map[y,x] = 1
-                if y >= np.round(k*x+b):
-                    doub_diff_map[y,x] = 0
+            print("total grid points: ", len(self.grid_set_velo_3d))
 
-        p1 = (0,800)
-        p2 = (700,0)
-        k = (p2[1]-p1[1])/(p2[0]-p1[0])
-        b = p1[1] - p1[0]*k
-
-        for y in range(doub_diff_map.shape[0]):
-            for x in range(doub_diff_map.shape[1]):
-                if y == np.round(k*x+b):
-                    doub_diff_map[y,x] = 1
-                if y <= np.round(k*x+b):
-                    doub_diff_map[y,x] = 0
-
-        c = (550,420)
-        r = 70
-        
-        for y in range(doub_diff_map.shape[0]):
-            for x in range(doub_diff_map.shape[1]):
-                if r == np.round(np.sqrt((x-c[0])**2 + (y-c[1])**2)):
-                    doub_diff_map[y,x] = 1
-                if r >= np.round(np.sqrt((x-c[0])**2 + (y-c[1])**2)):
-                    doub_diff_map[y,x] = 0
-
-
-        # Median filter
-        doub_diff_map = medfilt(doub_diff_map, kernel_size = 7)
-       
-        # Plot it.
-        #fig = plt.figure(figsize=(10,10))
-        #ax = fig.add_subplot(111)
-        #im = ax.imshow(doub_diff_map)
-        #fig.colorbar(im)
-        #fig.savefig('./fig_sim/double_diff.png',format='png')
-
-        ######## Provide the third component.
-        grid_set_velo_2d = self.grid_set_velo_2d
-        grid_set_velo_name = self.grid_set_velo_name
-
-        grid_set_velo_name = self.grid_set_velo_name + '_' + str(self.resolution)
-
-        print(len(grid_set_velo_2d))
-
-        test_point = self.test_point
-        all_points = grid_set_velo_2d.keys()
-        grid_set_velo_3d = {}
-        for point in all_points:
-            ind_x, ind_y = offset.point_index(point)
-
-            #if point == test_point:
-            #    print(ind_x,ind_y)
-            #    print(grid_set_velo_2d[point])
-            #    print(doub_diff_map[ind_y, ind_x])
-            #    print(doub_diff_map.shape)
-            #    print(type(doub_diff_map))
-
-            velo_2d = grid_set_velo_2d[point]
-            if ind_x is not None and ind_y is not None:
-                velo_up = [doub_diff_map[ind_y, ind_x]]
-            else:
-                velo_up = [0]
-            velo_3d = velo_2d + velo_up
-
-            grid_set_velo_3d[point] = velo_3d
-
-            #print(grid_set_velo_3d[point])
- 
-        print(grid_set_velo_3d[test_point])
-        print(len(grid_set_velo_3d))
-
-        with open(grid_set_velo_name + '_3d' + '.pkl', 'wb') as f:
-            pickle.dump(grid_set_velo_3d,f)
+        ##################
 
         print('Done with 3d velocity fields')
 
-        ##################
         write_to_file = True
         if write_to_file:
             xyz_file = self.pickle_dir +'/grid_set_velo_3d_verti.xyz'
@@ -658,7 +759,6 @@ class grouping(fourdvel):
             ######## Provide the third component.
             grid_set_velo_2d = self.grid_set_velo_2d
             print("Length of grid_set_velo_2d: ", len(grid_set_velo_2d))
-    
     
             all_points = grid_set_velo_2d.keys()
             grid_set_velo_3d = {}
@@ -727,6 +827,7 @@ class grouping(fourdvel):
 
     def create_grid_set_ref_velo_model(self):
 
+        # Get the names of the velo model grid set
         self.get_grid_set_velo_info()
 
         # 2D
@@ -770,7 +871,10 @@ class grouping(fourdvel):
                     count+=1
             
             print("total_grid points: ", len(grid_set_velo_3d))
-            print("test point: ", self.test_point, grid_set_velo_3d[self.test_point])
+            try:
+                print("test point: ",self.test_point, grid_set_velo_3d[self.test_point])
+            except:
+                pass
             print("set signature count: ", count)
             print("total grid points: ", len(grid_set_velo_3d))
 
@@ -781,7 +885,11 @@ class grouping(fourdvel):
 
         print('Done with adding signatures to 3d reference velocity model')
 
-        print("test point: ", self.test_point, self.grid_set_velo_3d[self.test_point])
+        try:
+            print("test point:",self.test_point, self.grid_set_velo_3d[self.test_point])
+        except:
+            pass
+
         print("total grid points: ", len(self.grid_set_velo_3d))
  
     
@@ -812,9 +920,10 @@ def main():
     # Generate secular velocity model.
     group.create_grid_set_ref_velo_model()
 
-    # Add additional signatures to the velo model
-    #group.add_signatures_grid_set_ref_velo_model()
-    
+    if group.proj == "Rutford":
+
+        # Add additional signatures to the velo model
+        group.add_signatures_grid_set_ref_velo_model()
 
 if __name__=='__main__':
     main()

@@ -261,13 +261,13 @@ class basics():
     
             # New tracks
             t50 = datetime.time(3,53,40)
-            track_timefraction[('s1',50)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+            track_timefraction[('s1',50)] = (t50.hour * 3600 + t50.minute*60 + t50.second)/(24*3600)
     
             t64 = datetime.time(2,57,0)
-            track_timefraction[('s1',64)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+            track_timefraction[('s1',64)] = (t64.hour * 3600 + t64.minute*60 + t64.second)/(24*3600)
     
             #t49 = datetime.time(2,16,0)
-            #track_timefraction[('s1',49)] = (t7.hour * 3600 + t7.minute*60 + t7.second)/(24*3600)
+            #track_timefraction[('s1',49)] = (t49.hour * 3600 + t49.minute*60 + t49.second)/(24*3600)
     
             #print(track_timefraction)
 

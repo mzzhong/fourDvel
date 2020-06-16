@@ -123,7 +123,7 @@ class mcmc_analysis(fourdvel):
 
             bin_centers = bin_borders[:-1] + np.diff(bin_borders)/2
             n_smooth = self.find_envelope(bin_centers, hist_values)
-            ax.plot(bin_centers,n_smooth,linewidth=3,color="black")
+            #ax.plot(bin_centers,n_smooth,linewidth=3,color="black")
 
             if true_exist: 
                 ax.plot( [true_model_vec_secular[i],true_model_vec_secular[i]], [0,np.max(hist_values)],linewidth=3, color="red" )
@@ -167,7 +167,7 @@ class mcmc_analysis(fourdvel):
 
         fig = plt.figure(2,figsize=(20,10))
         N, P,_ = tidal.shape
-        print(tidal.shape)
+        print("tidal: ", tidal.shape)
 
         tidal_names = self.modeling_tides
         comps = ['cos','sin']
@@ -222,8 +222,8 @@ class mcmc_analysis(fourdvel):
         grounding = trace.get_values('grounding')
 
         fig = plt.figure(3,figsize=(10,10))
-        print(grounding.shape)
-        true_grounding_level = self.grounding
+        print("grounding: ", grounding.shape)
+        true_grounding_level = self.simulation_grounding_level
         for i in range(1):
             values = grounding[:,0,0]
             ax = fig.add_subplot(111)
@@ -236,7 +236,7 @@ class mcmc_analysis(fourdvel):
             if true_exist:
                 ax.plot([true_grounding_level,true_grounding_level], [0,np.max(hist_values)],linewidth=3, color="red")
 
-            ax.set_xlim([-2.5,-0.5])
+            ax.set_xlim([-3,1])
             ax.set_xlabel("m",fontsize=15)
             ax.tick_params(labelsize=15)
             ax.get_yaxis().set_ticks([])
@@ -252,8 +252,6 @@ class mcmc_analysis(fourdvel):
         up_scale = trace.get_values('up_scale')
 
         fig = plt.figure(4,figsize=(10,10))
-        print(grounding.shape)
-        true_grounding_level = self.grounding
         for i in range(1):
             values = up_scale[:,0,0]
             ax = fig.add_subplot(111)
@@ -267,7 +265,7 @@ class mcmc_analysis(fourdvel):
             if true_exist:
                 ax.plot([true_up_scale,true_up_scale], [0,np.max(hist_values)],linewidth=3, color="red")
 
-            ax.set_xlim([0.5,1.5])
+            ax.set_xlim([0.0,1.5])
             ax.set_xlabel("ratio",fontsize=15)
             ax.tick_params(labelsize=15)
             ax.get_yaxis().set_ticks([])

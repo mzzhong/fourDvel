@@ -57,7 +57,7 @@ class fourdvel(basics):
             self.s1_data = {}
 
             self.s1_tracks = [37,52,169,65,7,50,64]
-            self.s1_workdir = "/net/jokull/nobak/mzzhong/S1-Evans"
+            self.s1_workdir = "/net/kraken/nobak/mzzhong/S1-Evans"
         
             for it in self.s1_tracks:
                 self.s1_data[it] = []
@@ -81,7 +81,7 @@ class fourdvel(basics):
 
             self.s1_tracks = [37,65,7]
 
-            self.s1_workdir = "/net/jokull/nobak/mzzhong/S1-Evans"
+            self.s1_workdir = "/net/kraken/nobak/mzzhong/S1-Evans"
         
             for it in self.s1_tracks:
                 self.s1_data[it] = []
@@ -98,11 +98,20 @@ class fourdvel(basics):
         resolution=self.resolution
 
         if self.proj == "Rutford":
-            if resolution == 500:
+            # lon/lat = 5
+            
+            if resolution == 1000:
+                self.lat_step = 0.01
+                self.lon_step = 0.05
+                self.lat_step_int = self.round_int_5dec(self.lat_step)
+                self.lon_step_int = self.round_int_5dec(self.lon_step)
+
+            elif resolution == 500:
                 self.lat_step = 0.005
                 self.lon_step = 0.025
                 self.lat_step_int = self.round_int_5dec(self.lat_step)
                 self.lon_step_int = self.round_int_5dec(self.lon_step)
+
             elif resolution == 100:
                 self.lat_step = 0.001
                 self.lon_step = 0.005
@@ -110,17 +119,33 @@ class fourdvel(basics):
                 self.lon_step_int = self.round_int_5dec(self.lon_step)
             else:
                 print("Unknown resolution")
-                print(stop)
+                raise Exception()
 
         elif self.proj == "Evans":
+            # lon/lat = 4
+
             if resolution == 500:
                 self.lat_step = 0.005
                 self.lon_step = 0.02
                 self.lat_step_int = self.round_int_5dec(self.lat_step)
                 self.lon_step_int = self.round_int_5dec(self.lon_step)
+            
+            elif resolution == 1000:
+                self.lat_step = 0.01
+                self.lon_step = 0.04
+                self.lat_step_int = self.round_int_5dec(self.lat_step)
+                self.lon_step_int = self.round_int_5dec(self.lon_step)
+
+            elif resolution == 2000:
+                # ad hoc lon/lat=5
+                self.lat_step = 0.02
+                self.lon_step = 0.10
+                self.lat_step_int = self.round_int_5dec(self.lat_step)
+                self.lon_step_int = self.round_int_5dec(self.lon_step)
+
             else:
                 print("Unknown resolution")
-                print(stop)
+                raise Exception()
 
         else:
             raise Exception("Unknown project name")
@@ -149,7 +174,10 @@ class fourdvel(basics):
         self.data_uncert_const = None
         self.test_point = None
         self.single_point_mode = False
-        self.external_up_disp = False
+        self.simulation_use_external_up = False
+        self.csk_excluded_tracks = []
+        self.s1_excluded_tracks = []
+        self.external_grounding_level_file = None
 
         fmt = '%Y%m%d'
 
@@ -250,21 +278,7 @@ class fourdvel(basics):
 
                 print('bbox: ',self.bbox)
 
-            if name == 'use_s1':
-                if value == 'True':
-                    self.use_s1 = True
-                else:
-                    self.use_s1 = False
-                print('use_s1: ',value)
-
-            if name == 's1_start':
-                self.s1_start = datetime.datetime.strptime(value, fmt).date()
-                print('s1_start: ',value)
-
-            if name == 's1_end':
-                self.s1_end = datetime.datetime.strptime(value, fmt).date()
-                print('s1_end: ',value)
-
+            # CSK
             if name == 'use_csk':
                 if value == 'True':
                     self.use_csk = True
@@ -292,6 +306,36 @@ class fourdvel(basics):
                 self.csk_log = value
                 print('csk_log: ',value)
 
+            # S1
+            if name == 'use_s1':
+                if value == 'True':
+                    self.use_s1 = True
+                else:
+                    self.use_s1 = False
+                print('use_s1: ',value)
+
+            if name == 's1_id':
+                self.s1_id = int(value)
+                print('s1_id: ',value)
+
+            if name == 's1_version':
+                self.s1_version = value
+                print('s1_version: ',value)
+
+            if name == 's1_start':
+                self.s1_start = datetime.datetime.strptime(value, fmt).date()
+                print('s1_start: ',value)
+
+            if name == 's1_end':
+                self.s1_end = datetime.datetime.strptime(value, fmt).date()
+                print('s1_end: ',value)
+
+
+            if name == 's1_excluded_tracks':
+                self.s1_excluded_tracks = [int(x) for x in value.split(',')]
+                print('s1_excluded_tracks: ',self.s1_excluded_tracks)
+
+            # Modeling
             if name == 'modeling_tides':
                 self.modeling_tides = [x.strip() for x in value.split(',')]
                 self.n_modeling_tides = len(self.modeling_tides)
@@ -339,13 +383,31 @@ class fourdvel(basics):
                     self.simulation_tides = []
                     self.n_simulation_tides = 0
             
-            if name == 'grounding':
-                self.grounding = float(value)
-                print("grounding: ",self.grounding)
+            if name == 'simulation_grounding_level':
+                self.simulation_grounding_level = float(value)
+                print("simulation_grounding_level: ",self.simulation_grounding_level)
 
-            if name == 'external_up_disp':
-                self.external_up_disp = value
-                print('external_up_disp: ',value)
+            if name == 'simulation_use_external_up':
+                if value == 'True':
+                    self.simulation_use_external_up = True
+                else:
+                    self.simulation_use_external_up = False
+                print('simulation_use_external_up: ',value)
+
+
+            if name == 'simulation_data_uncert_const':
+                self.simulation_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
+                print('simulation_data_uncert_const: ',self.simulation_data_uncert_const)
+
+            ## External up ##
+            if name == 'external_up_disp_file':
+                self.external_up_disp_file = value
+                print('external_up_disp_file: ',value)
+
+            ## External grounding level data ##
+            if name == 'external_grounding_level_file':
+                self.external_grounding_level_file = value
+                print('external_grounding_level_file: ',value)
 
             ## Analysis ##
             if name == 'analysis_name':
@@ -373,6 +435,13 @@ class fourdvel(basics):
                 else:
                     self.output_uq = False
                 print('output_uq: ',value)
+
+            if name == "output_others":
+                if value == 'True':
+                    self.output_others = True
+                else:
+                    self.output_others = False
+                print('output_others: ',value)
 
             if name == "output_resid":
                 if value == 'True':
@@ -533,7 +602,7 @@ class fourdvel(basics):
 
             for track_num in tracklist: 
             
-                filefolder = '/home/mzzhong/links/jokull-nobak-net/S1-Evans/data_' + str(track_num) + '/*zip'
+                filefolder = '/net/kraken/nobak/mzzhong/S1-Evans/data_' + str(track_num) + '/*zip'
                 filelist = glob.glob(filefolder)
                 s1_data[track_num] = []
     
@@ -592,6 +661,7 @@ class fourdvel(basics):
 
     def get_grid_set_velo(self):
 
+        # Get names
         self.get_grid_set_velo_info()
 
         if os.path.exists(self.grid_set_velo_3d_pkl_name):
@@ -606,6 +676,11 @@ class fourdvel(basics):
 
         if self.proj=="Rutford":
 
+            # For 1000m resolution
+            if self.resolution == 1000:
+                self.tile_lon_step = 2
+                self.tile_lat_step = 0.4
+
             # For 500m resolution
             if self.resolution == 500:
                 self.tile_lon_step = 1
@@ -618,9 +693,21 @@ class fourdvel(basics):
         
         elif self.proj=="Evans":
 
-            # For 500m resolution
-            self.tile_lon_step = 0.5
-            self.tile_lat_step = 0.1
+            if self.resolution == 500:
+                # For 500m resolution
+                self.tile_lon_step = 0.5
+                self.tile_lat_step = 0.1
+
+            if self.resolution == 1000:
+                # For 1000m resolution
+                self.tile_lon_step = 1
+                self.tile_lat_step = 0.2
+
+            if self.resolution == 2000:
+                # For 2000m resolution
+                self.tile_lon_step = 2
+                self.tile_lat_step = 0.4
+
 
         self.tile_set_name = "_".join((self.grid_set_name, "tile_set","lon_step",str(self.tile_lon_step),"lat_step", str(self.tile_lat_step)))
 
@@ -670,11 +757,11 @@ class fourdvel(basics):
         if self.proj == "Rutford":
             sources = {}
             sources["csk"] = "20190901_v12"
-            sources["s1"] = "20200101"
+            sources["s1"] = "unknown"
         elif self.proj == "Evans":
             sources = {}
-            sources["csk"] = "unknown"
-            sources["s1"] = "20200101"
+            sources["csk"] = "20180712"
+            sources["s1"] = "20200102_v12"
         else:
              raise Exception("Unknown project name")
 
@@ -808,7 +895,7 @@ class fourdvel(basics):
                     self.timings.append((the_date, round(tfrac,4)))
 
             self.timings = sorted(self.timings)
-            
+
             with open(timings_pkl_name,'wb') as f:
                 pickle.dump(self.timings, f)
 
@@ -818,7 +905,7 @@ class fourdvel(basics):
 
         print("Get the tidal model ...")
 
-        tide_file = self.external_up_disp
+        tide_file = self.external_up_disp_file
 
         fid = open(tide_file)
         lines = fid.readlines()
@@ -840,16 +927,17 @@ class fourdvel(basics):
         # From (date + time fraction) to tide_heights
         self.timings_tide_heights = {}
         t_origin = self.t_origin.date()
+ 
         for timing in self.timings:
             
             the_date, t_frac = timing
             relative_time = (the_date - t_origin).days + t_frac
-            #print(relative_time)
+
+            # Find the index
             idx = int((relative_time - self.tide_taxis[0])/self.tide_t_delta)
             self.timings_tide_heights[timing] = self.tide_data[idx]
 
         #print(self.timings_tide_heights)
-        #print(stop)
         return 0
 
     def get_design_mat_set(self):
@@ -974,7 +1062,13 @@ class fourdvel(basics):
 
     
     def get_offset_field_stack(self):
-    
+
+        # !!! Ad hoc !!!
+        # Turn off csk for Evans project
+        if self.proj == "Evans":
+            self.use_csk = False 
+   
+        # The dictionary for all offset fields 
         self.offsetFieldStack_all = {}
 
         # Find the necessary tracks
@@ -999,13 +1093,13 @@ class fourdvel(basics):
                 if track_num_set and not (track_num,"csk") in track_num_set:
                     continue
 
-                track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', \
-                                                            "cuDenseOffsets", "offsetFieldStack_" + str(self.csk_id)+ "_" + self.csk_version + ".pkl")
+                track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "offsetFieldStack_" + str(self.csk_id)+ "_" + self.csk_version + ".pkl")
+
                 if os.path.exists(track_offsetFieldStack_pkl):
                     print("Loading: ", track_offsetFieldStack_pkl)
                     with open(track_offsetFieldStack_pkl,'rb') as f:
                         offsetFieldStack = pickle.load(f)
-                        self.offsetFieldStack_all[("csk", track_num)] = offsetFieldStack
+                        self.offsetFieldStack_all[("csk", track_num)]= offsetFieldStack
 
 
         if self.use_s1:
@@ -1015,13 +1109,14 @@ class fourdvel(basics):
                 if track_num_set and not (track_num, "s1") in track_num_set:
                     continue
 
-                track_offsetFieldStack_pkl = os.path.join(self.s1_workdir, "track_" + str(track_num), \
-                                                            "cuDenseOffsets", "offsetFieldStack_20200101_v10.pkl")
+                track_offsetFieldStack_pkl = os.path.join(self.s1_workdir, "track_" + str(track_num), "cuDenseOffsets", "offsetFieldStack_" + str(self.s1_id)+ "_" + self.s1_version + ".pkl")
                 if os.path.exists(track_offsetFieldStack_pkl):
                     print("Loading: ", track_offsetFieldStack_pkl)
                     with open(track_offsetFieldStack_pkl,'rb') as f:
                         offsetFieldStack = pickle.load(f)
                         self.offsetFieldStack_all[("s1", track_num)] = offsetFieldStack
+        
+        return 0
 
     def point_rounding(self, point):
 
@@ -1091,6 +1186,7 @@ class fourdvel(basics):
         offsetfields = []
 
         for it in range(len(tracks)):
+
             #print(tracks[it])
             
             track_num = tracks[it][0]
@@ -1132,11 +1228,11 @@ class fourdvel(basics):
         linear_design_mat_set = {}
         for point in point_set:
             offsetfields = offsetfields_set[point]
-            linear_design_mat_set[point] = self.build_G(offsetfields=offsetfields)
+            linear_design_mat_set[point] = self.build_G(point=point, offsetfields=offsetfields)
 
         return linear_design_mat_set
 
-    def build_G(self, point=None, tracks=None, offsetfields=None, horizontal = False):
+    def build_G(self, point=None, tracks=None, offsetfields=None):
 
         if point is not None:
             
@@ -1162,9 +1258,6 @@ class fourdvel(basics):
             G = np.zeros(shape=(1,1)) + np.nan
             return G 
 
-        #print('total number of offsetfield:', n_offsets)
-        #n_offsets = 10
-
         ###############################################################
 
         ## Build the G matrix
@@ -1181,8 +1274,6 @@ class fourdvel(basics):
         
         for i in range(n_offsets):
 
-            #print(offsetfields[i][4])
-
             t_a = (offsetfields[i][0] - t_origin).days + offsetfields[i][4]
             t_b = (offsetfields[i][1] - t_origin).days + offsetfields[i][4]
 
@@ -1197,21 +1288,18 @@ class fourdvel(basics):
                 delta_cos[i,j] = np.cos(omega*t_b) - np.cos(omega*t_a)
                 delta_sin[i,j] = np.sin(omega*t_b) - np.sin(omega*t_a)
 
-            #print(stop)
-
         n_rows = n_offsets * 2 # Each offset corresponds to a vector.
 
         # E, N, U components.
         n_cols = 3 + n_modeling_tides * 6 # cosE, cosN, cosU and sinE, sinN, sinU.
-        
-        # Only the E, N components.
-        #n_cols = 3 + n_modeling_tides * 4 # cosE, cosN, sinE, sinN, Not finished below.
         
         ## G formation.
         G = np.zeros(shape=(n_rows,n_cols))
 
         # Iterate over offsetfields
         for i in range(n_offsets):
+
+            # Find the observation vector (los, azi) refering to "create_grid_set"
             vecs = [offsetfields[i][2],offsetfields[i][3]]
 
             # Two observation vectors
@@ -1237,109 +1325,100 @@ class fourdvel(basics):
         return G
         # End of building.
 
-    def build_G_ENU_set(self, point_set, offsetfields_set):
-        
-        linear_design_mat_set = {}
+
+    def modify_G_set(self, point_set, G_set, offsetfields_set, grounding_level):
+
+        # Extract the stack of up displacement from the tide model
+        up_disp_set = self.get_up_disp_set(point_set, offsetfields_set)
+
         for point in point_set:
+
+            G = G_set[point]
+            tide_height_master_model, tide_height_slave_model = up_disp_set[point]
+
+            # Should not do scaling here!
+            #velo_model = self.grid_set_velo[point]
+            #tide_height_master = tide_height_master_model * velo_model[2]
+            #tide_height_slave = tide_height_slave_model * velo_model[2]
+
+            # No scaling
+            tide_height_master = tide_height_master_model
+            tide_height_slave = tide_height_slave_model
+
             offsetfields = offsetfields_set[point]
-            linear_design_mat_set[point] = self.build_G_ENU(offsetfields=offsetfields)
 
-        return linear_design_mat_set
+            if self.external_grounding_level_file is None:
+                given_grounding_level = grounding_level
+            else:
 
-    def build_G_ENU(self, point=None, tracks=None, offsetfields=None, horizontal = False):
+                # Try to get the value
+                try:
+                    given_grounding_level = grounding_level[point]['optimal_grounding_level']
+                    print("optimal grounding level: ", given_grounding_level)
+                except:
+                    given_grounding_level = -10
 
-        if point is not None:
-            
-            lon,lat = point
+                if np.isnan(given_grounding_level):
+                    given_grounding_level = -10
 
-        if tracks is None and offsetfields is None:
-            print('Please provide data info on this grid point')
-            return
+            G_set[point] = self.modify_G(point=point, offsetfields=offsetfields, G=G, tide_height_master = tide_height_master, tide_height_slave = tide_height_slave, grounding_level = given_grounding_level)
 
-        elif tracks is not None:
-            # Only track info is provided. Using data catalog.
-            offsetfields = self.tracks_to_full_offsetfields(tracks)
-        
-        elif offsetfields is not None:
-            # real offsetfields are provided.
-            pass
+        return G_set
+
+    def modify_G(self, point, offsetfields, G, tide_height_master, tide_height_slave, grounding_level):
+
+        lon,lat = point
 
         # Control the number of offsetfields
         n_offsets = len(offsetfields)
 
-        # No offsetfield in available.
+        # Important: accounting for the no offsetfield scenario
         if n_offsets ==0:
             G = np.zeros(shape=(1,1)) + np.nan
             return G 
 
         ###############################################################
 
-        ## Build the G matrix
-        modeling_tides = self.modeling_tides
-        n_modeling_tides = self.n_modeling_tides
-        tide_periods = self.tide_periods
+        ## Modify the G matrix
+        # Find the shape of G
+        n_rows, n_cols = G.shape
 
-        t_origin = self.t_origin.date()
+        # Perform clipping
+        #print("shape: ",tide_height_master.shape)
+        #print("shape: ",grounding_level)
 
-        # Build up delta_td, delta_cos and delta_sin.
-        delta_td = np.zeros(shape=(n_offsets,))
-        delta_cos = np.zeros(shape=(n_offsets,n_modeling_tides))
-        delta_sin = np.zeros(shape=(n_offsets,n_modeling_tides))
-        
+        tide_height_master[tide_height_master<grounding_level]=grounding_level
+        tide_height_slave[tide_height_slave<grounding_level]=grounding_level
+
+        # Find the vertical displacement
+        disp_up = (tide_height_slave - tide_height_master).reshape(n_offsets,1)
+
+        # Find the vertical displacement vector
+        disp_up_vecs = np.hstack((np.zeros(shape=(n_offsets,2)), disp_up))
+
+        # Add a column to model vertical displacement from external tide model
+        G = np.hstack((G, np.zeros(shape=(n_rows,1))))
+        # Iterate over offsetfields
+        #print("n_offsets: ",n_offsets)
         for i in range(n_offsets):
 
-            #print(offsetfields[i][4])
+            # Find the observation vector (los, azi) refering to "create_grid_set"
+            vecs = [offsetfields[i][2],offsetfields[i][3]]
 
-            t_a = (offsetfields[i][0] - t_origin).days + offsetfields[i][4]
-            t_b = (offsetfields[i][1] - t_origin).days + offsetfields[i][4]
+            # Find the vertical displacement vector
+            disp_up_vec = disp_up_vecs[i,:]
 
-            delta_td[i] = (offsetfields[i][1] - offsetfields[i][0]).days
+            # Two observation vectors
+            for j in range(2):
 
-            for j in range(n_modeling_tides):
-
-                tide_name = modeling_tides[j]
-
-                omega = 2 * np.pi / tide_periods[tide_name]
-            
-                delta_cos[i,j] = np.cos(omega*t_b) - np.cos(omega*t_a)
-                delta_sin[i,j] = np.sin(omega*t_b) - np.sin(omega*t_a)
-
-        n_rows = n_offsets * 3 # Three components
-
-        if horizontal == False:
-            # E, N, U components.
-            n_cols = 3 + n_modeling_tides * 6 # cosE, cosN, cosU and sinE, sinN, sinU.
-        else:
-            # Only the E, N components.
-            n_cols = 3 + n_modeling_tides * 4 # cosE, cosN, sinE, sinN, Not finished below.
-        
-        ## G formation.
-        G = np.zeros(shape=(n_rows,n_cols))
-
-        # E, N, U Three components
-        for i in range(n_offsets):
-            vecs = [(1,0,0),(0,1,0),(0,0,1)]
-
-            # The observation vectors.
-            for j in range(3):
+                # Get the vector (represent E,N,U)
                 vector = np.asarray(vecs[j])
 
-                # Row entries of the observation.
-                row = np.zeros(shape=(n_cols,))
-
-                # Secular component.
-                row[0:3] = vector * delta_td[i]
-                
-                # Tidal components. (Projection)
-                for k in range(n_modeling_tides):
-                    row[3*(2*k+1):3*(2*k+2)] = vector * delta_cos[i,k]
-                    row[3*(2*k+2):3*(2*k+3)] = vector * delta_sin[i,k]
-
-                # Put them in into G.
-                G[i*3+j,:] = row
+                # Find the projection
+                G[i*2+j,n_cols] = np.dot(vector, disp_up_vec)
 
         return G
-        # End of building.
+        # End of modifying G.
 
     def model_vec_set_to_tide_vec_set(self, point_set, model_vec_set):
         tide_vec_set = {}
@@ -1356,16 +1435,16 @@ class fourdvel(basics):
         n_modeling_tides = self.n_modeling_tides
         modeling_tides = self.modeling_tides
 
-        num_params = 3 + n_modeling_tides*6
-        param_vec = np.zeros(shape=(num_params,1))
+        #num_params = 3 + n_modeling_tides*6
+        #param_vec = np.zeros(shape=(num_params,1))
+        
+        # Copy the model_vec
+        param_vec = np.copy(model_vec)
 
         # If model_vec is invalid.
         if np.isnan(model_vec[0,0]):
             param_vec = param_vec + np.nan
             return param_vec
-
-        # Model_vec is valid.
-        param_vec[0:3,0] = model_vec[0:3,0]
 
         # Tides.
         for k in range(n_modeling_tides):
@@ -1427,7 +1506,6 @@ class fourdvel(basics):
                 param_vec[3+k*6+t,0] = amp
                 param_vec[3+k*6+t+3,0] = phase
 
-        
         return param_vec
 
     # tide_vec to model_vec
@@ -1446,16 +1524,15 @@ class fourdvel(basics):
         n_modeling_tides = self.n_modeling_tides
         modeling_tides = self.modeling_tides
 
-        num_params = 3 + n_modeling_tides*6
-        param_vec = np.zeros(shape=(num_params,1))
+        #num_params = 3 + n_modeling_tides*6
+        #param_vec = np.zeros(shape=(num_params,1))
+        
+        param_vec = np.copy(tide_vec)
 
         # If tide_vec is invalid.
         if np.isnan(tide_vec[0,0]):
             param_vec = param_vec + np.nan
             return param_vec
-
-        # Model_vec is valid.
-        param_vec[0:3,0] = tide_vec[0:3,0]
 
         # Tides.
         for k in range(n_modeling_tides):
@@ -1614,29 +1691,34 @@ class fourdvel(basics):
 
         return invCd
 
-
-    def model_prior_set(self, point_set, horizontal = False):
+    def model_prior_set(self, point_set):
 
         invCm_set = {}
         for point in point_set:
-            invCm_set[point] = self.model_prior(horizontal = horizontal)
+            invCm_set[point] = self.model_prior()
 
         return invCm_set
 
-    def model_prior(self, horizontal = False):
+    def model_prior(self):
 
         n_modeling_tides = self.n_modeling_tides
         modeling_tides = self.modeling_tides
 
+        # Find the number of parameters
         num_params = 3 + n_modeling_tides*6
 
-        # Model priori.
+        # For tides_3, add one param for up_disp scale
+        if self.task_name == "tides_3":
+            num_params +=1
         
+        # Set the model priors
         # Sigmas of model parameters.
         inf_permiss = 0
         inf_restrict = 100000
  
         inv_sigma = np.zeros(shape=(num_params, num_params))
+
+        horizontal = self.horizontal_prior
 
         # Secular velocity.
         if horizontal == True:
@@ -1653,15 +1735,10 @@ class fourdvel(basics):
         else:
             up_short_period = False
 
-
         if hasattr(self,'horizontal_long_period'):
             horizontal_long_period = self.horizontal_long_period
         else:
             horizontal_long_period = False
-
-
-        #print(horizontal_long_period)
-        #print(stop)
 
         # Tides.
         for i in range(n_modeling_tides):
@@ -1687,15 +1764,14 @@ class fourdvel(basics):
 
         return invCm
 
-    def model_posterior_set(self, point_set, linear_design_mat_set, data_prior_set, model_prior_set):
+    def model_posterior_set(self, point_set, linear_design_mat_set, data_prior_set, model_prior_set, test_point=None):
+
         Cm_p_set = {}
         for point in point_set:
 
-            #print(point)
             Cm_p_set[point] = self.model_posterior(linear_design_mat_set[point], 
                                                     data_prior_set[point], 
                                                     model_prior_set[point])
-
         return Cm_p_set
 
     def model_posterior(self, design_mat, data_prior, model_prior):
@@ -1751,6 +1827,55 @@ class fourdvel(basics):
         out = error_lumped
 
         return quant
+
+    def extract_up_scale_set(self, point_set, model_vec_set, others_set):
+
+        for point in point_set:
+            model_vec = model_vec_set[point]
+            if np.isnan(model_vec[0,0]):
+                others_set[point]["up_scale"] = np.nan
+            else:
+                others_set[point]["up_scale"] = self.extract_up_scale(point, model_vec)
+
+        return 0
+
+    def extract_up_scale(self, point, model_vec):
+
+        # The first index after tides
+        return model_vec[3 + len(self.modeling_tides) * 6, 0]
+
+    def save_resid_set(self, point_set, resid_set, others_set, grounding_level):
+
+        for point in point_set:
+            if not 'grounding_level_resids' in others_set[point].keys():
+                others_set[point]['grounding_level_resids'] = {}
+
+            others_set[point]['grounding_level_resids'][grounding_level] = resid_set[point]
+
+        return 0
+
+    def select_optimal_grounding_level(self, point_set, others_set):
+
+        for point in point_set:
+
+            # if range_rmse is np.nan, optimal grounding level is np.nan
+            others_set[point]["optimal_grounding_level"] = np.nan
+            
+            min_resid = float("inf")
+
+            for grounding_level, resids in others_set[point]['grounding_level_resids'].items():
+
+                # Do selection based on full rmse
+                # range_rmse can np.nan
+                range_rmse = resids[1]
+                azimuth_rmse = resids[3]
+                full_rmse = np.sqrt(range_rmse**2 + azimuth_rmse**2)
+
+                if full_rmse < min_resid:
+                    min_resid = full_rmse
+                    others_set[point]["optimal_grounding_level"]  = grounding_level
+
+        return 0
 
     # Simple version.
     def param_estimation_simple(self, design_mat, data):
@@ -1814,7 +1939,7 @@ class fourdvel(basics):
 
         # Only keep the mean and standard deviation due to disk space.
         # There are four entries:
-        # range mean, range std, azimuth mean, azimuth std
+        # range mean, range rms, azimuth mean, azimuth rms
 
         for point in point_set:
 
@@ -1824,9 +1949,9 @@ class fourdvel(basics):
 
             if not np.isnan(resid_of_secular[0,0]):
                 resid_of_secular_set[point] = ( np.mean(resid_of_secular[0::2]),
-                                                np.std (resid_of_secular[0::2]),
+                                                np.sqrt(np.mean(resid_of_secular[0::2]**2)),
                                                 np.mean(resid_of_secular[1::2]),
-                                                np.std (resid_of_secular[1::2]))
+                                                np.sqrt(np.mean(resid_of_secular[1::2]**2)))
 
                 #print(resid_of_secular_set[point])
 
@@ -1839,10 +1964,10 @@ class fourdvel(basics):
 
             if not np.isnan(resid_of_tides[0,0]):
                 # range and azimuth
-                resid_of_tides_set[point] = ( np.mean(resid_of_tides[0::2]),
-                                                np.std (resid_of_tides[0::2]),
+                resid_of_tides_set[point] = (   np.mean(resid_of_tides[0::2]),
+                                                np.sqrt(np.mean(resid_of_tides[0::2]**2)),
                                                 np.mean(resid_of_tides[1::2]),
-                                                np.std (resid_of_tides[1::2]))
+                                                np.sqrt(np.mean(resid_of_tides[1::2]**2)))
 
                 #print(resid_of_tides_set[point])
 
@@ -2096,11 +2221,13 @@ class fourdvel(basics):
 
                     amp_full = (amp_alf**2 + amp_crf**2)**0.5
 
+                    # Remove some invalid phase values
                     if v_model>thres_for_v and amp_alf>thres_for_amp:
                         if self.proj == "Rutford" and lat<-77.8:
                             pass
 
-                        elif self.proj == "Evans" and ampU>0.5:
+                        elif self.proj == "Evans" and lat<-75.85:
+                        #elif self.proj == "Evans":
                             pass
 
                         else:
@@ -2115,7 +2242,8 @@ class fourdvel(basics):
                         if self.proj == "Rutford" and lat<-77.8:
                             pass
 
-                        elif self.proj == "Evans" and ampU>0.5:
+                        #elif self.proj == "Evans" and ampU>0.5:
+                        elif self.proj == "Evans":
                             pass
 
                         else:
@@ -2288,7 +2416,8 @@ class fourdvel(basics):
                     thres = 0.1
 
                     # value in velocity model > 0
-                    # estimated value > thres
+                    #if (ampU > thres) or (state=='uq') :
+
                     if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq') :
                         value = t_vec[3+k*6+5]
 
@@ -2328,8 +2457,6 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
-
-        
         # M2 Up phase. 
         # convert to minute
         elif quant_name.startswith('M2_up_displacement_phase'):
@@ -2340,7 +2467,8 @@ class fourdvel(basics):
                     ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
                     thres = 0.3
 
-                    if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
+                    #if ampU >=thres or state == 'uq':
+                    if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
                         # Find the phase
                         value = t_vec[3+k*6+5]
 
@@ -2392,7 +2520,7 @@ class fourdvel(basics):
                     ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
                     thres = 0.1
 
-                    if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
+                    if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
                         # Find the phase
                         value = t_vec[3+k*6+5]
 

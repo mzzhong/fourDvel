@@ -52,15 +52,12 @@ class configure(fourdvel):
                 stack = "stripmap"
                 workdir = self.csk_workdir
                 name='track_' + str(track_num).zfill(2) + str(0)
-                #runid = 20180712
                 runid = self.csk_id
     
             elif sate == 's1':
                 stack = 'tops'
                 workdir = self.s1_workdir
                 name = 'track_' + str(track_num)
-                #runid = 20180703
-                #runid = 20200101
                 runid = self.s1_id
 
         elif self.proj == "Rutford":
@@ -73,16 +70,14 @@ class configure(fourdvel):
     
             elif sate == 's1':
 
+                # TODO
                 raise Exception("S1 data not ready for Rutford yet")
 
                 stack = 'tops'
                 workdir = self.s1_workdir
                 name = 'track_' + str(track_num)
-                #runid = 20180703
                 runid = self.s1_id
-        
         else:
-
             raise Exception("Can't find data for project: ", self.proj)
 
         # Create dense offset object.
@@ -152,6 +147,11 @@ class configure(fourdvel):
             data_vec[2*i+1,0] = offsets[i][1]
 
         return data_vec
+
+    def load_simulation_noise_sigma(self, point):
+
+        simulation_noise_sigma = self.simulation_data_uncert_const
+        return simulation_noise_sigma
 
     def load_noise_sigma(self, point):
 
@@ -227,8 +227,10 @@ class configure(fourdvel):
                                                             point_set = point_set, 
                                                             velo_model_set = velo_model_set)
             # Data prior.
+            simulation_noise_sigma_set = {}
             noise_sigma_set = {}
             for point in point_set:
+                simulation_noise_sigma_set[point] = self.load_simulation_noise_sigma(point)
                 noise_sigma_set[point] = self.load_noise_sigma(point)
 
             # Find the stack of design matrix for Simulation (Rutford) tides
@@ -252,7 +254,7 @@ class configure(fourdvel):
                                 tide_amp_set = tide_amp_set, 
                                 tide_phase_set = tide_phase_set, 
                                 offsetfields_set = offsetfields_set, 
-                                noise_sigma_set = noise_sigma_set)
+                                noise_sigma_set = simulation_noise_sigma_set)
 
             # True tidal params. (Every point has the value)
             true_tide_vec_set = fourD_sim.true_tide_vec_set(point_set, secular_v_set, 
@@ -281,10 +283,17 @@ class configure(fourdvel):
                 track_num = track[0]
                 sate_name = track[1]
 
+                # Exclude the data requied by the user
                 if sate_name == "csk" and self.use_csk == False:
                     continue
 
                 if sate_name == "s1" and self.use_s1 == False:
+                    continue
+
+                if sate_name == "csk" and track_num in self.csk_excluded_tracks:
+                    continue
+
+                if sate_name == "s1" and track_num in self.s1_excluded_tracks:
                     continue
 
                 print('=========== NEW TRACK ==============')
@@ -354,8 +363,10 @@ class configure(fourdvel):
                                                                 velo_model_set = velo_model_set)
 
                 # Data prior.
+                simulation_noise_sigma_set = {}
                 noise_sigma_set = {}
                 for point in point_set:
+                    simulation_noise_sigma_set[point] = self.load_simulation_noise_sigma(point)
                     noise_sigma_set[point] = self.load_noise_sigma(point)
 
                 # Stack the design matrix for Rutford tides
@@ -378,7 +389,7 @@ class configure(fourdvel):
                                     tide_amp_set = tide_amp_set, 
                                     tide_phase_set = tide_phase_set, 
                                     offsetfields_set = offsetfields_set, 
-                                    noise_sigma_set = noise_sigma_set)
+                                    noise_sigma_set = simulation_noise_sigma_set)
 
                 # True tidal params. (Every point has the value)
                 # velocity domain m/d

@@ -51,7 +51,31 @@ class driver_fourdvel():
         self.param_file = inps.param_file
         self.task_name = inps.task_name
 
-        self.estimate_tasks = ["do_nothing", "tides_1", "tides_2"]
+        self.estimate_tasks = ["do_nothing", "tides_1", "tides_2", "tides_3", "tides_4", "tides_5"]
+
+        # Explantion:
+
+        # tides_1: conventional linear (BM 2017)
+
+        # tides_2: single point MCMC to detect grounding, can take external vertical model to constrain the vertical displacement
+        # This is non-linear, as we want to simutaneously infer grounding and tidal params
+        # Seems to work on detecting grounding
+
+        # tides_3: Try to linearize the problem in tides_2
+        # Add vertical data into linear model
+        # Estimate the vertical scaling only
+        # Enumerate the grounding level
+        # Check the residual to seclect the best grounding level
+
+        # TODO
+        # tides_4: Find the optimal grounding from the enumeration results using tides_3
+        # Need to load the results
+        # Only grid_set_others needs to be updated
+
+        # tides_5: Using the optimal grounding from tides_4 to get the new results
+        # Need to load the results
+        # All grid_set except than grid_set needs to be updated
+
         self.analysis_tasks = ["prediction_evaluation"]
 
         # Set the task
@@ -59,13 +83,17 @@ class driver_fourdvel():
 
             # Will change the class tasks to estimate 
             self.tasks = estimate(self.param_file)
+
+            # Set the task name
+            self.tasks.set_task_name(task_name = self.task_name)
         
         elif self.task_name in self.analysis_tasks:
             
             self.tasks = analysis(self.param_file)
 
-            # Set the analysis name
-            self.tasks.set_analysis_name(analysis_name = self.tasks.analysis_name)
+            # Set the task name
+            self.tasks.set_task_name(task_name = self.task_name)
+
         else:
             print("Undefined task_name")
             raise Exception()
@@ -210,7 +238,7 @@ class driver_fourdvel():
 
                         recorded = False
 
-                        all_sets = tasks.estimate(point_set = point_set, tracks_set = tracks_set, task_name = task_name, inversion_method = tasks.inversion_method)
+                        all_sets = tasks.estimate(point_set = point_set, tracks_set = tracks_set)
 
                         # Save the results
                         # Update (only for parallel call)
@@ -237,7 +265,7 @@ class driver_fourdvel():
                        
                             all_grid_sets['grid_set_resid_of_secular'].update(all_sets['resid_of_secular_set'])
                             all_grid_sets['grid_set_resid_of_tides'].update(all_sets['resid_of_tides_set'])
-                            all_grid_sets['grid_set_other_1'].update(all_sets['other_set_1'])
+                            all_grid_sets['grid_set_others'].update(all_sets['others_set'])
     
                         if recorded == False:
                             print("Having problem recording this tile: ", tile)
@@ -315,6 +343,9 @@ class driver_fourdvel():
 
             # Full divide
             divide = tasks.chop_into_threads(total_number, nthreads)
+            print('total number: ', total_number)
+            print('nthreads: ', nthreads)
+            print("full divide: ", divide)
     
             # Multithreading starts here.
             # The function to run every chunk.
@@ -330,7 +361,7 @@ class driver_fourdvel():
             all_grid_sets['grid_set_tide_vec_uq'] = manager.dict()
             all_grid_sets['grid_set_resid_of_secular'] = manager.dict()
             all_grid_sets['grid_set_resid_of_tides'] = manager.dict()
-            all_grid_sets['grid_set_other_1'] = manager.dict()
+            all_grid_sets['grid_set_others'] = manager.dict()
 
             ## analysis_tasks
             all_grid_sets['grid_set_analysis'] = manager.dict()
@@ -363,7 +394,7 @@ class driver_fourdvel():
     
             tasks.grid_set_resid_of_secular = dict(all_grid_sets['grid_set_resid_of_secular'])
             tasks.grid_set_resid_of_tides = dict(all_grid_sets['grid_set_resid_of_tides'])
-            tasks.grid_set_other_1 = dict(all_grid_sets['grid_set_other_1'])
+            tasks.grid_set_others = dict(all_grid_sets['grid_set_others'])
 
             # task_name = prediction_evaluation
             tasks.grid_set_analysis = dict(all_grid_sets['grid_set_analysis'])
@@ -386,23 +417,22 @@ class driver_fourdvel():
                     tasks.grid_set_true_tide_vec.update(all_sets['true_tide_vec_set'])
                 
                 tasks.grid_set_tide_vec.update(all_sets['tide_vec_set'])
-
                 tasks.grid_set_tide_vec_uq.update(all_sets['tide_vec_uq_set'])
-       
                 tasks.grid_set_resid_of_secular.update(all_sets['resid_of_secular_set'])
                 tasks.grid_set_resid_of_tides.update(all_sets['resid_of_tides_set'])
-                tasks.grid_set_other_1.update(all_sets['other_set_1'])
+                tasks.grid_set_others.update(all_sets['others_set'])
                 
-                tasks.grid_set_analysis.update(all_sets['analysis_set'])
+                #tasks.grid_set_analysis.update(all_sets['analysis_set'])
 
         ## Save the final results in dictionary manager
         forceSaveTides = False
         forceSaveAnalysis = False
 
-        if (task_name in self.estimate_tasks and tasks.single_point_mode == False) or (forceSaveTides):
+        if (task_name in self.estimate_tasks and tasks.single_point_mode == False) or (task_name in self.estimate_tasks and forceSaveTides == True):
 
             print("Write results to disk")
-            print("The task is tides")
+            print("The task is estimate")
+            print("Single_point_mode is off or Force Save is on")
             prefix = str(test_id) + '_'
             with open(self.estimation_dir + '/'+ prefix + 'grid_set_true_tide_vec.pkl', 'wb') as f:
                 
@@ -420,12 +450,12 @@ class driver_fourdvel():
             with open(self.estimation_dir + '/' + prefix + 'grid_set_resid_of_tides.pkl','wb') as f:
                 pickle.dump(tasks.grid_set_resid_of_tides, f)
     
-            with open(self.estimation_dir + '/' + prefix+ 'grid_set_other_1.pkl','wb') as f:
-                pickle.dump(tasks.grid_set_other_1, f)
+            with open(self.estimation_dir + '/' + prefix+ 'grid_set_others.pkl','wb') as f:
+                pickle.dump(tasks.grid_set_others, f)
 
             print("Done")
 
-        elif (task_name in self.analysis_tasks and tasks.single_point_mode == False) or (forceSaveAnalysis):
+        elif (task_name in self.analysis_tasks and tasks.single_point_mode == False) or (task_name in self.analysis_tasks and forceSaveAnalysis == True):
 
             print("Write results to disk")
             print("The task is prediction evaluation")

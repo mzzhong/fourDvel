@@ -665,7 +665,7 @@ class Bayesian_MCMC(fourdvel):
 
                 # Vertical displacement scaling
                 if use_up_scale:
-                    self.up_scale = pm.Normal('up_scale', mu=0, sigma=0.1, shape=(1,1))
+                    self.up_scale = pm.Normal('up_scale', mu=0.8, sigma=0.5, shape=(1,1))
 
                 dis_EN_ta = tt_d_mat_EN_ta.dot(self.model_vec_tidal)
                 dis_EN_tb = tt_d_mat_EN_tb.dot(self.model_vec_tidal)

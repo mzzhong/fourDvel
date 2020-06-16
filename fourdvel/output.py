@@ -41,22 +41,31 @@ class output(fourdvel):
 
         self.display = display(param_file)
 
-    def output_residual(self):
+    def run_output_residual(self):
 
         this_result_folder = self.estimation_dir
         test_id = self.test_id
 
-        with open(this_result_folder + '/' 
-                    + str(test_id) + '_' + 'grid_set_resid_of_secular.pkl','rb') as f:
-            self.grid_set_resid_of_secular = pickle.load(f)
+
+        #with open(this_result_folder + '/' 
+        #            + str(test_id) + '_' + 'grid_set_resid_of_secular.pkl','rb') as f:
+        #    self.grid_set_resid_of_secular = pickle.load(f)
 
         with open(this_result_folder + '/' 
                     + str(test_id) + '_' + 'grid_set_resid_of_tides.pkl','rb') as f:
             self.grid_set_resid_of_tides = pickle.load(f)
 
+        # compare id
+        compare_id = 202010565141
+
+        with open(self.estimations_dir + '/' + str(compare_id) + '/' +
+                    str(compare_id) + '_' + 'grid_set_resid_of_tides.pkl','rb') as f:
+            self.grid_set_resid_of_tides_compare = pickle.load(f)
+
+        # Set the compare set
 
         grid_sets = {}
-        grid_sets['resid_of_secular'] = self.grid_set_resid_of_secular
+        #grid_sets['resid_of_secular'] = self.grid_set_resid_of_secular
         grid_sets['resid_of_tides'] = self.grid_set_resid_of_tides
 
         state = 'est'
@@ -69,24 +78,44 @@ class output(fourdvel):
 
                 print('Output quantity name: ', quant_name)
                 grid_set_quant = {}
+                grid_set_quant_compare = {}
 
+                # The two grid sets
                 this_grid_set = grid_sets[misfit_name]
+                compare_grid_set = self.grid_set_resid_of_tides_compare
+
                 output_keys = this_grid_set.keys()
 
                 # For all available points in grid_set.
                 for point in output_keys:
                 
-                    # Four entries: range_mean(0), range_std(1), azimuth_mean(2), azimuth_std(3)
+                    # Four entries: range_mean(0), range_rms(1), azimuth_mean(2), azimuth_rms(3)
                     quant = this_grid_set[point]
 
+                    try:
+                        quant_compare = compare_grid_set[point]
+                    except:
+                        quant_compare = [np.nan]*10
+
+                    # Output the rms
                     if comp == 'range':
                         grid_set_quant[point] = quant[1]
+                        #print(quant[1])
+                        #print(quant_compare[1])
+                        grid_set_quant_compare[point] = quant[1] - quant_compare[1]
+
                     elif comp == 'azimuth':
                         grid_set_quant[point] = quant[3]
+                        grid_set_quant_compare[point] = quant[3] - quant_compare[3]
 
                 # Write to xyz file.
                 xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + quant_name + '.xyz')
                 self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
+
+                # Write the compare to xyz file.
+                xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + quant_name + '_compare' + '.xyz')
+
+                self.display.write_dict_to_xyz(grid_set_quant_compare, xyz_name = xyz_name)
 
         return 0
 
@@ -138,7 +167,7 @@ class output(fourdvel):
 
         return 0
 
-    def output_differences(self, compare_id, compare_prefix):
+    def run_output_difference(self, compare_id, compare_prefix):
 
         print('Ouput difference...')
 
@@ -154,7 +183,7 @@ class output(fourdvel):
 
         for quant_name in quant_list:
             
-            print('Output quantity nane: ', quant_name)
+            print('Output quantity name: ', quant_name)
             grid_set_quant = {}
 
             if quant_name == 'secular_horizontal_velocity_difference':
@@ -175,31 +204,68 @@ class output(fourdvel):
 
         return 0
 
-    def output_others(self):
+    def run_output_others(self):
 
         this_result_folder = self.estimation_dir
         test_id = self.test_id
 
         state='est'
-        quant_name='other_1'
 
         with open(this_result_folder + '/' 
-                    + str(test_id) + '_' + 'grid_set_other_1.pkl','rb') as f:
+                    + str(test_id) + '_' + 'grid_set_others.pkl','rb') as f:
             this_grid_set = pickle.load(f)
 
-        print('Output quantity name: ', quant_name)
-        grid_set_quant = {}
+ 
+        with open(this_result_folder + '/' 
+                    + str(test_id) + '_' + 'grid_set_others.pkl','rb') as f:
+            this_grid_set = pickle.load(f)
 
-        output_keys = this_grid_set.keys()
 
-        for point in output_keys:
+        quant_list=["up_scale", "optimal_grounding_level"]
+
+        for quant_name in quant_list:
+
+            print('Output quantity name: ', quant_name)
+            grid_set_quant = {}
+
+            output_keys = this_grid_set.keys()
+            for point in output_keys:
+
+                #if quant_name.startswith('optimal'):
+                #    print(stop)
+
+                # Ad hoc
+                if quant_name == "optimal_grounding_level":
+
+                    if not quant_name in this_grid_set[point].keys():
+                        continue
+
+                    if self.grid_set_velo[point][2]<=0.4:
+                        continue
+
+                    try:
+                        if this_grid_set[point][quant_name]=='external':
+                            continue
+                    except:
+                        pass
+
+                    try:
+                        if this_grid_set[point][quant_name]<=-2.8:
+                            continue
+                    except:
+                        pass
+
+                #if quant_name.startswith('optimal'):
+                #    print(stop)
         
-            # Record everything, if Cm_p exists, including nan futher filtered by tide_vec_to_quantity.
-            grid_set_quant[point] = this_grid_set[point]
+                # Record everything, including np.nan
+                # np.nan is filtered in write_dict_to_xyz
+                grid_set_quant[point] = this_grid_set[point][quant_name]
 
-        # Write to xyz file.
-        xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + quant_name + '.xyz')
-        self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
+            # Write to xyz file.
+            xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + 'others' + '_' + quant_name + '.xyz')
+            
+            self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
 
         return 0
 
@@ -318,18 +384,26 @@ class output(fourdvel):
                         'O1_up_displacement_phase',
                         'N2_up_displacement_amplitude',
                         'N2_up_displacement_phase',
-                        'Q1_up_displacement_amplitude',
-                        'Q1_up_displacement_phase',
+                        #'Q1_up_displacement_amplitude',
+                        #'Q1_up_displacement_phase',
  
                         # Msf
                         "Msf_horizontal_displacement_group",
                         "Msf_up_displacement_amplitude",
                         "Msf_up_displacement_phase",
 
+
                         # Mf
                         'Mf_horizontal_displacement_amplitude',
                         "Mf_up_displacement_amplitude",
-                        "Mf_up_displacement_phase"
+                        "Mf_up_displacement_phase",
+
+                        # M2
+                        'M2_horizontal_displacement_amplitude',
+
+                        # O1
+                        'O1_horizontal_displacement_amplitude'
+
                         ]
 
 #        quant_list = [
@@ -387,6 +461,12 @@ class output(fourdvel):
                             downsample = 50
                         elif self.resolution == 500:
                             downsample = 10
+                        elif self.resolution == 1000:
+                            downsample = 5
+                        elif self.resolution == 2000:
+                            downsample = 5
+                        else:
+                            raise Exception()
 
                         if lon_ind % downsample==0 and lat_ind % downsample==0:
                             output_keys.append((lon,lat))
@@ -525,19 +605,21 @@ def main(iargs=None):
     if out.output_est:  output_states.append("est")
     if out.output_uq:   output_states.append("uq")
 
+    if out.output_others: out.run_output_others()
+
     quant_list_name = inps.quant_list_name
 
     out.output_estimations(output_states, quant_list_name)
  
-    if out.output_resid: out.output_residual()
+    if out.output_resid: out.run_output_residual()
 
     if out.output_difference:
         if out.proj=="Evans":
             # Evans
-            out.output_differences(compare_id=620, compare_prefix='true')
+            out.run_output_difference(compare_id=620, compare_prefix='true')
         elif out.proj == "Rutford":
             # Rutford
-            out.output_differences(compare_id=2020104656, compare_prefix='true')
+            out.run_output_difference(compare_id=2020104656, compare_prefix='true')
         else:
             raise Exception()
 

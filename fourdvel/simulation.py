@@ -91,7 +91,7 @@ class simulation(fourdvel):
         self.verti_scale = 1
 
         # Models are represented in displacement.
-        model_num = 12
+        model_num = 11
 
         if model_num == 1:
 
@@ -159,6 +159,28 @@ class simulation(fourdvel):
             tidesRut_params['Mm'] =    [0,  253.0,  1.6,    63]
             tidesRut_params['Ssa'] =   [0, 256.0,  1.5,    179]
             tidesRut_params['Sa'] =    [0, 273.0,  0.2,    179]
+
+        
+        # Same as model 12, but increase M2, S2, O1, ...
+        if model_num == 13:
+
+            tidesRut_params['K2'] =    [2,  163,    29.1,   99]
+            tidesRut_params['N2'] =    [2,   163,    30.5,   20]
+            tidesRut_params['S2'] =    [20, 184,    101.6,  115]
+            tidesRut_params['M2'] =    [20, 177,    156.3,  70]  # M2
+
+            tidesRut_params['K1'] =    [10,  79,     49,     73]
+            tidesRut_params['P1'] =    [2,  77.0,   16.6,   64]
+
+            tidesRut_params['O1'] =    [15, 81.0,   43,     54]  # O1
+            tidesRut_params['Mf'] =    [0,  250.0,  2.9,    163] # Mf
+            #tidesRut_params['Msf'] =   [40.00, 18.8,   0.3,    164] # Msf
+            tidesRut_params['Msf'] =   [35.00, 260,   0.3,    164] # New Msf
+
+            tidesRut_params['Mm'] =    [0,  253.0,  1.6,    63]
+            tidesRut_params['Ssa'] =   [0, 256.0,  1.5,    179]
+            tidesRut_params['Sa'] =    [0, 273.0,  0.2,    179]
+
 
         if model_num == 2:
 
@@ -603,7 +625,7 @@ class simulation(fourdvel):
             d_u = d_u - np.mean(d_u)
 
             # periodic grounding
-            d_u[d_u < self.grounding] = self.grounding
+            d_u[d_u < self.simulation_grounding_level] = self.simulation_grounding_level
             
             # Plot the velocity time series.
             fig = plt.figure(1, figsize=(10,5))
@@ -661,7 +683,10 @@ class simulation(fourdvel):
 
             # Signature 1, grounding indicator
             # 0: no grounding, 1: grounding
-            grounding_indicator = velo_model[3]
+            if len(velo_model)>=4:
+                grounding_indicator = velo_model[3]
+            else:
+                grounding_indicator = 0
 
             # Note that the stacked design mat/up displacement may be empty 
             # because there is no data.
@@ -686,7 +711,7 @@ class simulation(fourdvel):
 
                 # Find vertical displacement at timing_a, timing_b
                 # Use parameterized tide model
-                if not self.external_up_disp: 
+                if not self.simulation_use_external_up: 
                     dis_U_ta = np.matmul(stacked_design_mat_U_ta, model_vec)
                     dis_U_tb = np.matmul(stacked_design_mat_U_tb, model_vec)
                 # Use external tide model (plain time series)
@@ -697,8 +722,8 @@ class simulation(fourdvel):
                 # Grounding
                 # When grounding_indicator is 1:
                 if grounding_indicator == 1:
-                    dis_U_ta[dis_U_ta < self.grounding] = self.grounding
-                    dis_U_tb[dis_U_tb < self.grounding] = self.grounding
+                    dis_U_ta[dis_U_ta < self.simulation_grounding_level] = self.simulation_grounding_level
+                    dis_U_tb[dis_U_tb < self.simulation_grounding_level] = self.simulation_grounding_level
     
                 # Find tide induced offset
                 offset_EN = dis_EN_tb - dis_EN_ta
