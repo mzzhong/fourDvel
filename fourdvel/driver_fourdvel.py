@@ -185,7 +185,6 @@ class driver_fourdvel():
                 #print('***  Start a new tile ***')
                 #self.print_int5d([lon, lat])
 
-
                 point_set = tile_set[tile] # A list of tuples
 
                 skip_this_tile = False
@@ -475,7 +474,6 @@ class driver_fourdvel():
         return 0
 
 def main(iargs=None):
-
     # Timer starts.
     start_time = time.time()
 

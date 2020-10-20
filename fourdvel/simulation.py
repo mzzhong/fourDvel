@@ -686,7 +686,7 @@ class simulation(fourdvel):
             if len(velo_model)>=4:
                 grounding_indicator = velo_model[3]
             else:
-                grounding_indicator = 0
+                grounding_indicator = velo_model[2]
 
             # Note that the stacked design mat/up displacement may be empty 
             # because there is no data.
@@ -711,7 +711,8 @@ class simulation(fourdvel):
 
                 # Find vertical displacement at timing_a, timing_b
                 # Use parameterized tide model
-                if not self.simulation_use_external_up: 
+                use_param_model = False
+                if not self.simulation_use_external_up or use_param_model: 
                     dis_U_ta = np.matmul(stacked_design_mat_U_ta, model_vec)
                     dis_U_tb = np.matmul(stacked_design_mat_U_tb, model_vec)
                 # Use external tide model (plain time series)

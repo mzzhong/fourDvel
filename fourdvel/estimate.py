@@ -217,7 +217,8 @@ class estimate(configure):
             # Show on point in the point set.
 
             self.show_vecs = False
-            show_control = False
+            show_control = True
+            
             if self.show_vecs == True or show_control== True:
             #if self.show_vecs == True and inversion_method=="Bayesian_Linear":
     

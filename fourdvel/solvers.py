@@ -729,6 +729,7 @@ class Bayesian_MCMC(fourdvel):
                 
                 # Find MAP solution
                 map_estimate = pm.find_MAP(model=model)
+                print("map estimate: ",map_estimate)
 
                 # Get model vec that satisfy to original definition
                 model_vec, grounding = self.pad_to_orig_model_vec(map_estimate, mode="nonlinear")

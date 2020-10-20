@@ -282,8 +282,10 @@ class fourdvel(basics):
             if name == 'use_csk':
                 if value == 'True':
                     self.use_csk = True
-                else:
+                elif value == "False":
                     self.use_csk = False
+                else:
+                    raise Exception("use_csk: " + value)
                 print('use_csk: ',value)
 
             if name == 'csk_id':
@@ -292,6 +294,8 @@ class fourdvel(basics):
 
             if name == 'csk_version':
                 self.csk_version = value
+                if value == "None":
+                    self.csk_version = None
                 print('csk_version: ',value)
 
             if name == 'csk_start':
@@ -320,6 +324,8 @@ class fourdvel(basics):
 
             if name == 's1_version':
                 self.s1_version = value
+                if value == "None":
+                    self.s1_version = None
                 print('s1_version: ',value)
 
             if name == 's1_start':
@@ -401,7 +407,10 @@ class fourdvel(basics):
 
             ## External up ##
             if name == 'external_up_disp_file':
-                self.external_up_disp_file = value
+                if value == "None":
+                    self.external_up_disp_file = None
+                else:
+                    self.external_up_disp_file = value
                 print('external_up_disp_file: ',value)
 
             ## External grounding level data ##
@@ -479,13 +488,17 @@ class fourdvel(basics):
         csk_end = self.csk_end
 
         # Not all data are available, currently, so I read the files exported from E-GEOS. I will switch to real data
-        file_folder = self.csk_log
-        data_file = os.path.join(file_folder,'all.csv')
+        
+        #file_folder = self.csk_log
+        #data_file = os.path.join(file_folder,'all.csv')
+        data_file = self.csk_log
 
         csk = CSK_Utils()
 
-        tot_product = 0
-        tot_frames = 0
+        tot_products = 0
+
+        num_products = 0
+        num_frames = 0
 
         with open(data_file) as dataset:
             csv_reader = csv.reader(dataset, delimiter=';')
@@ -496,7 +509,7 @@ class fourdvel(basics):
                     continue
                 
                 # Count as one product.
-                tot_product = tot_product + 1
+                tot_products = tot_products + 1
 
                 # Satellite 
                 sate = 'CSKS' + row[1][-1]
@@ -504,6 +517,8 @@ class fourdvel(basics):
                 acq_datefmt = row[5].split(' ')[0]
                 # Direction
                 direction = row[7][0]
+
+                #print(acq_datefmt)
 
                 # Convert date string to date object
                 date_comp = [int(item) for item in acq_datefmt.split('-')]
@@ -514,11 +529,15 @@ class fourdvel(basics):
     
                     # Find the figure out the track number.                
                     tracks = csk.date2track(day=theDate, sate=sate)[sate]
+                    #print(line, tracks, direction)
+                    #print(row)
                    
                     if direction == 'A':
                         track = [ i for i in tracks if i<=10 ]
                     else:
                         track = [ i for i in tracks if i>=11 ]
+
+                    #print(track)
 
                     # Record it.    
                     if track[0] in csk_data.keys():
@@ -526,11 +545,12 @@ class fourdvel(basics):
                     else:
                         csk_data[track[0]] = [theDate]
     
-                    tot_frames = tot_frames + csk.numOfFrames[track[0]]
+                    num_frames = num_frames + csk.numOfFrames[track[0]]
+                    num_products += 1
     
-        
-        print("Number of product: ", tot_product)
-        print("Number of frames: ", tot_frames)
+        print("Total number of products in log: ", tot_products)
+        print("Number of products: ", num_products)
+        print("Number of frames: ", num_frames)
 
         # Sort the dates of each track.
         # Output the track info
@@ -552,13 +572,21 @@ class fourdvel(basics):
 
         tracklist = self.csk_tracks
 
-        option = "data_based"
-
-        if option=="data_based":
-
+        # Set the option for setting available data dates in synthetic test
+        # For Evans CSK data is not available, so we make the data log-based
+        if self.proj == 'Evans' and self.test_mode == 1:
+            csk_data_option = "log_based"
+        else:
+            csk_data_option = "data_based"
+        if csk_data_option=="data_based":
             for track_num in tracklist: 
-            
-                filefolder = self.csk_workdir + '/track_' + str(track_num).zfill(3) + '_0' + '/raw/201*'
+
+                if self.proj == "Evans":            
+                    filefolder = self.csk_workdir + '/track_' + str(track_num).zfill(2) + '0' + '/raw/201*'
+                elif self.proj == "Rutford":
+                    filefolder = self.csk_workdir + '/track_' + str(track_num).zfill(3) + '_0' + '/raw/201*'
+                else:
+                    raise Exception()
 
                 filelist = glob.glob(filefolder)
                 csk_data[track_num] = []
@@ -575,10 +603,11 @@ class fourdvel(basics):
 
                 print("track_num: ",track_num,end=",  ")
                 print("Number of dates: ",len(csk_data[track_num]))
-                #print(csk_data[track_num])
 
+        elif csk_data_option == "log_based":
+            self.get_CSK_trackDates_from_log()
         else:
-            print("option", option, "is not defined yet")
+            print("csk_data_option", csk_data_option, "is not defined yet")
             raise Exception("dates are not available")
 
         return 0
@@ -596,10 +625,9 @@ class fourdvel(basics):
 
         tracklist = self.s1_tracks
 
-        option = "fake"
-
-        if option=="data_based":
-
+        s1_data_option = "data_based"
+        #s1_data_option = "no_data"
+        if s1_data_option=="data_based":
             for track_num in tracklist: 
             
                 filefolder = '/net/kraken/nobak/mzzhong/S1-Evans/data_' + str(track_num) + '/*zip'
@@ -620,8 +648,7 @@ class fourdvel(basics):
                 print("Number of dates: ", len(s1_data[track_num]))
                 #print(s1_data[track_num])
 
-        elif option == "fake":
-
+        elif s1_data_option == "fake":
             for track_num in tracklist:
     
                 s1_data[track_num] = []
@@ -637,8 +664,12 @@ class fourdvel(basics):
 
                 print("track_num: ",track_num)
                 print("Number of dates: ", len(s1_data[track_num]))
-                #print(s1_data[track_num])
-
+        
+        elif s1_data_option == "no_data":
+            for track_num in tracklist:
+                s1_data[track_num] = []
+                print("track_num: ",track_num)
+                print("Number of dates: ", len(s1_data[track_num]))
         else:
             print("option", option, "is not defined yet")
             raise Exception("dates are not available")
@@ -756,12 +787,17 @@ class fourdvel(basics):
         sources = {}
         if self.proj == "Rutford":
             sources = {}
-            sources["csk"] = "20190901_v12"
-            sources["s1"] = "unknown"
+            #sources["csk"] = "20190901_v12"
+            #sources["s1"] = "unknown"
+            sources["csk"]= "_".join(filter(None,(str(self.csk_id), self.csk_version)))
+            sources["s1"] = "_".join(filter(None,(str(self.s1_id), self.s1_version)))
+ 
         elif self.proj == "Evans":
             sources = {}
-            sources["csk"] = "20180712"
-            sources["s1"] = "20200102_v12"
+            #sources["csk"] = "20180712"
+            #sources["s1"] = "20200102_v12"
+            sources["csk"]= "_".join(filter(None,(str(self.csk_id), self.csk_version)))
+            sources["s1"] = "_".join(filter(None,(str(self.s1_id), self.s1_version)))
         else:
              raise Exception("Unknown project name")
 
@@ -907,18 +943,22 @@ class fourdvel(basics):
 
         tide_file = self.external_up_disp_file
 
-        fid = open(tide_file)
-        lines = fid.readlines()
-        taxis = []
-        data = []
-        for line in lines:
-            t,z = line.split()
-            taxis.append(float(t))
-            data.append(float(z))
-
-        self.tide_taxis = taxis
-        self.tide_data = data
-        self.tide_t_delta = self.tide_taxis[1] - self.tide_taxis[0]
+        if tide_file:
+            if os.path.exists(tide_file):
+                fid = open(tide_file)
+                lines = fid.readlines()
+                taxis = []
+                data = []
+                for line in lines:
+                    t,z = line.split()
+                    taxis.append(float(t))
+                    data.append(float(z))
+        
+                self.tide_taxis = taxis
+                self.tide_data = data
+                self.tide_t_delta = self.tide_taxis[1] - self.tide_taxis[0]
+            else:
+                raise Exception("Tide file does not exist: " + tide_file)
 
         return
 
@@ -1065,8 +1105,8 @@ class fourdvel(basics):
 
         # !!! Ad hoc !!!
         # Turn off csk for Evans project
-        if self.proj == "Evans":
-            self.use_csk = False 
+        #if self.proj == "Evans":
+        #    self.use_csk = False 
    
         # The dictionary for all offset fields 
         self.offsetFieldStack_all = {}
@@ -1085,31 +1125,40 @@ class fourdvel(basics):
 
         track_num_set = sorted(track_num_set)
         print("necessary tracks: ", track_num_set)
+        print(self.use_csk)
 
         if self.use_csk:
-
             for track_num in self.csk_tracks:
-
                 if track_num_set and not (track_num,"csk") in track_num_set:
                     continue
 
-                track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "offsetFieldStack_" + str(self.csk_id)+ "_" + self.csk_version + ".pkl")
+                print("Hey", track_num)
+
+                if self.proj == "Evans":
+                    track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(2) + '0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), self.csk_version])) +  ".pkl")
+
+                elif self.proj == "Rutford":
+                    track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), self.csk_version])) +  ".pkl")
+                else:
+                    raise Exception()
 
                 if os.path.exists(track_offsetFieldStack_pkl):
                     print("Loading: ", track_offsetFieldStack_pkl)
                     with open(track_offsetFieldStack_pkl,'rb') as f:
                         offsetFieldStack = pickle.load(f)
                         self.offsetFieldStack_all[("csk", track_num)]= offsetFieldStack
-
+                else:
+                    #raise Exception(track_offsetFieldStack_pkl + ' does not exist')
+                    print(track_offsetFieldStack_pkl + ' does not exist')
+                    assert self.test_mode==1, "Test mode must be 1"
 
         if self.use_s1:
-
             for track_num in self.s1_tracks:
-
                 if track_num_set and not (track_num, "s1") in track_num_set:
                     continue
 
-                track_offsetFieldStack_pkl = os.path.join(self.s1_workdir, "track_" + str(track_num), "cuDenseOffsets", "offsetFieldStack_" + str(self.s1_id)+ "_" + self.s1_version + ".pkl")
+                track_offsetFieldStack_pkl = os.path.join(self.s1_workdir, "track_" + str(track_num), "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.s1_id), self.s1_version])) + ".pkl")
+
                 if os.path.exists(track_offsetFieldStack_pkl):
                     print("Loading: ", track_offsetFieldStack_pkl)
                     with open(track_offsetFieldStack_pkl,'rb') as f:
@@ -1175,7 +1224,7 @@ class fourdvel(basics):
 
         return 0
 
-    def tracks_to_full_offsetfields(self,tracks):
+    def tracks_to_full_offsetfields(self, tracks):
         
         # Deduce the available offsetfields from all tracks
         csk_data = self.csk_data

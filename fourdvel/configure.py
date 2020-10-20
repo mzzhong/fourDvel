@@ -104,7 +104,7 @@ class configure(fourdvel):
         #print('obtained pairs: ', track_pairs)
         #print('obtained offsets: ', track_offsets)
 
-        # Add observation vectors and time fraction.
+        # Based on track_pairs_set, add observation vectors and time fractions to get track_offsetfields_set
         track_offsetfields_set = {}
         for point in point_set:
             track_offsetfields_set[point] = []
@@ -283,7 +283,7 @@ class configure(fourdvel):
                 track_num = track[0]
                 sate_name = track[1]
 
-                # Exclude the data requied by the user
+                # Exclude the data required by the user
                 if sate_name == "csk" and self.use_csk == False:
                     continue
 
@@ -329,7 +329,7 @@ class configure(fourdvel):
                 print('Length of offsetfields and offsets: ', 
                         len(track_offsetfields_set[test_point]),len(track_offsets_set[test_point]))
 
-                # Point by point addition
+                # Point by point adding the data from the new track
                 for point in point_set:
                     # List addition.
                     offsetfields_set[point] = offsetfields_set[point] + track_offsetfields_set[point]
@@ -415,6 +415,7 @@ class configure(fourdvel):
 #                    true_tide_vec_set[point][0] = secular_v_set[point][0]
 #                    true_tide_vec_set[point][1] = secular_v_set[point][1]
 #                    true_tide_vec_set[point][2] = secular_v_set[point][2]
-
+            else:
+                raise Exception("Test mode error " + str(test_mode))
 
         return (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set)
