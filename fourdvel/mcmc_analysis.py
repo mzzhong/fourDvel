@@ -53,7 +53,7 @@ class mcmc_analysis(fourdvel):
     def run_map_estimate(self):
 
         point = self.test_point
-        map_estimate_pkl = "_".join([self.this_result_folder + "/map_estimate_BMC",str(point[0]),str(point[1]),str(self.test_mode)])
+        map_estimate_pkl = "_".join([self.this_result_folder + "/map_estimate_BMC",str(point[0]),str(point[1]),str(self.csk_data_mode),str(self.s1_data_mode)])
         print("map_estimate_pkl: ", map_estimate_pkl)
 
         # Load the map results
@@ -92,7 +92,7 @@ class mcmc_analysis(fourdvel):
         point = self.test_point
 
         # Load the trace object
-        trace_pkl = "_".join([self.estimation_dir+"/samples_BMC",str(point[0]),str(point[1]),str(self.test_mode)])
+        trace_pkl = "_".join([self.estimation_dir+"/samples_BMC",str(point[0]),str(point[1]),str(self.csk_data_mode),str(self.s1_data_mode)])
         
         print("trace pickle file: ", trace_pkl)
 

@@ -590,7 +590,13 @@ class Bayesian_MCMC(fourdvel):
 
             # Obtain noise sigma
             noise_sigma = self.noise_sigma_set[point]
-
+            Cd = np.zeros(shape = (N_data,N_data))
+            for i in range(N_data//2):
+                # Range.
+                Cd[2*i,2*i] = noise_sigma[i][0]**2
+                # Azimuth.
+                Cd[2*i+1,2*i+1] = noise_sigma[i][1]**2
+            
             # Obtain offsetfields
             offsetfields = self.offsetfields_set[point]
 
@@ -650,22 +656,21 @@ class Bayesian_MCMC(fourdvel):
             # Construct the parameter vector
             self.bmc_model = pm.Model()
             with self.bmc_model as model:
-
                 # Find the number of tidal model parameters
                 _ , P = d_mat_EN_ta.shape
     
                 # E, N, U
-                self.model_vec_secular = pm.Normal('secular', mu=0, sigma=2, shape=(1,3))
+                self.model_vec_secular=pm.Normal('secular', mu=0, sigma=2, shape=(1,3))
     
                 # Tidal components
-                self.model_vec_tidal = pm.Normal('tidal', mu=0, sigma=2, shape=(P,1))
+                self.model_vec_tidal=pm.Normal('tidal', mu=0, sigma=2, shape=(P,1))
 
                 # Grounding level
-                self.grounding = pm.Normal('grounding', mu=-1, sigma=2, shape=(1,1))
+                self.grounding=pm.Normal('grounding', mu=-1, sigma=2, shape=(1,1))
 
                 # Vertical displacement scaling
                 if use_up_scale:
-                    self.up_scale = pm.Normal('up_scale', mu=0.8, sigma=0.5, shape=(1,1))
+                    self.up_scale=pm.Normal('up_scale', mu=0.8, sigma=0.5, shape=(1,1))
 
                 dis_EN_ta = tt_d_mat_EN_ta.dot(self.model_vec_tidal)
                 dis_EN_tb = tt_d_mat_EN_tb.dot(self.model_vec_tidal)
@@ -676,7 +681,6 @@ class Bayesian_MCMC(fourdvel):
                     dis_U_tb = tt_d_mat_U_tb.dot(self.model_vec_tidal)
                 elif task_name == "tides_2":
                     # Based on external time series
-
                     if not use_up_scale:
                         dis_U_ta = tt_dis_U_ta
                         dis_U_tb = tt_dis_U_tb
@@ -719,11 +723,20 @@ class Bayesian_MCMC(fourdvel):
                 # Multiply to observation
                 # N_offsets * 3 -> N_data
                 pred_vec = tt_vec_mat.dot(offset_total_flatten)
-                
-                # Observation
-                obs = pm.Normal('obs', mu=pred_vec, sigma=self.sampling_data_sigma, observed=data_vec)
 
-                print('Model compilaion is done')
+                # Observation
+                normal_or_multinormal = 'normal'
+                if normal_or_multinormal == 'normal':
+                    obs = pm.Normal('obs', mu=pred_vec, sigma=self.sampling_data_sigma, observed=data_vec)
+                else:
+                    pred_vec_2 = pred_vec.reshape(shape=(N_data,))
+                    data_vec_2 = data_vec.reshape((1,N_data))
+                    print(Cd.shape)
+                    print(data_vec_2.shape)  
+                    # Multivariate Normal
+                    obs= pm.MvNormal('obs', mu=pred_vec_2, cov=Cd, observed=data_vec_2)
+
+                print('Model compilation is done')
                 
                 MAP_or_Sample = "Sample"
                 
@@ -744,7 +757,7 @@ class Bayesian_MCMC(fourdvel):
                 #n_steps = 100
                 if MAP_or_Sample == 'Sample':
                     #step = pm.NUTS()
-                    trace = pm.sample(n_steps, tune=n_steps,chains=3)
+                    trace = pm.sample(n_steps, tune=n_steps, chains=3)
 
                     # Save the true model vec to the trace object
                     if true_model_vec_set is not None:

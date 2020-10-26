@@ -711,8 +711,7 @@ class simulation(fourdvel):
 
                 # Find vertical displacement at timing_a, timing_b
                 # Use parameterized tide model
-                use_param_model = False
-                if not self.simulation_use_external_up or use_param_model: 
+                if not self.simulation_use_external_up: 
                     dis_U_ta = np.matmul(stacked_design_mat_U_ta, model_vec)
                     dis_U_tb = np.matmul(stacked_design_mat_U_tb, model_vec)
                 # Use external tide model (plain time series)
@@ -722,7 +721,7 @@ class simulation(fourdvel):
 
                 # Grounding
                 # When grounding_indicator is 1:
-                if grounding_indicator == 1:
+                if grounding_indicator > 0:
                     dis_U_ta[dis_U_ta < self.simulation_grounding_level] = self.simulation_grounding_level
                     dis_U_tb[dis_U_tb < self.simulation_grounding_level] = self.simulation_grounding_level
     

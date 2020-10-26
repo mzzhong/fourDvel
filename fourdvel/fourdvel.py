@@ -10,6 +10,7 @@ import sys
 import pickle
 import time
 import pathlib
+import glob
 
 import numpy as np
 
@@ -27,10 +28,7 @@ from basics import basics
 class fourdvel(basics):
 
     def __init__(self, param_file=None):
-
         print(param_file)
-        #assert(1==2)
-
         super(fourdvel,self).__init__()
 
         if param_file is not None:
@@ -164,7 +162,6 @@ class fourdvel(basics):
         print("fourdvel initialization done")
 
     def read_parameters(self, param_file):
-
         print("Reading: ",param_file)
         f = open(param_file)
         params = f.readlines()
@@ -178,6 +175,7 @@ class fourdvel(basics):
         self.csk_excluded_tracks = []
         self.s1_excluded_tracks = []
         self.external_grounding_level_file = None
+        self.simulation_mode = False
 
         fmt = '%Y%m%d'
 
@@ -255,10 +253,6 @@ class fourdvel(basics):
                 self.sampling_data_sigma = float(value)
                 print("sampling_data_sigma", value)
 
-            if name == 'test_mode':
-                self.test_mode = int(value)
-                print('test_mode',value)
-
             if name == 'resolution':
                 self.resolution = int(value)
                 print('resolution: ',value)
@@ -266,10 +260,6 @@ class fourdvel(basics):
             if name == 'grid_set_data_uncert_name':
                 self.grid_set_data_uncert_name = value
                 print('grid_set_data_uncert_name: ',value)
-
-            if name == 'data_uncert_const':
-                self.data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
-                print('data_uncert_const: ',self.data_uncert_const)
 
             if name == "bbox":
                 borders = [ s.strip() for s in value.split(",") ]
@@ -287,6 +277,24 @@ class fourdvel(basics):
                 else:
                     raise Exception("use_csk: " + value)
                 print('use_csk: ',value)
+
+            if name == 'csk_data_mode':
+                self.csk_data_mode = int(value)
+                print('csk_data_mode',value)
+                if self.csk_data_mode in [1,2]:
+                    self.simulation_mode = True
+
+            if name == 'csk_data_date_option':
+                self.csk_data_date_option = value
+                print('csk_data_date_option: ', value)
+
+            if name == 'csk_simulation_data_uncert_const':
+                self.csk_simulation_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
+                print('csk_simulation_data_uncert_const: ',self.csk_simulation_data_uncert_const)
+
+            if name == 'csk_data_uncert_const':
+                self.csk_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
+                print('csk_data_uncert_const: ',self.csk_data_uncert_const)
 
             if name == 'csk_id':
                 self.csk_id = int(value)
@@ -317,6 +325,24 @@ class fourdvel(basics):
                 else:
                     self.use_s1 = False
                 print('use_s1: ',value)
+
+            if name == 's1_data_mode':
+                self.s1_data_mode = int(value)
+                print('s1_data_mode',value)
+                if self.s1_data_mode in [1,2]:
+                    self.simulation_mode = True
+
+            if name == 's1_data_date_option':
+                self.s1_data_date_option = value
+                print('s1_data_date_option: ', value)
+
+            if name == 's1_simulation_data_uncert_const':
+                self.s1_simulation_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
+                print('s1_simulation_data_uncert_const: ',self.s1_simulation_data_uncert_const)
+
+            if name == 's1_data_uncert_const':
+                self.s1_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
+                print('s1_data_uncert_const: ',self.s1_data_uncert_const)
 
             if name == 's1_id':
                 self.s1_id = int(value)
@@ -401,10 +427,6 @@ class fourdvel(basics):
                 print('simulation_use_external_up: ',value)
 
 
-            if name == 'simulation_data_uncert_const':
-                self.simulation_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
-                print('simulation_data_uncert_const: ',self.simulation_data_uncert_const)
-
             ## External up ##
             if name == 'external_up_disp_file':
                 if value == "None":
@@ -477,7 +499,6 @@ class fourdvel(basics):
         return 0
             
     def get_CSK_trackDates_from_log(self):
-
         import csv
         from CSK_Utils import CSK_Utils
 
@@ -563,9 +584,6 @@ class fourdvel(basics):
         return 0
 
     def get_CSK_trackDates(self):
-
-        import glob
-
         csk_data = self.csk_data
         csk_start = self.csk_start
         csk_end = self.csk_end
@@ -574,14 +592,11 @@ class fourdvel(basics):
 
         # Set the option for setting available data dates in synthetic test
         # For Evans CSK data is not available, so we make the data log-based
-        if self.proj == 'Evans' and self.test_mode == 1:
-            csk_data_option = "log_based"
-        else:
-            csk_data_option = "data_based"
-        if csk_data_option=="data_based":
-            for track_num in tracklist: 
+        csk_data_date_option = self.csk_data_date_option
 
-                if self.proj == "Evans":            
+        if csk_data_date_option=="data_based":
+            for track_num in tracklist: 
+                if self.proj == "Evans": 
                     filefolder = self.csk_workdir + '/track_' + str(track_num).zfill(2) + '0' + '/raw/201*'
                 elif self.proj == "Rutford":
                     filefolder = self.csk_workdir + '/track_' + str(track_num).zfill(3) + '_0' + '/raw/201*'
@@ -604,18 +619,21 @@ class fourdvel(basics):
                 print("track_num: ",track_num,end=",  ")
                 print("Number of dates: ",len(csk_data[track_num]))
 
-        elif csk_data_option == "log_based":
+        elif csk_data_date_option == "log_based":
             self.get_CSK_trackDates_from_log()
+
+        elif csk_data_date_option == "no_data":
+            for track_num in tracklist:
+                csk_data[track_num] = []
+
         else:
-            print("csk_data_option", csk_data_option, "is not defined yet")
-            raise Exception("dates are not available")
+            print("csk_data_date_option", csk_data_option, "is not defined yet")
+            raise Exception("dates information are not available")
 
         return 0
 
     def get_S1_trackDates(self):
-
         from S1_Utils import S1_Utils
-        import glob
 
         s1_data = self.s1_data
         s1_start = self.s1_start
@@ -625,12 +643,12 @@ class fourdvel(basics):
 
         tracklist = self.s1_tracks
 
-        s1_data_option = "data_based"
-        #s1_data_option = "no_data"
-        if s1_data_option=="data_based":
+        s1_data_date_option = self.s1_data_date_option
+
+        if s1_data_date_option=="data_based":
             for track_num in tracklist: 
             
-                filefolder = '/net/kraken/nobak/mzzhong/S1-Evans/data_' + str(track_num) + '/*zip'
+                filefolder = self.s1_workdir + '/data_' + str(track_num) + '/*zip'
                 filelist = glob.glob(filefolder)
                 s1_data[track_num] = []
     
@@ -646,11 +664,9 @@ class fourdvel(basics):
 
                 print("track_num: ",track_num)
                 print("Number of dates: ", len(s1_data[track_num]))
-                #print(s1_data[track_num])
 
-        elif s1_data_option == "fake":
+        elif s1_data_date_option == "projected":
             for track_num in tracklist:
-    
                 s1_data[track_num] = []
     
                 ref_date = s1.ref_date[track_num]
@@ -665,13 +681,13 @@ class fourdvel(basics):
                 print("track_num: ",track_num)
                 print("Number of dates: ", len(s1_data[track_num]))
         
-        elif s1_data_option == "no_data":
+        elif s1_data_date_option == "no_data":
             for track_num in tracklist:
                 s1_data[track_num] = []
                 print("track_num: ",track_num)
                 print("Number of dates: ", len(s1_data[track_num]))
         else:
-            print("option", option, "is not defined yet")
+            print("option", s1_data_date_option, "is not defined yet")
             raise Exception("dates are not available")
 
         return 0
@@ -1005,9 +1021,9 @@ class fourdvel(basics):
             with open(model_design_mat_set_pkl,'wb') as f:
                 pickle.dump(self.model_design_mat_set,f)
 
-        # For simulation
-        # Use the simulated tides
-        if self.test_mode==1 or self.test_mode==2:
+        # Construct matrix simulation (here "rutford" just means the used model)
+        # The tides used in modeling is more than the tides used in inversion
+        if self.csk_data_mode in [1,2] or self.s1_data_mode in [1,2]:
 
             self.rutford_design_mat_set_pkl = self.pickle_dir +'/'+ '_'.join(['rutford_design_mat_set', 'csk',self.csk_start.strftime(fmt), self.csk_end.strftime(fmt), 's1', self.s1_start.strftime(fmt), self.s1_end.strftime(fmt)]) + '.pkl'
 
@@ -1108,7 +1124,7 @@ class fourdvel(basics):
         #if self.proj == "Evans":
         #    self.use_csk = False 
    
-        # The dictionary for all offset fields 
+        # Create the dictionary for all offset fields 
         self.offsetFieldStack_all = {}
 
         # Find the necessary tracks
@@ -1148,9 +1164,8 @@ class fourdvel(basics):
                         offsetFieldStack = pickle.load(f)
                         self.offsetFieldStack_all[("csk", track_num)]= offsetFieldStack
                 else:
-                    #raise Exception(track_offsetFieldStack_pkl + ' does not exist')
                     print(track_offsetFieldStack_pkl + ' does not exist')
-                    assert self.test_mode==1, "Test mode must be 1"
+                    assert self.csk_data_mode==1, "Test mode must be 1"
 
         if self.use_s1:
             for track_num in self.s1_tracks:
@@ -1164,7 +1179,10 @@ class fourdvel(basics):
                     with open(track_offsetFieldStack_pkl,'rb') as f:
                         offsetFieldStack = pickle.load(f)
                         self.offsetFieldStack_all[("s1", track_num)] = offsetFieldStack
-        
+                else:
+                    print(track_offsetFieldStack_pkl + ' does not exist')
+                    assert self.s1_data_mode==1, "Test mode must be 1"
+
         return 0
 
     def point_rounding(self, point):
@@ -1728,15 +1746,14 @@ class fourdvel(basics):
         Cd = np.zeros(shape = (n_data,n_data))
         invCd = np.zeros(shape = (n_data,n_data))
 
-        for i in range(n_data):
+        for i in range(n_data//2):
             # Range.
-            if i % 2 == 0:
-                Cd[i,i] = sigma[0]**2
+            Cd[2*i,2*i] = sigma[i][0]**2
             # Azimuth.
-            else:
-                Cd[i,i] = sigma[1]**2
+            Cd[2*i+1,2*i+1] = sigma[i][1]**2
 
-            invCd[i,i] = 1/Cd[i,i]
+            invCd[2*i,2*i] = 1/Cd[2*i,2*i]
+            invCd[2*i+1,2*i+1] = 1/Cd[2*i+1,2*i+1]
 
         return invCd
 

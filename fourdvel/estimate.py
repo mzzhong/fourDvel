@@ -51,7 +51,11 @@ class estimate(configure):
 
         # Find the info
         test_id = self.test_id
-        test_mode = self.test_mode
+
+        data_mode = {}
+        data_mode['csk'] = self.csk_data_mode
+        data_mode['s1'] = self.s1_data_mode
+
         task_name = self.task_name
         inversion_method = self.inversion_method
 
@@ -78,8 +82,7 @@ class estimate(configure):
         redo_dataset_formation = 1
         tmp_dataset_pkl_name = "tmp_point_set_dataset.pkl"
         if redo_dataset_formation:
-
-            all_data_set = self.data_set_formation(point_set, tracks_set, test_mode)
+            all_data_set = self.data_set_formation(point_set, tracks_set, data_mode)
             # Save the obtained data set
             with open(tmp_dataset_pkl_name,"wb") as f:
                 pickle.dump(all_data_set,f)
@@ -283,8 +286,7 @@ class estimate(configure):
             BMC.set_up_disp_set(up_disp_set)
 
             # Obtain true model vec from true tide vec
-            if self.test_mode in [1,2]:
-
+            if self.simulation_mode:
                 true_model_vec_set = self.tide_vec_set_to_model_vec_set(point_set, true_tide_vec_set)
 
             else:
@@ -292,14 +294,14 @@ class estimate(configure):
 
             # Run inversion
             est_grounding = None
+            suffix = str(data_mode['csk'])+'_' + str(data_mode['s1'])
             if inversion_method=="Bayesian_MCMC":
-                model_vec, est_grounding = BMC.run_MCMC(run_point = self.test_point, true_model_vec_set=true_model_vec_set, task_name = task_name, suffix=str(self.test_mode))
+                model_vec, est_grounding = BMC.run_MCMC(run_point = self.test_point, true_model_vec_set=true_model_vec_set, task_name = task_name, suffix = suffix)
                 print("*** Result of Bayesian MCMC")
                 print(model_vec)
 
             elif inversion_method=="Bayesian_MCMC_Linear":
-                model_vec = BMC.run_MCMC_Linear(run_point = self.test_point, true_model_vec_set = true_model_vec_set, suffix=str(self.test_mode))
-
+                model_vec = BMC.run_MCMC_Linear(run_point = self.test_point, true_model_vec_set = true_model_vec_set, suffix = suffix)
                 print("*** Result of Bayesian MCMC Linear")
                 print(model_vec)
 
