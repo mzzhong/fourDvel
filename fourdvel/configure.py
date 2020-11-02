@@ -25,7 +25,6 @@ from simulation import simulation
 class configure(fourdvel):
 
     def __init__(self, param_file=None):
-
         if param_file:
             super(configure,self).__init__(param_file)
         else:
@@ -70,7 +69,6 @@ class configure(fourdvel):
                 runid = self.csk_id
     
             elif sate == 's1':
-
                 # TODO
                 raise Exception("S1 data not ready for Rutford yet")
 
@@ -210,17 +208,23 @@ class configure(fourdvel):
             this_data_mode = data_mode[sate_name]
 
             if this_data_mode == 1:
+                print("######################################")
+                print("Start to create catalog-based data...")
+
                 test_point = self.test_point
     
                 # Get catalog of all offsetfields.
                 data_info_set = collections.defaultdict(list)
                 offsetfields_set = collections.defaultdict(list)
                 offsets_set = collections.defaultdict(list)
-    
+
+                test_point_sate_tracks = [track for track in tracks_set[self.test_point] if track[3] == sate_name]
+                print("Date mode 1, Test point tracks: ", self.test_point, test_point_sate_tracks)
+   
                 for point in point_set:
                     # Only choose the tracks of this satellite
                     this_sate_tracks = [track for track in tracks_set[point] if track[3] == sate_name]
-    
+
                     # Create all offsetfields
                     offsetfields_set[point] = self.tracks_to_full_offsetfields(this_sate_tracks)
                     
@@ -479,5 +483,5 @@ class configure(fourdvel):
         print(final_offsetfields_set[test_point])
         print(final_noise_sigma_set[test_point])
         print(true_tide_vec_set[test_point])
- 
+
         return (final_data_info_set, final_data_vec_set, final_noise_sigma_set, final_offsetfields_set, final_true_tide_vec_set)

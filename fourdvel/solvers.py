@@ -38,7 +38,7 @@ class Bayesian_MCMC(fourdvel):
         self.modeling_tides = modeling_tides
         self.n_params = 3 + 6 * len(modeling_tides)
 
-    def set_model_priors(self, model_prior_set=None, no_secular_up=False, up_short_period=False, horizontal_long_period=False, up_lower=None, up_upper=None):
+    def set_model_priors(self, model_prior_set=None, no_secular_up=False, up_short_period=False, horizontal_long_period=False, up_lower=None, up_upper=None, up_mean=None, up_std=None):
 
         self.model_prior_set = model_prior_set
         self.no_secular_up = no_secular_up
@@ -47,6 +47,9 @@ class Bayesian_MCMC(fourdvel):
 
         self.up_lower = up_lower
         self.up_upper = up_upper
+
+        self.up_mean = up_mean
+        self.up_std = up_std
 
     def set_noise_sigma_set(self, noise_sigma_set):
 
@@ -519,16 +522,19 @@ class Bayesian_MCMC(fourdvel):
             grounding = map_estimate['grounding'][0][0]
     
             compressed_model_vec = np.hstack((secular, tidal))
+            print("compressed_model_vec: ", compressed_model_vec)
+
+            compressed_model_vec_no_secular = tidal
     
             model_vec = np.zeros(shape=(self.n_params,1))
             model_vec[0][0] = secular[0]
             model_vec[1][0] = secular[1]
             model_vec[2][0] = secular[2]
-    
-            i=0
+
+            i = 0
             print("kept entries: ", self.kept_model_vec_entries)
             for j in self.kept_model_vec_entries:
-                model_vec[j] = compressed_model_vec[i]
+                model_vec[j] = compressed_model_vec_no_secular[i]
                 i+=1
     
             return (model_vec, grounding)
@@ -746,6 +752,7 @@ class Bayesian_MCMC(fourdvel):
 
                 # Get model vec that satisfy to original definition
                 model_vec, grounding = self.pad_to_orig_model_vec(map_estimate, mode="nonlinear")
+                #print(model_vec, grounding)
 
                 # Save the MAP solution
                 pkl_name = "_".join([self.estimation_dir+"/map_estimate_BMC",str(point[0]),str(point[1]),suffix])

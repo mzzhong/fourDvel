@@ -167,15 +167,19 @@ class fourdvel(basics):
         params = f.readlines()
         f.close()
 
-        # Quick and dirty intialization:
+        # Intialize some parameters
         self.data_uncert_const = None
         self.test_point = None
+        self.test_point_file = None
         self.single_point_mode = False
         self.simulation_use_external_up = False
         self.csk_excluded_tracks = []
         self.s1_excluded_tracks = []
         self.external_grounding_level_file = None
         self.simulation_mode = False
+
+        self.csk_data_log = None
+        self.csk_data_product_ids = None
 
         fmt = '%Y%m%d'
 
@@ -222,26 +226,32 @@ class fourdvel(basics):
 
                 test_point_file = value
 
-                f_test_point = open(test_point_file)
-                test_point_lines = f_test_point.readlines()
-                f_test_point.close()
-                
-                for test_point_line in test_point_lines:
-                    try:    
-                        name1,value1 = test_point_line.split(':')
-                        name1 = name1.strip()
-                        value1 = value1.strip()
-                    except:
-                        continue
+                if value.lower() != "none":
+                    self.test_point_file = test_point_file
 
-                    if name1=="test_point" and value1!="None":
-                        the_point = [float(x) for x in value1.split(",")]
-                        self.test_point = self.float_lonlat_to_int5d(the_point)
-                    else:
-                        continue
-                    print("test_point", value1, self.test_point)
-                    print("Turn on single point mode")
-                    self.single_point_mode = True
+                    assert os.path.exists(test_point_file), print("Test point file does not exist")
+                    f_test_point = open(test_point_file)
+                    test_point_lines = f_test_point.readlines()
+                    f_test_point.close()
+                    
+                    for test_point_line in test_point_lines:
+                        try:    
+                            name1,value1 = test_point_line.split(':')
+                            name1 = name1.strip()
+                            value1 = value1.strip()
+                        except:
+                            continue
+    
+                        if name1=="test_point" and value1!="None":
+                            the_point = [float(x) for x in value1.split(",")]
+                            self.test_point = self.float_lonlat_to_int5d(the_point)
+                        else:
+                            continue
+                        print("test_point", value1, self.test_point)
+                        print("Turn on single point mode")
+                        self.single_point_mode = True
+                else:
+                    self.test_point_file = None
 
             if name == "inversion_method":
 
@@ -314,9 +324,21 @@ class fourdvel(basics):
                 self.csk_end = datetime.datetime.strptime(value, fmt).date()
                 print('csk_end: ',value)
 
-            if name == 'csk_log':
-                self.csk_log = value
-                print('csk_log: ',value)
+            if name == 'csk_data_log':
+                self.csk_data_log = value
+                print('csk_data_log: ',value)
+
+            if name == 'csk_data_product_ids':
+                if value.lower() != None:
+                    assert os.path.exists(value), print("product id file missing")
+                    f = open(value,'r')
+                    line = f.readlines()[0]
+                    self.csk_data_product_ids = [int(i) for i in line.split(',')]
+                    print(self.csk_data_product_ids)
+                else:
+                    self.csk_data_product_ids = None
+
+                print('csk_data_product_ids: ',value)
 
             # S1
             if name == 'use_s1':
@@ -501,26 +523,20 @@ class fourdvel(basics):
     def get_CSK_trackDates_from_log(self):
         import csv
         from CSK_Utils import CSK_Utils
+        csk = CSK_Utils()
 
         # csk_data[track_number] = [date1, date2, date3,...]
         csk_data = self.csk_data
 
         csk_start = self.csk_start
         csk_end = self.csk_end
-
-        # Not all data are available, currently, so I read the files exported from E-GEOS. I will switch to real data
         
-        #file_folder = self.csk_log
-        #data_file = os.path.join(file_folder,'all.csv')
-        data_file = self.csk_log
+        data_file = self.csk_data_log
 
-        csk = CSK_Utils()
-
-        tot_products = 0
+        min_cov = self.csk_evans_min_coverage()
 
         num_products = 0
         num_frames = 0
-
         with open(data_file) as dataset:
             csv_reader = csv.reader(dataset, delimiter=';')
             line = 0
@@ -528,18 +544,27 @@ class fourdvel(basics):
                 line = line + 1
                 if line == 1:
                     continue
-                
-                # Count as one product.
-                tot_products = tot_products + 1
 
+                # Product ID
+                product_id = int(row[0])
                 # Satellite 
                 sate = 'CSKS' + row[1][-1]
                 # Date
                 acq_datefmt = row[5].split(' ')[0]
                 # Direction
                 direction = row[7][0]
+                # Coverage
+                coverage = float(row[19][:4])
+                # Time fraction
+                t_frac_fmt = row[5].split(' ')[2]
+                hour, minute, second = [int(s) for s in t_frac_fmt.split(':')]
+                t_frac = (hour*3600 + minute*60 + second)/(24*3600)
 
-                #print(acq_datefmt)
+                # coverage less 1%, this is not a planned acquisition
+                if coverage<1:
+                    continue
+
+                print(acq_datefmt, t_frac_fmt, t_frac)
 
                 # Convert date string to date object
                 date_comp = [int(item) for item in acq_datefmt.split('-')]
@@ -547,40 +572,42 @@ class fourdvel(basics):
 
                 # If the date is within the range set by user
                 if theDate >= csk_start and theDate < csk_end:
-    
                     # Find the figure out the track number.                
                     tracks = csk.date2track(day=theDate, sate=sate)[sate]
-                    #print(line, tracks, direction)
-                    #print(row)
                    
                     if direction == 'A':
                         track = [ i for i in tracks if i<=10 ]
                     else:
                         track = [ i for i in tracks if i>=11 ]
 
-                    #print(track)
+                    print(sate, track, coverage)
+                    assert len(track)==1, print("Fail to derive the track number")
 
-                    # Record it.    
-                    if track[0] in csk_data.keys():
-                        csk_data[track[0]].append(theDate)
-                    else:
-                        csk_data[track[0]] = [theDate]
+                    if coverage < min_cov[track[0]]:
+                        print("Bad acquisition")
+                        continue
+
+                    if self.csk_data_product_ids:
+                        if not product_id in self.csk_data_product_ids:
+                            continue
+
+                    # Record it. 
+                    csk_data[track[0]].append(theDate)
     
                     num_frames = num_frames + csk.numOfFrames[track[0]]
                     num_products += 1
     
-        print("Total number of products in log: ", tot_products)
         print("Number of products: ", num_products)
         print("Number of frames: ", num_frames)
 
         # Sort the dates of each track.
-        # Output the track info
+        # Output the dates for each track
         for track_num in sorted(csk_data.keys()):
             csk_data[track_num].sort()
             print(track_num)
             print("Number of dates: ", len(csk_data[track_num]))
             #print(csk_data[track_num])
-       
+
         return 0
 
     def get_CSK_trackDates(self):
@@ -954,7 +981,7 @@ class fourdvel(basics):
         return 0
 
     def get_tidal_model(self):
-
+        
         print("Get the tidal model ...")
 
         tide_file = self.external_up_disp_file
@@ -1243,7 +1270,6 @@ class fourdvel(basics):
         return 0
 
     def tracks_to_full_offsetfields(self, tracks):
-        
         # Deduce the available offsetfields from all tracks
         csk_data = self.csk_data
         s1_data = self.s1_data
@@ -1253,8 +1279,7 @@ class fourdvel(basics):
         offsetfields = []
 
         for it in range(len(tracks)):
-
-            #print(tracks[it])
+            print(tracks[it])
             
             track_num = tracks[it][0]
             vec1 = tracks[it][1]
@@ -1274,9 +1299,10 @@ class fourdvel(basics):
                 dates = s1_data[track_num]
                 max_delta=12
                 t_frac = track_timefraction[('s1',track_num)]
-
             else:
                 raise Exception('unfounded satellite name')
+
+            #print("Available dates for this track: ", dates)
 
             # the offsetfields
             for d1 in dates:
@@ -1284,9 +1310,6 @@ class fourdvel(basics):
                     if d1<d2 and (d2-d1).days<=max_delta:
                         #print(d1,d2)
                         offsetfields.append([d1,d2,vec1,vec2,t_frac])
-
-            #print(len(offsetfields))
-            #print(stop)
 
         return offsetfields
 
@@ -2292,8 +2315,8 @@ class fourdvel(basics):
                         if self.proj == "Rutford" and lat<-77.8:
                             pass
 
-                        elif self.proj == "Evans" and lat<-75.85:
-                        #elif self.proj == "Evans":
+                        #elif self.proj == "Evans" and lat<-75.85:
+                        elif self.proj == "Evans":
                             pass
 
                         else:

@@ -273,4 +273,20 @@ class basics():
 
         return 0
 
+    def csk_evans_min_coverage(self):
+        min_cov = {}
+        for it in range(22):
+            min_cov[it] = 0
+        min_cov[3] = 6
+        min_cov[4] = 6
+        min_cov[5] = 5
+        min_cov[7] = 6
+        min_cov[9] = 5.1
+        min_cov[11] = 3
+        min_cov[13] = 3.3
+        min_cov[14] = 7
+        min_cov[16] = 7
+        min_cov[17] = 7
+        min_cov[18] = 8
 
+        return min_cov

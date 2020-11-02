@@ -431,10 +431,9 @@ class driver_fourdvel():
 
             print("Write results to disk")
             print("The task is estimate")
-            print("Single_point_mode is off or Force Save is on")
+            print("Single_point_mode is off (So the save is auto on) or forced save is on")
             prefix = str(test_id) + '_'
             with open(self.estimation_dir + '/'+ prefix + 'grid_set_true_tide_vec.pkl', 'wb') as f:
-                
                 pickle.dump(tasks.grid_set_true_tide_vec, f)
     
             with open(self.estimation_dir + '/' + prefix + 'grid_set_tide_vec.pkl','wb') as f:

@@ -694,36 +694,40 @@ class simulation(fourdvel):
             # return an empty vector
 
             if point == self.test_point:
-                
                 print("master tide height: ", tide_height_master.shape)
                 print("slave tide height: ", tide_height_slave.shape)
                 print(velo_model)
 
             if len(stacked_design_mat_EN_ta)==0:
-
                 data_vector = np.asarray([])
 
             else:
-
                 # Find horizontal displacement at timing_a, timing_b
                 dis_EN_ta = np.matmul(stacked_design_mat_EN_ta, model_vec)
                 dis_EN_tb = np.matmul(stacked_design_mat_EN_tb, model_vec)
 
                 # Find vertical displacement at timing_a, timing_b
                 # Use parameterized tide model
-                if not self.simulation_use_external_up: 
+                if not self.simulation_use_external_up:
+                    #print("Use parameterized model") 
                     dis_U_ta = np.matmul(stacked_design_mat_U_ta, model_vec)
                     dis_U_tb = np.matmul(stacked_design_mat_U_tb, model_vec)
                 # Use external tide model (plain time series)
                 else:
+                    #print("Use external model")
                     dis_U_ta = tide_height_master.reshape(len(tide_height_master),1)
                     dis_U_tb = tide_height_slave.reshape(len(tide_height_slave),1)
 
                 # Grounding
                 # When grounding_indicator is 1:
                 if grounding_indicator > 0:
+                    #print("Perform clipping at: ", self.simulation_grounding_level)
                     dis_U_ta[dis_U_ta < self.simulation_grounding_level] = self.simulation_grounding_level
                     dis_U_tb[dis_U_tb < self.simulation_grounding_level] = self.simulation_grounding_level
+
+                #if point == self.test_point:
+                #    print("Test point")
+                #    print(stop)
     
                 # Find tide induced offset
                 offset_EN = dis_EN_tb - dis_EN_ta
