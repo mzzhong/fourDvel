@@ -69,7 +69,8 @@ class fourdvel(basics):
 
             self.csk_tracks = [8,10,23,25,40,52,55,67,69,82,97,99,114,126,128,129,141,143,156,158,171,172,173,186,188,201,203,215,218,230,231,232]
 
-            self.csk_workdir = "/net/kraken/nobak/mzzhong/CSK-Rutford"
+            #self.csk_workdir = "/net/kraken/nobak/mzzhong/CSK-Rutford"
+            self.csk_workdir = "/net/kraken/nobak/mzzhong/CSK-Rutford-v2"
 
             for it in self.csk_tracks:
                 self.csk_data[it] = []
@@ -339,6 +340,7 @@ class fourdvel(basics):
                     self.csk_data_product_ids = None
 
                 print('csk_data_product_ids: ',value)
+                print("Number of products: ", len(set(self.csk_data_product_ids)))
 
             # S1
             if name == 'use_s1':
@@ -604,9 +606,8 @@ class fourdvel(basics):
         # Output the dates for each track
         for track_num in sorted(csk_data.keys()):
             csk_data[track_num].sort()
-            print(track_num)
+            print("track number: ", track_num)
             print("Number of dates: ", len(csk_data[track_num]))
-            #print(csk_data[track_num])
 
         return 0
 
@@ -981,11 +982,8 @@ class fourdvel(basics):
         return 0
 
     def get_tidal_model(self):
-        
         print("Get the tidal model ...")
-
         tide_file = self.external_up_disp_file
-
         if tide_file:
             if os.path.exists(tide_file):
                 fid = open(tide_file)
@@ -1002,7 +1000,6 @@ class fourdvel(basics):
                 self.tide_t_delta = self.tide_taxis[1] - self.tide_taxis[0]
             else:
                 raise Exception("Tide file does not exist: " + tide_file)
-
         return
 
     def get_timings_tide_heights(self):
@@ -1010,14 +1007,12 @@ class fourdvel(basics):
         # From (date + time fraction) to tide_heights
         self.timings_tide_heights = {}
         t_origin = self.t_origin.date()
- 
         for timing in self.timings:
-            
             the_date, t_frac = timing
             relative_time = (the_date - t_origin).days + t_frac
-
+            
             # Find the index
-            idx = int((relative_time - self.tide_taxis[0])/self.tide_t_delta)
+            idx = int(round((relative_time - self.tide_taxis[0])/self.tide_t_delta))
             self.timings_tide_heights[timing] = self.tide_data[idx]
 
         #print(self.timings_tide_heights)
@@ -1440,8 +1435,7 @@ class fourdvel(basics):
             if self.external_grounding_level_file is None:
                 given_grounding_level = grounding_level
             else:
-
-                # Try to get the value
+                # Try to get the value from external file
                 try:
                     given_grounding_level = grounding_level[point]['optimal_grounding_level']
                     print("optimal grounding level: ", given_grounding_level)
@@ -1500,7 +1494,6 @@ class fourdvel(basics):
 
             # Two observation vectors
             for j in range(2):
-
                 # Get the vector (represent E,N,U)
                 vector = np.asarray(vecs[j])
 
@@ -1896,7 +1889,6 @@ class fourdvel(basics):
 
         return Cm_p
 
-
     def model_posterior_analysis_set(self,point_set=None, Cm_p_set=None):
 
         others_set = {}
@@ -1934,7 +1926,6 @@ class fourdvel(basics):
         return model_vec[3 + len(self.modeling_tides) * 6, 0]
 
     def save_resid_set(self, point_set, resid_set, others_set, grounding_level):
-
         for point in point_set:
             if not 'grounding_level_resids' in others_set[point].keys():
                 others_set[point]['grounding_level_resids'] = {}
@@ -1944,9 +1935,8 @@ class fourdvel(basics):
         return 0
 
     def select_optimal_grounding_level(self, point_set, others_set):
-
+        
         for point in point_set:
-
             # if range_rmse is np.nan, optimal grounding level is np.nan
             others_set[point]["optimal_grounding_level"] = np.nan
             
@@ -1954,8 +1944,8 @@ class fourdvel(basics):
 
             for grounding_level, resids in others_set[point]['grounding_level_resids'].items():
 
-                # Do selection based on full rmse
-                # range_rmse can np.nan
+                # Do selection based on the full root mean squre error
+                # range_rmse can be np.nan (np.nan < number is False)
                 range_rmse = resids[1]
                 azimuth_rmse = resids[3]
                 full_rmse = np.sqrt(range_rmse**2 + azimuth_rmse**2)
@@ -2021,7 +2011,7 @@ class fourdvel(basics):
 
 
     # Calculate residual sets.
-    def resids_set(self, point_set, linear_design_mat_set, data_vec_set, model_vec_set):
+    def get_resid_set(self, point_set, linear_design_mat_set, data_vec_set, model_vec_set):
 
         resid_of_secular_set = {}
         resid_of_tides_set = {}
@@ -2092,7 +2082,6 @@ class fourdvel(basics):
 
     # Residual including all tides.
     def resid_of_tides(self, design_mat, data, model):
-
         G = design_mat
         d = data
         m = model
@@ -2106,6 +2095,23 @@ class fourdvel(basics):
         resid_of_tides = d - pred
 
         return resid_of_tides
+
+    def get_model_likelihood_set(self, point_set, linear_design_mat_set, data_vec_set, model_vec_set, invCd_set):
+
+        model_likelihood_set = {}
+        for point in point_set:
+            G = linear_design_mat_set[point]
+            d = data_vec_set[point]
+            m = model_vec_set[point]
+            invCd = invCd_set[point]
+
+            if np.isnan(m[0,0]):
+                model_likelihood_set[point] = np.nan
+            else:
+                model_likelihood = 0.5 * (d - G @ m).T @ invCd @ (d - G @ m)
+                model_likelihood_set[point] = model_likelihood[0,0]
+       
+        return model_likelihood_set
 
     def tide_vec_to_quantity(self, tide_vec, quant_name, point=None, state=None, extra_info=None):
 

@@ -428,7 +428,10 @@ class configure(fourdvel):
                 raise Exception("Data mode error " + str(this_data_mode))
 
             print("***************************")
-            print("Mark: ", sate_name, this_data_mode, data_vec_set[test_point].shape, type(data_vec_set[test_point]))
+            print("Summary of satellite {} dataset extraction".format(sate_name))
+            print("date mode: ", this_data_mode)
+            print("data vec shape: ", data_vec_set[test_point].shape)
+            print("**************************")
             data_info_set_dict[sate_name] = data_info_set
             data_vec_set_dict[sate_name] = data_vec_set
             noise_sigma_set_dict[sate_name] = noise_sigma_set
@@ -458,8 +461,11 @@ class configure(fourdvel):
                 break
 
         print(noise_sigma_set_dict.keys())
-        print(len(noise_sigma_set_dict['csk']))
-        print(len(noise_sigma_set_dict['s1']))
+        if 'csk' in noise_sigma_set_dict:
+            print("csk noise dict size: ", len(noise_sigma_set_dict['csk']))
+        if 's1' in noise_sigma_set_dict:
+            print("s1 noise dict size: ", len(noise_sigma_set_dict['s1']))
+
         #print(data_vec_set_dict['csk'][point].shape)
 
         for point in point_set:
@@ -475,13 +481,17 @@ class configure(fourdvel):
                 final_noise_sigma_set[point] = final_noise_sigma_set[point] + noise_sigma_set_dict[sate_name][point]
                 final_offsetfields_set[point] = final_offsetfields_set[point] + offsetfields_set_dict[sate_name][point]
 
-        print('======= DATA SET FORMATION ========')
+        print('======= SUMMARY OF DATA SET FORMATION ========')
+        print("Summary (include all satellites: )")
         print('Total number of offsetfields at test point: ', len(final_offsetfields_set[test_point]))
         print('Total length of noise_sigma pair at test point: ', len(final_noise_sigma_set[test_point]))
         print('Total length of offset measurement: ', len(final_data_vec_set[test_point]))
+        print('======= SUMMARY OF DATA SET FORMATION ========')
 
-        print(final_offsetfields_set[test_point])
+        # show the information of test
+        #print(final_offsetfields_set[test_point])
         print(final_noise_sigma_set[test_point])
-        print(true_tide_vec_set[test_point])
+        if test_point in true_tide_vec_set:
+            print("true tide vec at test point: ", true_tide_vec_set[test_point])
 
         return (final_data_info_set, final_data_vec_set, final_noise_sigma_set, final_offsetfields_set, final_true_tide_vec_set)

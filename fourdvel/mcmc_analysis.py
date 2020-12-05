@@ -107,6 +107,7 @@ class mcmc_analysis(fourdvel):
         if true_exist:  
             true_model_vec_secular = trace.true_model_vec[:3]
             true_model_vec_tidal = trace.true_model_vec[3:]
+            true_model_up_scale = trace.true_up_scale
         
         # Display secular parameters
         secular = trace.get_values("secular")
@@ -236,7 +237,7 @@ class mcmc_analysis(fourdvel):
             if true_exist:
                 ax.plot([true_grounding_level,true_grounding_level], [0,np.max(hist_values)],linewidth=3, color="red")
 
-            ax.set_xlim([-3,1])
+            ax.set_xlim([-2.2,-1.4])
             ax.set_xlabel("m",fontsize=15)
             ax.tick_params(labelsize=15)
             ax.get_yaxis().set_ticks([])
@@ -261,11 +262,10 @@ class mcmc_analysis(fourdvel):
             n_smooth = self.find_envelope(bin_centers, hist_values)
             #ax.plot(bin_centers,n_smooth,linewidth=3,color="black")
 
-            true_up_scale = 1
             if true_exist:
-                ax.plot([true_up_scale,true_up_scale], [0,np.max(hist_values)],linewidth=3, color="red")
+                ax.plot([true_model_up_scale,true_model_up_scale], [0,np.max(hist_values)],linewidth=3, color="red")
 
-            ax.set_xlim([0.0,1.5])
+            ax.set_xlim([0.8,1.2])
             ax.set_xlabel("ratio",fontsize=15)
             ax.tick_params(labelsize=15)
             ax.get_yaxis().set_ticks([])

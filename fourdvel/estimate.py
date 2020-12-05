@@ -24,9 +24,9 @@ from multiprocessing import Value
 
 from configure import configure
 from display import display
+from solvers import solvers
 
 class estimate(configure):
-
     def __init__(self, param_file=None):
 
         if param_file:
@@ -95,17 +95,17 @@ class estimate(configure):
 
         print("Data set formation Done")
 
-        do_linear = False
+        # Check task and inversion method
+        if task_name in ["tides_1","tides_3"]:
+            assert inversion_method == "Bayesian_Linear"
+
         if task_name == "tides_2":
-            do_linear = False
+            assert inversion_method in ["Bayesian_MCMC", "Nonlinear_Optimization"]
 
-        if inversion_method == 'Bayesian_Linear' or do_linear == True:
-
+        if task_name in ["tides_1", "tides_3"] and inversion_method == 'Bayesian_Linear':
             # Data prior.
             invCd_set = self.real_data_uncertainty_set(point_set, data_vec_set, \
                                                             noise_sigma_set)
-            from solvers import Bayesian_Linear
-
             ### MODEL ###
 
             # Design matrix.
@@ -119,24 +119,26 @@ class estimate(configure):
                 # Rutford
                 #enum_grounding_level = [-1.8, -1.7, -1.6, -1.5]
 
-                #print(self.external_grounding_level_file)
-
                 if self.external_grounding_level_file is None:
                     enum_grounding_level = [-3.0, -2.9, -2.8, -2.7, -2.6, -2.5, -2.4, -2.3, -2.2, -2.1, -2.0, -1.9, -1.8, -1.7, -1.6, -1.5, -1.4, -1.3, -1.2, -1.1, -1.0, -0.9, -0.8,-0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0]
+
+                    #enum_grounding_level = [-1.80, -1.75, -1.70, -1.65, -1.60, -1.55, -1.50]
+                    #enum_grounding_level = [-1.78, -1.76, -1.74, -1.72, -1.70, -1.68, -1.66, -1.64]
+                    enum_grounding_level = [-1.700, -1.695, -1.690, -1.685, -1.680, -1.675, -1.670, -1.665]
                 else:
                     enum_grounding_level = ['external']
+                    # Currently the external grounding file is saved in ${id}_grid_set_others.pkl
                     with open(self.external_grounding_level_file,'rb') as f:
                         external_grounding_level = pickle.load(f)
-
             else:
                 enum_grounding_level = [None]
 
+            # Loop through the grounding level
             for ienum, grounding_level in enumerate(enum_grounding_level):
-
                 print("New enumeration: ", ienum, grounding_level)
-
+               
+                # Inversion with enforced grounding level ("tides_3")
                 if grounding_level is not None:
-
                     # Make a deep copy of dictionary of design matrix
                     linear_design_mat_set = copy.deepcopy(linear_design_mat_set_orig)
 
@@ -149,6 +151,7 @@ class estimate(configure):
                     linear_design_mat_set = self.modify_G_set(point_set, linear_design_mat_set, offsetfields_set, grounding_level = given_grounding_level)
                     print("Modified matrix (obs) set is Done")
 
+                # Default inversion ("tides_1")
                 else:
                      linear_design_mat_set = linear_design_mat_set_orig
     
@@ -177,11 +180,17 @@ class estimate(configure):
                 print(bl_model_vec)
     
                 # Calculale the residual.
-                resid_of_secular_set, resid_of_tides_set = self.resids_set(point_set, linear_design_mat_set, data_vec_set, model_vec_set)
+                resid_of_secular_set, resid_of_tides_set = self.get_resid_set(point_set, linear_design_mat_set, data_vec_set, model_vec_set)
                 print('Residual calculation Done')
                 resid_of_tides_point = resid_of_tides_set[self.test_point]
                 print("Residual at this point: ", resid_of_tides_point)
-    
+
+                # Calculale the model likelihood.
+                model_likelihood_set = self.get_model_likelihood_set(point_set, linear_design_mat_set, data_vec_set, model_vec_set, invCd_set)
+                print('Model likelihood calculation Done')
+                model_likelihood_point = model_likelihood_set[self.test_point]
+                print("Model likelihood at this point: ", model_likelihood_point)
+
                 # Convert to tidal params.
                 tide_vec_set = self.model_vec_set_to_tide_vec_set(point_set, model_vec_set)
                 #print('tide_vec_set: ',tide_vec_set)
@@ -195,26 +204,24 @@ class estimate(configure):
                 print('Point set inversion Done')
     
                 ############ Some additional work ##############################
+                
                 print('Some additional work ...')
-
                 if self.task_name == "tides_3":
-
                     # Put the vertical scaling into other_set_1
                     self.extract_up_scale_set(point_set, model_vec_set, others_set)
 
                     # Save the residuals
                     self.save_resid_set(point_set, resid_of_tides_set, others_set, grounding_level)
 
-
             # Select the optimal grounding level
             # If mode is tides_3 and the enumeration is actually done
             if self.task_name == "tides_3" and enum_grounding_level[0] is not None:
-
                 print(others_set[self.test_point]['grounding_level_resids'][enum_grounding_level[0]])
-    
                 self.select_optimal_grounding_level(point_set, others_set)
-                print("Optimal grounding level: ", others_set[self.test_point]["optimal_grounding_level"])
-            
+                print("Optimal grounding level before scaling: ", others_set[self.test_point]["optimal_grounding_level"])
+                print("The scaling is: ", model_vec_set[self.test_point][-1][0])
+                print("Optimal grounding level after scaling: ", others_set[self.test_point]["optimal_grounding_level"] * model_vec_set[self.test_point][-1][0])
+
             ########### Show the results ########################
             # Stack the true and inverted models.
             # Show on point in the point set.
@@ -227,7 +234,7 @@ class estimate(configure):
             if self.show_vecs == True or show_control== True:
             #if self.show_vecs == True and inversion_method=="Bayesian_Linear":
     
-                if true_tide_vec_set is not None:
+                if self.test_point in true_tide_vec_set:
                     stacked_vecs = np.hstack((  true_tide_vec_set[self.test_point], 
                                                 tide_vec_set[self.test_point], 
                                                 tide_vec_uq_set[self.test_point]))
@@ -242,12 +249,11 @@ class estimate(configure):
                 self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
 
             #######################################################
+       
+        if task_name == "tides_2" and inversion_method in ['Bayesian_MCMC', 'Nonlinear_Optimization']:
 
-        if inversion_method in ['Bayesian_MCMC', 'Bayesian_MCMC_Linear']:
-
-            from solvers import Bayesian_MCMC
-
-            BMC = Bayesian_MCMC(self.param_file)
+            ## Step 1: Prepare the solver (named BMC)
+            BMC = solvers(self.param_file)
             
             # Set the point_set to work on
             BMC.set_point_set(point_set)
@@ -264,7 +270,7 @@ class estimate(configure):
             # Provide model priors
             self.up_lower = -4
             self.up_upper = 0
-            BMC.set_model_priors(model_prior_set = true_tide_vec_set, no_secular_up = self.no_secular_up, up_short_period = self.up_short_period, horizontal_long_period = self.horizontal_long_period, up_lower = self.up_lower, up_upper = self.up_upper)
+            BMC.set_model_priors(model_mean_prior_set = true_tide_vec_set, no_secular_up = self.no_secular_up, up_short_period = self.up_short_period, horizontal_long_period = self.horizontal_long_period, up_lower = self.up_lower, up_upper = self.up_upper)
 
             # Provide data priors
             BMC.set_noise_sigma_set(noise_sigma_set)
@@ -290,22 +296,30 @@ class estimate(configure):
             # Obtain true model vec from true tide vec
             if self.simulation_mode:
                 true_model_vec_set = self.tide_vec_set_to_model_vec_set(point_set, true_tide_vec_set)
-
             else:
                 true_model_vec_set = None
+            BMC.set_true_model_vec_set(true_model_vec_set)
+
+            # Pass the velo model to solver as well, as it contains the up_scale
+            BMC.set_grid_set_velo(self.grid_set_velo)
+
+            # Set task name
+            BMC.set_task_name(task_name)
 
             # Run inversion
             est_grounding = None
             suffix = str(data_mode['csk'])+'_' + str(data_mode['s1'])
             if inversion_method=="Bayesian_MCMC":
-                model_vec, est_grounding = BMC.run_MCMC(run_point = self.test_point, true_model_vec_set=true_model_vec_set, task_name = task_name, suffix = suffix)
+                model_vec, est_grounding = BMC.run_MCMC(run_point = self.test_point, suffix = suffix)
                 print("*** Result of Bayesian MCMC")
                 print(model_vec)
-
-            elif inversion_method=="Bayesian_MCMC_Linear":
-                model_vec = BMC.run_MCMC_Linear(run_point = self.test_point, true_model_vec_set = true_model_vec_set, suffix = suffix)
-                print("*** Result of Bayesian MCMC Linear")
-                print(model_vec)
+            
+            elif inversion_method=="Nonlinear_Optimization":
+                model_vec_set = BMC.run_optimize(run_point = self.test_point)
+                print("*** Result of nonlinear optimization")
+                print(model_vec_set[self.test_point])
+            else:
+                raise Exception()
 
             # Compare model vec and tide_vec
             stacked_model_vecs = []
@@ -351,7 +365,6 @@ class estimate(configure):
             self.display.display_vecs(stacked_vecs, row_names,column_names, test_id)
 
         ########### Inversion done ##########################
-
         # Record and return
         print("Recording...")
         all_sets = {}

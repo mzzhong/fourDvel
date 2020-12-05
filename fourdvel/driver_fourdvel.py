@@ -45,7 +45,6 @@ def cmdLineParse(iargs = None):
     return parser.parse_args(args=iargs)
 
 class driver_fourdvel():
-
     def __init__(self, inps):
 
         self.param_file = inps.param_file
@@ -54,25 +53,36 @@ class driver_fourdvel():
         self.estimate_tasks = ["do_nothing", "tides_1", "tides_2", "tides_3", "tides_4", "tides_5"]
 
         # Explantion:
+        # tides_1: conventional linear model (BM 2017). Summation of a family of sinusoidal functions.
+        # Include modification: introduce grounding
 
-        # tides_1: conventional linear (BM 2017)
+        # Inversion method: 
+        # (1) Bayesian_Linear (without grounding) 
+        # (2) Bayesian_Linear_MCMC (without grounding, same result as (1), but sampling-based) (turned off)
+        # (3) Bayesian_MCMC (with grounding, which barely works) (turned off)
+        # (4) Nonlinaer optimization (with grounding, which barely workds) (turned off)
 
         # tides_2: single point MCMC to detect grounding, can take external vertical model to constrain the vertical displacement
         # This is non-linear, as we want to simutaneously infer grounding and tidal params
         # Seems to work on detecting grounding
+        # Inversion method: 
+        # (1) Bayesian_MCMC method 
+        # (2) Nonlinear optimization method
 
         # tides_3: Try to linearize the problem in tides_2
         # Add vertical data into linear model
         # Estimate the vertical scaling only
         # Enumerate the grounding level
         # Check the residual to seclect the best grounding level
+        # Inversion method: 
+        # (1) Bayesian_Linear
 
         # TODO
-        # tides_4: Find the optimal grounding from the enumeration results using tides_3
+        # tides_x: Find the optimal grounding from the enumeration results using tides_3
         # Need to load the results
         # Only grid_set_others needs to be updated
 
-        # tides_5: Using the optimal grounding from tides_4 to get the new results
+        # tides_y: Using the optimal grounding from tides_x to get the new results
         # Need to load the results
         # All grid_set except than grid_set needs to be updated
 

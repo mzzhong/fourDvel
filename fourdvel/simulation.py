@@ -91,7 +91,7 @@ class simulation(fourdvel):
         self.verti_scale = 1
 
         # Models are represented in displacement.
-        model_num = 11
+        model_num = 12
 
         if model_num == 1:
 

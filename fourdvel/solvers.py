@@ -15,32 +15,26 @@ import pymc3 as pm
 import seaborn as sns
 import pickle
 
+import scipy
+
+import time
+
 plt.style.use('seaborn-darkgrid')
 
-class Bayesian_Linear(fourdvel):
-
-    def __init__(self):
-
-        pass
-
-class Bayesian_MCMC(fourdvel):
-
+class solvers(fourdvel):
     def __init__(self, param_file):
-
-        super(Bayesian_MCMC, self).__init__(param_file)
-
+        super(solvers, self).__init__(param_file)
+    
     def set_point_set(self, point_set):
-
         self.point_set = point_set
 
     def set_modeling_tides(self, modeling_tides):
-    
         self.modeling_tides = modeling_tides
         self.n_params = 3 + 6 * len(modeling_tides)
 
-    def set_model_priors(self, model_prior_set=None, no_secular_up=False, up_short_period=False, horizontal_long_period=False, up_lower=None, up_upper=None, up_mean=None, up_std=None):
+    def set_model_priors(self, model_mean_prior_set=None, no_secular_up=False, up_short_period=False, horizontal_long_period=False, up_lower=None, up_upper=None, up_mean=None, up_std=None):
 
-        self.model_prior_set = model_prior_set
+        self.model_mean_prior_set = model_mean_prior_set
         self.no_secular_up = no_secular_up
         self.up_short_period = up_short_period
         self.horizontal_long_period = horizontal_long_period
@@ -52,27 +46,31 @@ class Bayesian_MCMC(fourdvel):
         self.up_std = up_std
 
     def set_noise_sigma_set(self, noise_sigma_set):
-
         self.noise_sigma_set = noise_sigma_set
 
     def set_data_set(self, data_vec_set):
-
         self.data_vec_set = data_vec_set
 
     def set_offsetfields_set(self, offsetfields_set):
-
         self.offsetfields_set = offsetfields_set
 
     def set_stack_design_mat_set(self, stack_design_mat_set):
-
         self.stack_design_mat_set = stack_design_mat_set
 
     def set_linear_design_mat_set(self, linear_design_mat_set):
-
         self.linear_design_mat_set = linear_design_mat_set
 
     def set_up_disp_set(self, up_disp_set):
         self.up_disp_set = up_disp_set
+
+    def set_grid_set_velo(self, grid_set_velo):
+        self.grid_set_velo = grid_set_velo
+
+    def set_true_model_vec_set(self, true_model_vec_set):
+        self.true_model_vec_set = true_model_vec_set
+
+    def set_task_name(self, task_name):
+        self.task_name = task_name
 
     def run_test0(self):
 
@@ -270,7 +268,7 @@ class Bayesian_MCMC(fourdvel):
 
         comps = ['e','n','u']
 
-        model_prior = self.model_prior_set[point]
+        model_prior = self.model_mean_prior_set[point]
 
         no_secular_up = self.no_secular_up
         up_short_period = self.up_short_period
@@ -288,7 +286,6 @@ class Bayesian_MCMC(fourdvel):
                 RVs_secular.append(rv)
 
             self.model_vec_secular = pm.math.concatenate(RVs_secular, axis=0)
-
 
             # Tidal componens
             sigma_permiss = 10
@@ -324,7 +321,6 @@ class Bayesian_MCMC(fourdvel):
         return 0
 
     def remove_design_mat_cols(self, G, secular_included, remove_tidal_up=False):
-
         # MCMC_linear: secular_included = True
         # MCMC: secular_included = False
 
@@ -376,8 +372,8 @@ class Bayesian_MCMC(fourdvel):
 
         return new_G
     
-    def run_MCMC_Linear(self, run_point, true_model_vec_set=None, suffix=None):
-
+    def run_MCMC_Linear(self, run_point=None, suffix=None):
+        # Supported tasks: "tides_1 (no grounding)"
         print('Running MCMC on linear model...')
 
         for point in self.point_set:
@@ -481,10 +477,9 @@ class Bayesian_MCMC(fourdvel):
                 trace = pm.sample(draws=N_draws, tune=4000)
 
                 # Find the true model vec
-                if true_model_vec_set is not None:
-
+                if self.true_model_vec_set is not None:
                     # Include both secular & tidal components
-                    true_model_vec = true_model_vec_set[point]
+                    true_model_vec = self.true_model_vec_set[point]
 
                     # Get the compressed model_vec by removing the components
                     # constrained to be small
@@ -505,14 +500,13 @@ class Bayesian_MCMC(fourdvel):
                 plt.savefig('MCMC_linear.png')
                 
                 # Show the true model vec
-                if true_model_vec_set is not None:
+                if self.true_model_vec_set is not None:
                     print("true model vec:")
-                    print(true_model_vec_set[point])
+                    print(self.true_model_vec_set[point])
 
         return model_vec
 
     def pad_to_orig_model_vec(self, map_estimate, mode):
-
         if not mode in ["linear","nonlinear"]:
             raise Exception("Undefined mode")
 
@@ -554,29 +548,52 @@ class Bayesian_MCMC(fourdvel):
                 i+=1
 
             return model_vec
+
+    def prepare_data_error_model(self, noise_sigma, N_data):
+
+        Cd = np.zeros(shape = (N_data,N_data))
+        data_error = np.zeros(shape = (N_data,1))
+        for i in range(N_data//2):
+            # range.
+            Cd[2*i,2*i] = noise_sigma[i][0]**2
+            # azimuth.
+            Cd[2*i+1,2*i+1] = noise_sigma[i][1]**2
+
+            # range
+            data_error[2*i] = noise_sigma[i][0]
+            # azimuth
+            data_error[2*i+1] = noise_sigma[i][1]
+
+        return (Cd, data_error)
         
-    def run_MCMC(self, run_point, true_model_vec_set=None, task_name=None, suffix=None):
-
+    def run_MCMC(self, run_point, suffix=None):
+        # Supported tasks: "tides_1 (with grounding)", "tides_2"
         print("Running Bayesian MCMC...")
-        print("task_name: ", task_name)
+        print("task_name: ", self.task_name)
 
+        reweight = True
         for point in self.point_set:
-
             #if point != self.float_lonlat_to_int5d((-82.5, -78.6)):
             if point != run_point:
                 continue
-            
-            print('The grid point is: ',point)
 
+            print('The grid point is: ',point)
+            
+            # Show the up_scale in model
+            velo_model = self.grid_set_velo[point]
+            print("true up scale: ", velo_model[2])
+            true_up_scale = velo_model[2]
+
+            ## Design matrix ## 
             # Obtain design matrix
             # row size: 
             # EN: 2 * num of offset fields
             # U:  1 * num of offset fields
             d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb = self.stack_design_mat_set[point]
 
-            if task_name == "tides_1":
+            if self.task_name == "tides_1":
                 remove_tidal_up = False
-            elif task_name == "tides_2":
+            elif self.task_name == "tides_2":
                 remove_tidal_up = True
             else:
                 raise Exception()
@@ -587,26 +604,32 @@ class Bayesian_MCMC(fourdvel):
             d_mat_U_ta = self.remove_design_mat_cols(G=d_mat_U_ta, secular_included=False, remove_tidal_up = remove_tidal_up)
             d_mat_U_tb = self.remove_design_mat_cols(G=d_mat_U_tb, secular_included=False, remove_tidal_up = remove_tidal_up)
 
+            ## Data ##
             # Obtain data vector
             data_vec = self.data_vec_set[point]
-            print('data_vec shape',data_vec.shape)
-
             N_data = len(data_vec)
             N_offsets = N_data//2
 
-            # Obtain noise sigma
+            # Prepare data error model
             noise_sigma = self.noise_sigma_set[point]
-            Cd = np.zeros(shape = (N_data,N_data))
-            for i in range(N_data//2):
-                # Range.
-                Cd[2*i,2*i] = noise_sigma[i][0]**2
-                # Azimuth.
-                Cd[2*i+1,2*i+1] = noise_sigma[i][1]**2
-            
+            Cd, data_error = self.prepare_data_error_model(noise_sigma, N_data)
+
+            # Data reweighting
+            if reweight:
+                # scale data according to sampling sigma
+                for i in range(N_offsets):
+                    data_vec[2*i,0] = \
+                        data_vec[2*i,0] / data_error[2*i,0] * self.sampling_data_sigma
+
+                    data_vec[2*i+1,0] = \
+                        data_vec[2*i+1,0] / data_error[2*i+1,0] * self.sampling_data_sigma 
+
+            ## Obtain satellite observation vectors ## 
             # Obtain offsetfields
             offsetfields = self.offsetfields_set[point]
 
             # Form the necessary vectors
+            # vecs & delta_t
             vecs = np.zeros(shape=(N_data, 3))
             delta_t = np.zeros(shape=(N_offsets,1))
             t_origin = self.t_origin.date()
@@ -618,13 +641,13 @@ class Bayesian_MCMC(fourdvel):
                 t_b = (offsetfields[i][1] - t_origin).days + round(offsetfields[i][4],4)
                 delta_t[i,0] = t_b - t_a
 
-            # shape = (N_offsets ,3)
             delta_t = np.repeat(delta_t, 3, axis=1)
 
             tt_vecs = theano.shared(vecs)
             tt_delta_t = theano.shared(delta_t)
 
             # Form the observation vector matrix
+            # vec_mat
             # shape: N_data x (N_offsets*3)
             vec_mat = np.zeros(shape=(N_data, N_offsets*3))
             for i in range(N_offsets):
@@ -633,9 +656,16 @@ class Bayesian_MCMC(fourdvel):
                 vec_mat[2*i,    3*i:3*(i+1)] = vec1
                 vec_mat[2*i+1,  3*i:3*(i+1)] = vec2
 
+            # Scale observation vector matrix according to sampling sigma
+            if reweight:
+                for i in range(N_offsets):
+                    vec_mat[2*i,:] = \
+                        vec_mat[2*i, :] / data_error[2*i,0] * self.sampling_data_sigma
+
+                    vec_mat[2*i+1,:] = \
+                        vec_mat[2*i+1, :] / data_error[2*i+1,0] * self.sampling_data_sigma 
+
             tt_vec_mat = theano.shared(vec_mat)
-                
-            #print('delta_t: ',delta_t)
 
             # Make the design matrix shared
             tt_d_mat_EN_ta = theano.shared(d_mat_EN_ta)
@@ -643,21 +673,14 @@ class Bayesian_MCMC(fourdvel):
             tt_d_mat_U_ta = theano.shared(d_mat_U_ta)
             tt_d_mat_U_tb = theano.shared(d_mat_U_tb)
 
-            # Up displacement model
-            up_scale = 1
-            tide_height_master_model, tide_height_slave_model = self.up_disp_set[point]
+            # Prepare tide-based Up displacement, for tides_2
+            if self.task_name == "tides_2":
+                tide_height_master_model, tide_height_slave_model = self.up_disp_set[point]
+                dis_U_ta_model = tide_height_master_model.reshape(len(tide_height_master_model),1)
+                dis_U_tb_model = tide_height_slave_model.reshape(len(tide_height_slave_model),1)
 
-            tide_height_master = tide_height_master_model * up_scale
-            tide_height_slave = tide_height_slave_model * up_scale
-
-            dis_U_ta = tide_height_master.reshape(len(tide_height_master),1)
-            dis_U_tb = tide_height_slave.reshape(len(tide_height_slave),1)
-
-            tt_dis_U_ta = theano.shared(dis_U_ta)
-            tt_dis_U_tb = theano.shared(dis_U_tb)
-
-            # Flag to use up scale or not
-            use_up_scale = True
+                tt_dis_U_ta = theano.shared(dis_U_ta_model)
+                tt_dis_U_tb = theano.shared(dis_U_tb_model)
 
             # Construct the parameter vector
             self.bmc_model = pm.Model()
@@ -675,30 +698,39 @@ class Bayesian_MCMC(fourdvel):
                 self.grounding=pm.Normal('grounding', mu=-1, sigma=2, shape=(1,1))
 
                 # Vertical displacement scaling
-                if use_up_scale:
+                if self.task_name == "tides_2":
                     self.up_scale=pm.Normal('up_scale', mu=0.8, sigma=0.5, shape=(1,1))
 
+                # Displacement E & N
                 dis_EN_ta = tt_d_mat_EN_ta.dot(self.model_vec_tidal)
                 dis_EN_tb = tt_d_mat_EN_tb.dot(self.model_vec_tidal)
 
-                if task_name == "tides_1":
+                # Displacement U
+                if self.task_name == "tides_1":
                     # Based on parameters
                     dis_U_ta = tt_d_mat_U_ta.dot(self.model_vec_tidal)
                     dis_U_tb = tt_d_mat_U_tb.dot(self.model_vec_tidal)
-                elif task_name == "tides_2":
+                elif self.task_name == "tides_2":
                     # Based on external time series
-                    if not use_up_scale:
-                        dis_U_ta = tt_dis_U_ta
-                        dis_U_tb = tt_dis_U_tb
-                    else:
+                    op_order = "clip first"
+                    if op_order == "scale first":
+                        # Scale U
                         dis_U_ta = tt_dis_U_ta * self.up_scale
                         dis_U_tb = tt_dis_U_tb * self.up_scale
+                        # Clip U
+                        dis_U_ta = tt.clip(dis_U_ta, self.grounding, 100)
+                        dis_U_tb = tt.clip(dis_U_tb, self.grounding, 100)
+                    elif op_order == "clip first":
+                        # Clip U
+                        dis_U_ta = tt.clip(tt_dis_U_ta, self.grounding, 100)
+                        dis_U_tb = tt.clip(tt_dis_U_tb, self.grounding, 100)
+                        # Scale U
+                        dis_U_ta = dis_U_ta * self.up_scale
+                        dis_U_tb = dis_U_tb * self.up_scale
+                    else:
+                        raise Exception()
                 else:
                     raise Exception()
-
-                # Clipping U here
-                dis_U_ta = tt.clip(dis_U_ta, self.grounding, 100)
-                dis_U_tb = tt.clip(dis_U_tb, self.grounding, 100)
 
                 # Find E & N offset
                 offset_EN = dis_EN_tb - dis_EN_ta
@@ -720,13 +752,13 @@ class Bayesian_MCMC(fourdvel):
                 # (N_offsets, 3) * (N_offsets, 3)
                 offset_secular = self.model_vec_secular.repeat(N_offsets, axis=0) * tt_delta_t
 
-                # Add secular displacement
+                # Total ENU
                 offset_total = offset_ENU + offset_secular
 
                 # Flatten it to a vector
                 offset_total_flatten = offset_total.reshape(shape=(N_offsets*3,1))
 
-                # Multiply to observation
+                # Multiply to observation vectors for prediction
                 # N_offsets * 3 -> N_data
                 pred_vec = tt_vec_mat.dot(offset_total_flatten)
 
@@ -767,8 +799,8 @@ class Bayesian_MCMC(fourdvel):
                     trace = pm.sample(n_steps, tune=n_steps, chains=3)
 
                     # Save the true model vec to the trace object
-                    if true_model_vec_set is not None:
-                        true_model_vec = true_model_vec_set[point]
+                    if self.true_model_vec_set is not None:
+                        true_model_vec = self.true_model_vec_set[point]
 
                         # secular
                         compressed_true_model_vec = true_model_vec[:3,0].tolist()
@@ -781,6 +813,9 @@ class Bayesian_MCMC(fourdvel):
                     else:
                         trace.true_model_vec = None
 
+                    # Save the true scaling to the trace object
+                    trace.true_up_scale = true_up_scale
+
                     # Save the trace to disk
                     pkl_name = "_".join([self.estimation_dir+"/samples_BMC",str(point[0]),str(point[1]),suffix])
                     with open(pkl_name + ".pkl","wb") as f:
@@ -790,19 +825,17 @@ class Bayesian_MCMC(fourdvel):
                     pm.traceplot(trace)
                     plt.savefig(self.estimation_dir+'/MCMC_trace.png')
 
-            # Only do the test point in the point set
+            # Return the results. Note that this is optimization result not sampling
             return (model_vec, grounding)
 
+    #########################################################
     #### Below are pure optimization using scipy ############
+    #########################################################
+
     def construct_bounds(self, point):
 
-        self.bmc_model = pm.Model()
-        RVs_secular = []
-        RVs_tidal = []
-
-        comps = ['e','n','u']
-
-        model_prior = self.model_prior_set[point]
+        # Get the priors 
+        model_prior = self.model_mean_prior_set[point]
 
         no_secular_up = self.no_secular_up
         up_short_period = self.up_short_period
@@ -811,24 +844,30 @@ class Bayesian_MCMC(fourdvel):
         up_lower = self.up_lower
         up_upper = self.up_upper
 
-
+        # Create the bounds
         bounds = []
-        # Secular component
-        for i, comp in enumerate(comps):
+
+        # Secular component (allow 10% difference)
+        for i, comp in enumerate(['E','N','U']):
             bounds.append( (model_prior[i,0] - max(abs(model_prior[i,0])*0.1, 1e-6), model_prior[i,0]+ max(abs(model_prior[i,0])*0.1,1e-6)) )
 
+        # Tidal component
+        if self.task_name == "tides_1":
+            comp_name = ['cosE','cosN','cosU','sinE','sinN','sinU']
+        elif self.task_name == "tides_2":
+            comp_name = ['cosE','cosN','sinE','sinN']
+        
         # Tidal componens
         bound_permiss = 1
         bound_restrict = 1e-6
-        comp_name = ['cosE','cosN','cosU','sinE','sinN','sinU']
 
         for i, tide_name in enumerate(self.modeling_tides):
-            for j in range(6):
-                k = 3 + i*6 + j
-                if up_short_period and not tide_name in ['M2','S2','K2','O1','K1','P1'] and (j==2 or j==5):
+            for j in range(len(comp_name)):
+                k = 3 + i*len(comp_name) + j
+                if up_short_period and not tide_name in ['M2','S2','K2','N2','O1','K1','P1','Q1'] and comp_name[j][-1]=='U':
                     bound = bound_restrict
 
-                elif horizontal_long_period and not tide_name in ['Mf','Msf','Mm'] and (j==0 or j==1 or j==3 or j==4):
+                elif horizontal_long_period and not tide_name in ['Mf','Msf','Mm'] and comp_name[j][-1] in ['E','N']:
                     bound = bound_restrict
                 else:
                     bound = bound_permiss
@@ -836,42 +875,73 @@ class Bayesian_MCMC(fourdvel):
                 bounds.append((-bound, bound))
 
         # Grouding component
-        bounds.append((-2,0))
+        bounds.append((up_lower, up_upper))
+
+        # Scaling
+        if self.task_name == "tides_2":
+            bounds.append((0,1.5))
 
         return bounds
 
-    def run_optimize(self):
-
-        import scipy
-        from scipy.optimize import shgo, differential_evolution, dual_annealing
-
+    def run_optimize(self, run_point=None):
+        # Supported tasks: "tides_1 (with/without grounding)" and "tides_2 (TODO)"
         model_vec_set = {}
 
         for point in self.point_set:
+            if run_point and point!=run_point:
+                continue
+
+            print("optimize at: ", point)
+
+            if self.true_model_vec_set:
+                true_model_vec = self.true_model_vec_set[point]
+            else:
+                true_model_vec = None
+
+            print("true model vec\n", true_model_vec)
+
+            print("task name: ", self.task_name)
             
-            print(point)
-            # Create bounds
-            bounds = self.construct_bounds(point)
-
-            # This is used to determine the number of parameters
-            print('bounds: ', len(bounds))
-
             # Obtain design matrix
             # row size: N_offsets
             d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb = self.stack_design_mat_set[point]
 
+            if self.task_name == "tides_1":
+                remove_tidal_up = False
+            elif self.task_name == "tides_2":
+                remove_tidal_up = True
+            else:
+                raise Exception()
+
+            # Subset the design matrix to remove some parameters according to prior 
+            d_mat_EN_ta = self.remove_design_mat_cols(G=d_mat_EN_ta, secular_included=False, remove_tidal_up = remove_tidal_up)
+            d_mat_EN_tb = self.remove_design_mat_cols(G=d_mat_EN_tb, secular_included=False, remove_tidal_up = remove_tidal_up)
+            d_mat_U_ta = self.remove_design_mat_cols(G=d_mat_U_ta, secular_included=False, remove_tidal_up = remove_tidal_up)
+            d_mat_U_tb = self.remove_design_mat_cols(G=d_mat_U_tb, secular_included=False, remove_tidal_up = remove_tidal_up)
+
+            #print(d_mat_EN_ta.shape)
+            #print(d_mat_U_ta.shape)
+
+            ## Data ##
             # Obtain data vector
             data_vec = self.data_vec_set[point]
             N_data = len(data_vec)
-            N_offsets = N_data//2
+            N_offsets = N_data // 2
 
+            # Prepare data error model
+            noise_sigma = self.noise_sigma_set[point]
+            Cd, data_error = self.prepare_data_error_model(noise_sigma, N_data)
+
+            ## Obtain satellite observation vectors ## 
             # Obtain offsetfields
             offsetfields = self.offsetfields_set[point]
 
-            # Form the vectors
+            # Form the necessary vectors
+            # vecs & delta_t 
             vecs = np.zeros(shape=(N_data, 3))
             delta_t = np.zeros(shape=(N_offsets,1))
             t_origin = self.t_origin.date()
+
             for i in range(N_offsets):
                 vecs[2*i,:] = np.asarray(offsetfields[i][2])
                 vecs[2*i+1,:] = np.asarray(offsetfields[i][3])
@@ -880,7 +950,7 @@ class Bayesian_MCMC(fourdvel):
                 delta_t[i,0] = t_b - t_a
 
             delta_t = np.repeat(delta_t, 3, axis=1)
-            
+
             # Form the observation vector matrix
             vec_mat = np.zeros(shape=(N_data, N_offsets*3))
             for i in range(N_offsets):
@@ -888,77 +958,187 @@ class Bayesian_MCMC(fourdvel):
                 vec2 = np.asarray(offsetfields[i][3])
                 vec_mat[2*i,    3*i:3*(i+1)] = vec1
                 vec_mat[2*i+1,  3*i:3*(i+1)] = vec2
-                
-            pred_vec = np.zeros(shape=(N_data,1))
-            args_1 = (d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb, data_vec, N_data, N_offsets, vecs, delta_t, vec_mat, pred_vec) 
-        
-            
-            linear_design_mat = self.linear_design_mat_set[point]
-            args_2 = (linear_design_mat, data_vec)
 
+            # Prepare tide-based Up displacement(TODO)
+            if self.task_name == "tides_2":
+                tide_height_master_model, tide_height_slave_model = self.up_disp_set[point]
+                dis_U_ta_model = tide_height_master_model.reshape(len(tide_height_master_model),1)
+                dis_U_tb_model = tide_height_slave_model.reshape(len(tide_height_slave_model),1)
+            else:
+                dis_U_ta_model = None
+                dis_U_tb_model = None
+
+            # Prediction
+            pred_vec = np.zeros(shape=(N_data,1))
+
+            # Find the true/model vec
+
+            # Prepare the arguments
+            args_1 = (d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb, data_vec, N_data, N_offsets, vecs, delta_t, vec_mat, dis_U_ta_model, dis_U_tb_model, pred_vec, self.task_name)
+
+            # Prepare initial point
+            if self.true_model_vec_set is not None:
+                true_model_vec = self.true_model_vec_set[point]
+
+                # secular
+                compressed_true_model_vec = true_model_vec[:3,0].tolist()
+                x0 = compressed_true_model_vec.copy()
+
+                # tidal
+                for ind in self.kept_model_vec_entries:
+                    compressed_true_model_vec.append(true_model_vec[ind,0])
+                    x0.append(0)
+
+                # grounding
+                x0.append(-2)
+                
+                # scaling
+                if self.task_name == "tides_2":
+                    x0.append(1)
+            else:
+                raise Exception()
+
+            print("compressed_true_model_vec: ", compressed_true_model_vec)
+            print("x0: ", x0)
+
+            # Compare the forward problems
+            # tides_1: without grounding 
+            #linear_design_mat = self.linear_design_mat_set[point]
+            #args_2 = (linear_design_mat, data_vec)
             #np.random.seed(20190711)
             #x_test = np.random.randn(len(bounds))
-
             #res1 = forward(x_test, *args_1)
             #res2 = forward_linear(x_test, *args_2)
-
             #print('comparison...')
             #print(res1, res2)
-
             #if (abs(res1 - res2<0.01)):
             #    print('successful')
             #else:
             #    raise Exception('forward problem has problem')
 
-            res = differential_evolution(forward, bounds, args_1)
-            #res = differential_evolution(forward_linear, bounds, args_2)
+            # Solve it
+            start_time = time.time()
 
-            print(res)
+            #method = "basinhopping"
+            #method = "differential_evolution"
+            #method = "shgo"
+            #method = "dual_annealing"
+            #method = "SLSQP"
+            method = "trust-constr"
+
+            # Create bounds for parameters
+            bounds = self.construct_bounds(point)
+            lb = [value[0] for value in bounds]
+            ub = [value[1] for value in bounds]
+            print("lb: ", lb)
+            print("ub: ", ub)
+            bounds_obj = scipy.optimize.Bounds(lb, ub)
+            #print(bounds_obj)
+
+            # This is used to determine the number of parameters
+            print('bounds: ', bounds)
+
+            if method == "basinhopping":
+                res = scipy.optimize.basinhopping(forward, x0, minimizer_kwargs={"args": args_1})
+            elif method == "differential_evolution":
+                res = scipy.optimize.differential_evolution(forward, bounds, args_1)
+
+            elif method == "shgo":
+                res = scipy.optimize.shgo(forward, bounds, args_1)
+
+            elif method == "dual_annealing":
+                res = scipy.optimize.dual_annealing(forward, bounds, args_1)
+
+            elif method == "SLSQP":
+                res = scipy.optimize.minimize(forward, x0, args=args_1, method='SLSQP', bounds=bounds_obj)
+
+            elif method == "trust-constr":
+                res = scipy.optimize.minimize(forward, x0, args=args_1, method='trust-constr', bounds=bounds_obj)
+ 
+            else:
+                raise Exception()
+            
+            elapsed_time = time.time() - start_time
+
+            print("Optimizer: ", res)
+            print("Elapased time: ", elapsed_time)
 
             model_vec_set[point] = res.x
 
+            print("Result: ")
+            print(res.x)
+            print(compressed_true_model_vec)
+            
+            print(stop)
+
         return model_vec_set
 
-
-# Forward problem calculation used by non-linear optimization
-
+# Some forward problem calculation used by non-linear optimization
 def forward_linear(x, *T):
-
     G,d = T
-
-    #print(G.shape)
-    #print(x.shape)
-    #print(d.shape)
-
     print(x)
-
     pred = np.matmul(G, x[:,None])
-
     return np.linalg.norm(pred - d)
 
-
-#def forward(x, A1, A2, A3, A4, B1, B2, B3, B4, C1):
 def forward(x, *T):
+    # Unpack the arguments
+    d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb, data_vec, N_data, N_offsets, vecs, delta_t, vec_mat, dis_U_ta_model, dis_U_tb_model, pred_vec, task_name = T
+    
+    #d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb, data_vec, N_data, N_offsets, vecs, delta_t, vec_mat, dis_U_ta_model, dis_U_tb_model, pred_vec, task_name = T["args"]
+    
+    # Show the current value
+    #print("x: ", x)
 
-    d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb, data_vec, N_data, N_offsets, vecs, delta_t, vec_mat, pred_vec = T
+    # E, N
+    if task_name == "tides_1":
+        dis_EN_ta = np.matmul(d_mat_EN_ta, x[3:-1,None])
+        dis_EN_tb = np.matmul(d_mat_EN_tb, x[3:-1,None])
+    elif task_name == "tides_2":
+        dis_EN_ta = np.matmul(d_mat_EN_ta, x[3:-2,None])
+        dis_EN_tb = np.matmul(d_mat_EN_tb, x[3:-2,None])
+    else:
+        raise Exception()
 
-    print(x)
+    # U
+    if task_name == "tides_1":
+        dis_U_ta = np.matmul(d_mat_U_ta, x[3:-1,None])
+        dis_U_tb = np.matmul(d_mat_U_tb, x[3:-1,None])
+    elif task_name == "tides_2":
+        op_order = "clip first"
+        if op_order == "scale first":
+            dis_U_ta = dis_U_ta_model * x[-1]
+            dis_U_tb = dis_U_tb_model * x[-1]
 
-    dis_EN_ta = np.matmul(d_mat_EN_ta, x[3:-1,None])
-    dis_EN_tb = np.matmul(d_mat_EN_tb, x[3:-1,None])
-    dis_U_ta = np.matmul(d_mat_U_ta, x[3:-1,None])
-    dis_U_tb = np.matmul(d_mat_U_tb, x[3:-1,None])
+            dis_U_ta[dis_U_ta < x[-2]] = x[-2]
+            dis_U_tb[dis_U_tb < x[-2]] = x[-2]
+        
+        elif op_order == "clip first":
+            dis_U_ta = dis_U_ta_model * 1.0
+            dis_U_tb = dis_U_tb_model * 1.0
 
-    # Clipping
-    dis_U_ta[dis_U_ta < x[-1]] = x[-1]
-    dis_U_tb[dis_U_tb < x[-1]] = x[-1]
+            dis_U_ta[dis_U_ta < x[-2]] = x[-2]
+            dis_U_tb[dis_U_tb < x[-2]] = x[-2]
 
+            dis_U_ta = dis_U_ta * x[-1]
+            dis_U_tb = dis_U_tb * x[-1]
+    else:
+        raise Exception()
+
+    # The following stuff the same as in those in run_MCMC after clipping
+    # Find E & N offset
     offset_EN = dis_EN_tb - dis_EN_ta
+
+    # Find U offset
     offset_U = dis_U_tb - dis_U_ta
 
+    # Form 3d displacement
+    # shape = (N_offsets x 3)
     offset_ENU = np.hstack((offset_EN.reshape(N_offsets,2), offset_U))
 
-    # Broadcast
+    # Element-wise multiplication
+    # delta_t: (N_offsets x 3)
+    # x[None, 0:3]: (1 x 3)
+    # secular_ENU: (N_offsets x 3) 
     secular_ENU = np.repeat(x[None,0:3], N_offsets, axis=0) * delta_t
 
     # Total ENU
@@ -968,11 +1148,13 @@ def forward(x, *T):
     #    pred_vec[2*i] = np.dot(vecs[2*i], total_ENU[i])
     #    pred_vec[2*i+1] = np.dot(vecs[2*i+1], total_ENU[i])
 
-    # Flatten
+    # Flatten it to a vector
     total_ENU_flatten = total_ENU.reshape(N_offsets*3, 1)
 
-    # Prediction
+    # Multiply to observation vectors for prediction
     pred_vec = np.matmul(vec_mat, total_ENU_flatten)
+
+    # Find likelihood(TODO)
 
     return np.linalg.norm(pred_vec - data_vec)
 
