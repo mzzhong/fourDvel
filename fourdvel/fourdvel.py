@@ -1170,7 +1170,7 @@ class fourdvel(basics):
                 if track_num_set and not (track_num,"csk") in track_num_set:
                     continue
 
-                print("Hey", track_num)
+                print("Get offset field stack: track ", track_num)
 
                 if self.proj == "Evans":
                     track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(2) + '0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), self.csk_version])) +  ".pkl")

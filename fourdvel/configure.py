@@ -293,6 +293,7 @@ class configure(fourdvel):
                 data_info_set = collections.defaultdict(list)
                 offsetfields_set = collections.defaultdict(list)
                 offsets_set = collections.defaultdict(list)
+                offsetsVar_set = collections.defaultdict(list)
 
                 # Default value, because data_mode(3) doesn't have true_tide_vec_set
                 true_tide_vec_set = {}
@@ -337,7 +338,7 @@ class configure(fourdvel):
                     
                     print('For this track, available offsetfields at test point: ',
                             track_offsetfields_set[test_point])
-                    print('For this track, obtained offsets at test point: ', 
+                    print('For this track, obtained offsets and var at test point: ', 
                                 track_offsets_set[test_point])
                     print('For this track, length of offsetfields and offsets at test point: ', 
                             len(track_offsetfields_set[test_point]),len(track_offsets_set[test_point]))
@@ -346,16 +347,24 @@ class configure(fourdvel):
                     for point in point_set:
                         # List addition.
                         offsetfields_set[point] = offsetfields_set[point] + track_offsetfields_set[point]
-                        # List addition.
-                        offsets_set[point] = offsets_set[point] + track_offsets_set[point]
+
+                        # List addition
+                        # Old
+                        #offsets_set[point] = offsets_set[point] + track_offsets_set[point]
+
+                        # New
+                        # Structure of every offset: [rng offset, azi offset, rng offset var, azi offset var].
+                        offsets_set[point] = offsets_set[point] + [value[:2] for value in track_offsets_set[point]]
+                        offsetsVar_set[point] = offsetsVar_set[point] + [value[2:4] for value in track_offsets_set[point]]
     
                         # Save the information. (# track info)
                         data_info_set[point].append([(track[0], track[1]), len(track_offsets_set[point])])
     
-                print('======= END OF EXTRACTION ========')
+                print('======= END OF EXTRACTION For {} ========'.format(sate_name))
                 print('Total number of offsetfields at test point: ', len(offsetfields_set[test_point]))
                 print('Total length of offsets at test point: ', len(offsets_set[test_point]))
-    
+                print('Total length of offsets variance at test point: ', len(offsetsVar_set[test_point]))
+   
                 # Generate synthetic data
                 if this_data_mode == 2:
                     # Synthetic data.
@@ -411,19 +420,29 @@ class configure(fourdvel):
                     data_vec_set = self.offsets_set_to_data_vec_set(point_set, offsets_set)
     
                     # Noise model.
-                    noise_sigma_set = {}
-                    for point in point_set:
-                        noise_sigma_set[point] = noise_sigma_set[point] = [self.noise_sigma_const_dict[sate_name]]*len(offsetfields_set[point])
+                    real_data_noise_model_option = 1
+                    # Set by user
+                    if real_data_noise_model_option == 0:
+                        noise_sigma_set = {}
+                        for point in point_set:
+                            noise_sigma_set[point] = [self.noise_sigma_const_dict[sate_name]]*len(offsetfields_set[point])
 
-    #                # Get reference velocity
-    #                n_params = 3 + len(self.modeling_tides) * 6
-    #                for point in point_set:
-    #
-    #                    true_tide_vec_set[point] = np.zeros(shape=(n_params, 1))
-    #    
-    #                    true_tide_vec_set[point][0] = secular_v_set[point][0]
-    #                    true_tide_vec_set[point][1] = secular_v_set[point][1]
-    #                    true_tide_vec_set[point][2] = secular_v_set[point][2]
+                    elif real_data_noise_model_option == 1:
+                        noise_sigma_set = {}
+                        for point in point_set:
+                            noise_sigma_set[point] = [ (np.sqrt(value[0])/5, np.sqrt(value[1])/5 ) for value in offsetsVar_set[point] ]
+                    else:
+                        raise Exception("Not implemented")
+
+                    #print(noise_sigma_set[test_point])
+
+                    ## Get reference velocity
+                    #n_params = 3 + len(self.modeling_tides) * 6
+                    #for point in point_set:
+                    #    true_tide_vec_set[point] = np.zeros(shape=(n_params, 1))
+                    #    true_tide_vec_set[point][0] = secular_v_set[point][0]
+                    #    true_tide_vec_set[point][1] = secular_v_set[point][1]
+                    #    true_tide_vec_set[point][2] = secular_v_set[point][2]
             else:
                 raise Exception("Data mode error " + str(this_data_mode))
 
@@ -486,7 +505,7 @@ class configure(fourdvel):
         print('Total number of offsetfields at test point: ', len(final_offsetfields_set[test_point]))
         print('Total length of noise_sigma pair at test point: ', len(final_noise_sigma_set[test_point]))
         print('Total length of offset measurement: ', len(final_data_vec_set[test_point]))
-        print('======= SUMMARY OF DATA SET FORMATION ========')
+        print('==============================================')
 
         # show the information of test
         #print(final_offsetfields_set[test_point])
