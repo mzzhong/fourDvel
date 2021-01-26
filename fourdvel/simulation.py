@@ -566,6 +566,15 @@ class simulation(fourdvel):
         self.up_disp_set = up_disp_set
         return 0
 
+    def nonlinear_scaling(self, hh, power):
+        max_val = 3.1 
+        hh_sign = np.sign(hh)
+        hh_hat = hh / (hh_sign * max_val)
+        hh_hat_nonlinear_amp = np.absolute(hh_hat) ** power
+        hh_nonlinear = hh_hat_nonlinear_amp * (hh_sign * max_val)
+
+        return hh_nonlinear
+
     def syn_offsets_data_vec_set(self, point_set, secular_v_set, modeling_tides, 
                             tide_amp_set, tide_phase_set, offsetfields_set, noise_sigma_set):
 
@@ -639,6 +648,14 @@ class simulation(fourdvel):
         elif method == "model_with_grounding":
 
             # Convert parameters from velocity to displacement
+            # Some explanation on the conversion here
+            # Assume = Velo = A * sin(omega * t + phi)
+            # Disp = A / omega * sin(omega*t + phi - pi/2)
+            #      = A' * cos(pi - omega*t - phi)
+            #      = A' * cos(omega*t + phi - pi)
+            #      = A' * cos(omega*t + phi + pi)
+            #      = A' * (cos(omega*t) * cos(phi + pi) - sin(omega*t) * sin(phi + pi))
+
             tide_dis_amp = {}
             tide_dis_phase = {}
 
@@ -674,19 +691,49 @@ class simulation(fourdvel):
 
             # Obtain up displacement vector
             tide_height_master_model, tide_height_slave_model = self.up_disp_set[point]
-            
-            # Scale the up displacement vector
-            # Scaling factor is normalized
+
+          
+            # Get velo_model 
             velo_model = self.grid_set_velo[point]
-            tide_height_master = tide_height_master_model * velo_model[2]
-            tide_height_slave = tide_height_slave_model * velo_model[2]
+
+            # ad hoc change
+            if point == self.test_point:
+                #velo_model[2] = 0.6
+                print("velo model: ", velo_model)
+                # Ad hoc manually change up_scale to be 0.8
+                #print(stop)
+ 
+            scaling_type = "linear_scaling"
+            #scaling_type = "nonlinear_scaling"
+
+            # Scale the up displacement vector
+            if scaling_type == "linear_scaling":
+                # Scaling factor is velo_model[2]
+                # scale vertical displacement
+                tide_height_master = tide_height_master_model * velo_model[2]
+                tide_height_slave = tide_height_slave_model * velo_model[2]
+
+            elif scaling_type == "nonlinear_scaling":
+                #power = 1.0
+                power = 0.5
+                tide_height_master_model_nonlinear_scaled  = self.nonlinear_scaling(tide_height_master_model, power=power)
+                tide_height_slave_model_nonlinear_scaled  = self.nonlinear_scaling(tide_height_slave_model, power=power)
+
+                tide_height_master = tide_height_master_model_nonlinear_scaled * velo_model[2]
+                tide_height_slave = tide_height_slave_model_nonlinear_scaled * velo_model[2]
+
+            else:
+                raise Exception()
 
             # Signature 1, grounding indicator
             # 0: no grounding, 1: grounding
             if len(velo_model)>=4:
+                #print("grounding indicator is index 3")
                 grounding_indicator = velo_model[3]
             else:
+                #print("grounding indicator is index 2")
                 grounding_indicator = velo_model[2]
+
 
             # Note that the stacked design mat/up displacement may be empty 
             # because there is no data.
@@ -715,11 +762,12 @@ class simulation(fourdvel):
                 # Use external tide model (plain time series)
                 else:
                     #print("Use external model")
+                    # scaled vertical displacement
                     dis_U_ta = tide_height_master.reshape(len(tide_height_master),1)
                     dis_U_tb = tide_height_slave.reshape(len(tide_height_slave),1)
 
                 # Grounding
-                # When grounding_indicator is 1:
+                # When grounding_indicator is larger than 1 (I use velo_model[2] and velo_model[3]):
                 if grounding_indicator > 0:
                     #print("Perform clipping at: ", self.simulation_grounding_level)
                     dis_U_ta[dis_U_ta < self.simulation_grounding_level] = self.simulation_grounding_level

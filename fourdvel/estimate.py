@@ -91,9 +91,15 @@ class estimate(configure):
             with open(tmp_dataset_pkl_name,"rb") as f:
                 all_data_set = pickle.load(f)
 
-        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set) = all_data_set
+        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set, height_set) = all_data_set
 
         print("Data set formation Done")
+
+        # Put height into others_set
+        print("Save the average the extracted height")
+        for point in point_set:
+            others_set[point]['height'] = np.nanmean(height_set[point]) if len(height_set)>0 else np.nan
+        print("Mean height at test point: ", others_set[self.test_point]['height'])
 
         # Check task and inversion method
         if task_name in ["tides_1","tides_3"]:
@@ -116,15 +122,47 @@ class estimate(configure):
 
             if task_name == "tides_3":
                 # Enumerate grounding
-                # Rutford
-                #enum_grounding_level = [-1.8, -1.7, -1.6, -1.5]
+                #enum_grounding_level = [-10]
 
-                if self.external_grounding_level_file is None:
-                    enum_grounding_level = [-3.0, -2.9, -2.8, -2.7, -2.6, -2.5, -2.4, -2.3, -2.2, -2.1, -2.0, -1.9, -1.8, -1.7, -1.6, -1.5, -1.4, -1.3, -1.2, -1.1, -1.0, -0.9, -0.8,-0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0]
+                enum_space = 0.05
+                #enum_space = 0.1
 
-                    #enum_grounding_level = [-1.80, -1.75, -1.70, -1.65, -1.60, -1.55, -1.50]
-                    #enum_grounding_level = [-1.78, -1.76, -1.74, -1.72, -1.70, -1.68, -1.66, -1.64]
-                    enum_grounding_level = [-1.700, -1.695, -1.690, -1.685, -1.680, -1.675, -1.670, -1.665]
+                #gl_low = -2.2
+                #gl_high = -0.7
+
+                gl_low = -3.0
+                gl_high = -0.0
+
+                enum_grounding_level = np.arange(gl_low, gl_high+1e-6, enum_space)
+
+                #enum_grounding_level = [-1.80, -1.75, -1.70, -1.65, -1.60, -1.55, -1.50]
+                #enum_grounding_level = [-1.78, -1.76, -1.74, -1.72, -1.70, -1.68, -1.66, -1.64]
+                #enum_grounding_level = [-1.700, -1.695, -1.690, -1.685, -1.680, -1.675, -1.670, -1.665]
+
+                # Three modes: redo, continue, import
+                #enum_grounding_run_mode = "redo"
+                enum_grounding_run_mode = "continue"
+
+                if enum_grounding_run_mode == "redo":
+                    pass
+
+                elif enum_grounding_run_mode == "continue":
+                    point_result_folder = self.estimation_dir + '/point_result'
+                    tile_lon, tile_lat = self.tile
+                    point_name = str(tile_lon) + '_' + str(tile_lat)
+
+                    # load previous others_set
+                    tile_result_pkl_file = point_result_folder + "/" + point_name + ".pkl"
+                    if os.path.exists(tile_result_pkl_file):
+                        with open(tile_result_pkl_file,"rb") as f:
+                            all_sets_former = pickle.load(f)
+
+                        others_set = all_sets_former["others_set"]
+                        completed_enum_gl = others_set[self.test_point]["grounding_level_model_likelihood"].keys()
+                        print("Completed enum gl: ", completed_enum_gl)
+                    else:
+                        completed_enum_gl = []
+
                 else:
                     enum_grounding_level = ['external']
                     # Currently the external grounding file is saved in ${id}_grid_set_others.pkl
@@ -133,8 +171,17 @@ class estimate(configure):
             else:
                 enum_grounding_level = [None]
 
+            # Make the enumerated gl be integers (10e6)
+            enum_grounding_level_int = [int(round(gl*(10**6))) if gl else None for gl in enum_grounding_level]
+
             # Loop through the grounding level
-            for ienum, grounding_level in enumerate(enum_grounding_level):
+            for ienum, grounding_level_int in enumerate(enum_grounding_level_int):
+                
+                if enum_grounding_run_mode == "continue" and grounding_level_int in completed_enum_gl:
+                    print("Completed and skip: ", grounding_level_int/ 10**6)
+                    continue
+
+                grounding_level = grounding_level_int / (10**6)
                 print("New enumeration: ", ienum, grounding_level)
                
                 # Inversion with enforced grounding level ("tides_3")
@@ -205,22 +252,31 @@ class estimate(configure):
     
                 ############ Some additional work ##############################
                 
-                print('Some additional work ...')
+                print('Additional work for tides_3 saving the results')
                 if self.task_name == "tides_3":
-                    # Put the vertical scaling into other_set_1
-                    self.extract_up_scale_set(point_set, model_vec_set, others_set)
-
-                    # Save the residuals
-                    self.save_resid_set(point_set, resid_of_tides_set, others_set, grounding_level)
+                    # Save the corresponding up_scale and residuals
+                    self.export_to_others_set_wrt_gl(point_set, grounding_level_int, model_vec_set, model_likelihood_set, resid_of_tides_set, others_set)
 
             # Select the optimal grounding level
             # If mode is tides_3 and the enumeration is actually done
             if self.task_name == "tides_3" and enum_grounding_level[0] is not None:
-                print(others_set[self.test_point]['grounding_level_resids'][enum_grounding_level[0]])
                 self.select_optimal_grounding_level(point_set, others_set)
-                print("Optimal grounding level before scaling: ", others_set[self.test_point]["optimal_grounding_level"])
-                print("The scaling is: ", model_vec_set[self.test_point][-1][0])
-                print("Optimal grounding level after scaling: ", others_set[self.test_point]["optimal_grounding_level"] * model_vec_set[self.test_point][-1][0])
+                optimal_grounding_level_int = others_set[self.test_point]["optimal_grounding_level"]
+                optimal_grounding_level = optimal_grounding_level_int / 10**6
+
+                print("Optimal grounding level before scaling: ", optimal_grounding_level)
+
+                print(others_set[self.test_point]['optimal_grounding_level'])
+                print(others_set[self.test_point]['grounding_level_model_likelihood'])
+                print(others_set[self.test_point]['grounding_level_up_scale'])
+
+                if not np.isnan(optimal_grounding_level_int):
+                    up_scale = others_set[self.test_point]['grounding_level_up_scale'][optimal_grounding_level_int]
+
+                    print("The scaling is: ", up_scale)
+                    print("Optimal grounding level after scaling: ", optimal_grounding_level * up_scale)
+                else:
+                    print("No result (NaN) at test point")
 
             ########### Show the results ########################
             # Stack the true and inverted models.
@@ -228,12 +284,11 @@ class estimate(configure):
 
             self.show_vecs = False
             show_control = False
-            if self.test_point_file:
+            if self.single_point_mode:
                 show_control = True
             
-            if self.show_vecs == True or show_control== True:
-            #if self.show_vecs == True and inversion_method=="Bayesian_Linear":
-    
+            if (self.show_vecs == True or show_control== True) and self.task_name == "tides_1":
+   
                 if self.test_point in true_tide_vec_set:
                     stacked_vecs = np.hstack((  true_tide_vec_set[self.test_point], 
                                                 tide_vec_set[self.test_point], 
@@ -243,13 +298,15 @@ class estimate(configure):
                 else:
                     stacked_vecs = np.hstack((  tide_vec_set[self.test_point], 
                                                 tide_vec_uq_set[self.test_point]))
+
                     row_names = ['Estimated','Uncertainty']
                     column_names = ['Secular'] + self.modeling_tides
     
                 self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
 
             #######################################################
-       
+
+        # Non-linear model 
         if task_name == "tides_2" and inversion_method in ['Bayesian_MCMC', 'Nonlinear_Optimization']:
 
             ## Step 1: Prepare the solver (named BMC)
@@ -298,6 +355,7 @@ class estimate(configure):
                 true_model_vec_set = self.tide_vec_set_to_model_vec_set(point_set, true_tide_vec_set)
             else:
                 true_model_vec_set = None
+
             BMC.set_true_model_vec_set(true_model_vec_set)
 
             # Pass the velo model to solver as well, as it contains the up_scale
@@ -309,22 +367,44 @@ class estimate(configure):
             # Run inversion
             est_grounding = None
             suffix = str(data_mode['csk'])+'_' + str(data_mode['s1'])
+
             if inversion_method=="Bayesian_MCMC":
+                # single-point mode
                 model_vec, est_grounding = BMC.run_MCMC(run_point = self.test_point, suffix = suffix)
                 print("*** Result of Bayesian MCMC")
                 print(model_vec)
             
             elif inversion_method=="Nonlinear_Optimization":
-                model_vec_set = BMC.run_optimize(run_point = self.test_point)
-                print("*** Result of nonlinear optimization")
-                print(model_vec_set[self.test_point])
+                # calls scipy.optimize for direct nonlinear optimzation
+                # point-set mode
+                optimize_result = BMC.run_optimize(run_point = self.test_point)
+                model_vec_set, grounding_set, up_scale_set = optimize_result
+
+                # convert to tidal params
+                tide_vec_set = self.model_vec_set_to_tide_vec_set(point_set, model_vec_set)
+
+                # put true and estimated grounding and up_scale into others_set
+                # true value is in self.grid_set_velo and self.simulation_grounding_level
+                self.extract_grounding_up_scale_set(point_set, grounding_set, up_scale_set, others_set)
+
+                # get results of test_point
+                model_vec = model_vec_set[self.test_point]
+                est_grounding = grounding_set[self.test_point]
+                up_scale = up_scale_set[self.test_point]
+                
+                print("*** Result of nonlinear optimization at test point")
+                print("model_vec: ", model_vec)
+                print("grounding: ", est_grounding)
+                print("up scale: ", up_scale)
             else:
                 raise Exception()
 
-            # Compare model vec and tide_vec
+            #######################################
+            ###  Compare model vec and tide_vec on test_point ###
             stacked_model_vecs = []
             stacked_tide_vecs = []
             row_names = []
+
             # True model
             if true_model_vec_set is not None:
                 true_model_vec = true_model_vec_set[self.test_point]

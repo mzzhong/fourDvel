@@ -48,14 +48,16 @@ class fourdvel(basics):
 
             for it in self.csk_tracks:
                 self.csk_data[it] = []
-            self.csk_workdir = "/net/kraken/nobak/mzzhong/CSK-Evans"
+            #self.csk_workdir = "/net/kraken/nobak/mzzhong/CSK-Evans"
+            self.csk_workdir = "/marmot-nobak/mzzhong/CSK-Evans-v3"
 
             # S1
             # Key is track, values are dates
             self.s1_data = {}
 
             self.s1_tracks = [37,52,169,65,7,50,64]
-            self.s1_workdir = "/net/kraken/nobak/mzzhong/S1-Evans"
+            self.s1_data_dir = "/net/kraken/nobak/mzzhong/S1-Evans"
+            self.s1_workdir = "/net/kraken/nobak/mzzhong/S1-Evans-v2"
         
             for it in self.s1_tracks:
                 self.s1_data[it] = []
@@ -80,7 +82,7 @@ class fourdvel(basics):
 
             self.s1_tracks = [37,65,7]
 
-            self.s1_workdir = "/net/kraken/nobak/mzzhong/S1-Evans"
+            self.s1_workdir = "/net/kraken/nobak/mzzhong/S1-Evans-v2"
         
             for it in self.s1_tracks:
                 self.s1_data[it] = []
@@ -171,7 +173,6 @@ class fourdvel(basics):
         # Intialize some parameters
         self.data_uncert_const = None
         self.test_point = None
-        self.test_point_file = None
         self.single_point_mode = False
         self.simulation_use_external_up = False
         self.csk_excluded_tracks = []
@@ -223,36 +224,37 @@ class fourdvel(basics):
                     print("copy param file: ",cmd)
                     os.system(cmd)
 
-            if name == "test_point_file":
-
-                test_point_file = value
-
+            if name == "test_point":
                 if value.lower() != "none":
-                    self.test_point_file = test_point_file
+
+                    test_point_file, test_point_id = value.split('|')
+                    test_point_file, test_point_id = test_point_file.strip(), test_point_id.strip()
 
                     assert os.path.exists(test_point_file), print("Test point file does not exist")
-                    f_test_point = open(test_point_file)
+
+                    f_test_point = open(test_point_file,'r')
                     test_point_lines = f_test_point.readlines()
                     f_test_point.close()
                     
                     for test_point_line in test_point_lines:
                         try:    
-                            name1,value1 = test_point_line.split(':')
-                            name1 = name1.strip()
-                            value1 = value1.strip()
+                            line_id, line_value = test_point_line.split(':')
+                            line_id, line_value = line_id.strip(), line_value.strip()
                         except:
                             continue
     
-                        if name1=="test_point" and value1!="None":
-                            the_point = [float(x) for x in value1.split(",")]
-                            self.test_point = self.float_lonlat_to_int5d(the_point)
-                        else:
-                            continue
-                        print("test_point", value1, self.test_point)
-                        print("Turn on single point mode")
-                        self.single_point_mode = True
+                        if line_id==test_point_id:
+                            try:
+                                the_point = [float(x) for x in line_value.split(",")]
+                                self.test_point = self.float_lonlat_to_int5d(the_point)
+                                print("Turn on single point mode")
+                                self.single_point_mode = True
+                            except:
+                                continue
                 else:
-                    self.test_point_file = None
+                    self.test_point = None
+                
+                print("test_point", value, self.test_point, self.single_point_mode)
 
             if name == "inversion_method":
 
@@ -625,7 +627,7 @@ class fourdvel(basics):
         if csk_data_date_option=="data_based":
             for track_num in tracklist: 
                 if self.proj == "Evans": 
-                    filefolder = self.csk_workdir + '/track_' + str(track_num).zfill(2) + '0' + '/raw/201*'
+                    filefolder = self.csk_workdir + '/track_' + str(track_num).zfill(3) + '_0' + '/raw/201*'
                 elif self.proj == "Rutford":
                     filefolder = self.csk_workdir + '/track_' + str(track_num).zfill(3) + '_0' + '/raw/201*'
                 else:
@@ -638,6 +640,27 @@ class fourdvel(basics):
                     datestr = rawfile.split('/')[-1]
                     if len(datestr)==8:
                         theDate = date(int(datestr[0:4]), int(datestr[4:6]), int(datestr[6:8]))
+
+                        # ad hoc, remove short data on track 11
+                        if track_num == 11 and theDate >= date(2017,12,20) and theDate <= date(2018,3,4):
+                            continue
+
+                        # ad hoc, remove short data on track 12
+                        if track_num == 12 and theDate >= date(2018,1,22) and theDate <= date(2018,2,27):
+                            continue
+
+                        # ad hoc, remove all track 12 data
+                        if track_num == 12:
+                        # 01: 2019 and 2020 data
+                        #if track_num == 12 and theDate <= date(2018,12,31):
+                        # 02: 2018 data
+                        #if track_num == 12 and (theDate <= date(2018,1,1) or theDate >= date(2018,12,31)):
+                        # 03: 2017 data
+                        #if track_num == 12 and theDate >= date(2017,12,31):
+                        # 04: 2018, 2019, 2020 data
+                        #if track_num == 12 and theDate <= date(2017,12,31):
+                            continue
+
                         if theDate >= csk_start and theDate < csk_end:
                             csk_data[track_num].append(theDate)
     
@@ -658,6 +681,7 @@ class fourdvel(basics):
             print("csk_data_date_option", csk_data_option, "is not defined yet")
             raise Exception("dates information are not available")
 
+        #print(stop)
         return 0
 
     def get_S1_trackDates(self):
@@ -676,7 +700,7 @@ class fourdvel(basics):
         if s1_data_date_option=="data_based":
             for track_num in tracklist: 
             
-                filefolder = self.s1_workdir + '/data_' + str(track_num) + '/*zip'
+                filefolder = self.s1_data_dir + '/data_' + str(track_num) + '/*zip'
                 filelist = glob.glob(filefolder)
                 s1_data[track_num] = []
     
@@ -1170,10 +1194,20 @@ class fourdvel(basics):
                 if track_num_set and not (track_num,"csk") in track_num_set:
                     continue
 
-                print("Get offset field stack: track ", track_num)
+                print("Get offset field stack: csk track ", track_num)
 
-                if self.proj == "Evans":
-                    track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(2) + '0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), self.csk_version])) +  ".pkl")
+                # if data mode is pure synthetic data not relying on real data
+                if self.csk_data_mode == 1:
+                    print("csk data mode is 1, skip loading offset field stack")
+                    continue
+
+                # ad hoc, 2020.01.02
+                special_case = False
+                if self.proj == "Evans" and track_num == 12 and special_case:
+                    track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), "v13"])) +  ".pkl")
+
+                elif self.proj == "Evans":
+                    track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), self.csk_version])) +  ".pkl")
 
                 elif self.proj == "Rutford":
                     track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), self.csk_version])) +  ".pkl")
@@ -1190,8 +1224,15 @@ class fourdvel(basics):
                     assert self.csk_data_mode==1, "Test mode must be 1"
 
         if self.use_s1:
+
             for track_num in self.s1_tracks:
                 if track_num_set and not (track_num, "s1") in track_num_set:
+                    continue
+
+                print("Get offset field stack: s1 track ", track_num)
+
+                if self.s1_data_mode == 1:
+                    print("s1 data mode is 1, skip loading offset field stack")
                     continue
 
                 track_offsetFieldStack_pkl = os.path.join(self.s1_workdir, "track_" + str(track_num), "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.s1_id), self.s1_version])) + ".pkl")
@@ -1274,7 +1315,7 @@ class fourdvel(basics):
         offsetfields = []
 
         for it in range(len(tracks)):
-            print(tracks[it])
+            #print(tracks[it])
             
             track_num = tracks[it][0]
             vec1 = tracks[it][1]
@@ -1909,23 +1950,62 @@ class fourdvel(basics):
 
         return quant
 
+    ## For nonlinear model, tides_2 ##
+    def extract_grounding_up_scale_set(self, point_set, grounding_set, up_scale_set, others_set):
+
+        for point in point_set:
+            # true
+            others_set[point]["true_up_scale"] = self.grid_set_velo[point][2]
+            others_set[point]["true_optimal_grounding_level"] = self.simulation_grounding_level
+
+            # estimated
+            if point in grounding_set:
+                others_set[point]["optimal_grounding_level"] = grounding_set[point]
+            if point in up_scale_set:
+                others_set[point]["up_scale"] = up_scale_set[point]
+
+        return 0 
+
     def extract_up_scale_set(self, point_set, model_vec_set, others_set):
 
         for point in point_set:
             model_vec = model_vec_set[point]
+            # true
+            others_set[point]["true_up_scale"] = self.grid_set_velo[point][2]
+
+            # estimated
             if np.isnan(model_vec[0,0]):
                 others_set[point]["up_scale"] = np.nan
             else:
-                others_set[point]["up_scale"] = self.extract_up_scale(point, model_vec)
+                others_set[point]["up_scale"] = self.extract_up_scale(model_vec)
 
         return 0
 
-    def extract_up_scale(self, point, model_vec):
-
+    def extract_up_scale(self, model_vec):
         # The first index after tides
-        return model_vec[3 + len(self.modeling_tides) * 6, 0]
+        if not np.isnan(model_vec[0,0]):
+            return model_vec[3 + len(self.modeling_tides) * 6, 0]
+        else:
+            return np.nan
 
-    def save_resid_set(self, point_set, resid_set, others_set, grounding_level):
+    ## For linear model, tides_3 ##
+    def export_to_others_set_wrt_gl(self, point_set, grounding_level, model_vec_set, model_likelihood_set, resid_set, others_set):
+
+        # up scale
+        for point in point_set:
+            if not 'grounding_level_up_scale' in others_set[point].keys():
+                others_set[point]['grounding_level_up_scale'] = {}
+
+            others_set[point]['grounding_level_up_scale'][grounding_level] = self.extract_up_scale(model_vec_set[point])
+
+        # model likelihood
+        for point in point_set:
+            if not 'grounding_level_model_likelihood' in others_set[point].keys():
+                others_set[point]['grounding_level_model_likelihood'] = {}
+
+            others_set[point]['grounding_level_model_likelihood'][grounding_level] = model_likelihood_set[point]
+
+        # residual
         for point in point_set:
             if not 'grounding_level_resids' in others_set[point].keys():
                 others_set[point]['grounding_level_resids'] = {}
@@ -1935,24 +2015,47 @@ class fourdvel(basics):
         return 0
 
     def select_optimal_grounding_level(self, point_set, others_set):
-        
+
+        select_mode = "likelihood"
+ 
         for point in point_set:
-            # if range_rmse is np.nan, optimal grounding level is np.nan
+
+            # default value is nan
+            # e.g. if range_rmse is np.nan, optimal grounding level is np.nan
             others_set[point]["optimal_grounding_level"] = np.nan
             
-            min_resid = float("inf")
+            if select_mode == "resid":
+                min_value = float("inf")
 
-            for grounding_level, resids in others_set[point]['grounding_level_resids'].items():
+                for grounding_level, resids in sorted(others_set[point]['grounding_level_resids'].items()):
 
-                # Do selection based on the full root mean squre error
-                # range_rmse can be np.nan (np.nan < number is False)
-                range_rmse = resids[1]
-                azimuth_rmse = resids[3]
-                full_rmse = np.sqrt(range_rmse**2 + azimuth_rmse**2)
+                    # Do selection based on the full root mean squre error
+                    # range_rmse can be np.nan (np.nan < number is False)
+                    range_rmse = resids[1]
+                    azimuth_rmse = resids[3]
+                    full_rmse = np.sqrt(range_rmse**2 + azimuth_rmse**2)
 
-                if full_rmse < min_resid:
-                    min_resid = full_rmse
-                    others_set[point]["optimal_grounding_level"]  = grounding_level
+                    if full_rmse < min_value:
+                        min_value = full_rmse
+                        others_set[point]["optimal_grounding_level"]  = grounding_level
+
+                        # Need to add up_scale here (TODO)
+            
+            elif select_mode == "likelihood":
+                min_value = float("inf")
+
+                for grounding_level, likelihood in sorted(others_set[point]['grounding_level_model_likelihood'].items()):
+
+                    if likelihood < min_value:
+                        min_value = likelihood
+
+                        others_set[point]["optimal_grounding_level"]  = grounding_level
+
+                        # Save the corresponding up_scale
+                        others_set[point]["up_scale"] = others_set[point]['grounding_level_up_scale'][grounding_level]
+
+            else:
+                raise Exception()
 
         return 0
 
@@ -2338,6 +2441,7 @@ class fourdvel(basics):
                             pass
 
                         #elif self.proj == "Evans" and ampU>0.5:
+                        #elif self.proj == "Evans" and lat<-75.85:
                         elif self.proj == "Evans":
                             pass
 

@@ -18,6 +18,8 @@ from scipy.interpolate import splrep, splev
 from fourdvel import fourdvel
 from display import display
 
+with_power = True
+
 def createParser():
 
     parser = argparse.ArgumentParser( description='driver of fourdvel')
@@ -108,6 +110,8 @@ class mcmc_analysis(fourdvel):
             true_model_vec_secular = trace.true_model_vec[:3]
             true_model_vec_tidal = trace.true_model_vec[3:]
             true_model_up_scale = trace.true_up_scale
+            if with_power:
+                true_power = trace.true_power
         
         # Display secular parameters
         secular = trace.get_values("secular")
@@ -227,6 +231,7 @@ class mcmc_analysis(fourdvel):
         true_grounding_level = self.simulation_grounding_level
         for i in range(1):
             values = grounding[:,0,0]
+            mean_value = np.nanmean(values)
             ax = fig.add_subplot(111)
             hist_values, bin_borders, patches = ax.hist(values, bins=80, density=True, fc=(0,1,1,1))
 
@@ -234,10 +239,13 @@ class mcmc_analysis(fourdvel):
             n_smooth = self.find_envelope(bin_centers, hist_values)
             #ax.plot(bin_centers,n_smooth,linewidth=3,color="black")
 
+            # plot mean
+            ax.plot([mean_value, mean_value],[0, np.nanmax(hist_values)],'k-')
+
             if true_exist:
                 ax.plot([true_grounding_level,true_grounding_level], [0,np.max(hist_values)],linewidth=3, color="red")
 
-            ax.set_xlim([-2.2,-1.4])
+            ax.set_xlim([-3, 0])
             ax.set_xlabel("m",fontsize=15)
             ax.tick_params(labelsize=15)
             ax.get_yaxis().set_ticks([])
@@ -245,7 +253,7 @@ class mcmc_analysis(fourdvel):
             ax.set_ylabel("Probability Density", fontsize=15)
 
             # title
-            ax.set_title('Grounding Level', fontsize=15)
+            ax.set_title('Grounding Level: ' + str(mean_value), fontsize=15)
 
         fig.savefig(self.estimation_dir+"/dist_grounding.png",bbox_inches='tight')
 
@@ -255,6 +263,8 @@ class mcmc_analysis(fourdvel):
         fig = plt.figure(4,figsize=(10,10))
         for i in range(1):
             values = up_scale[:,0,0]
+            mean_value = np.nanmean(values)
+
             ax = fig.add_subplot(111)
             hist_values, bin_borders, patches = ax.hist(values, bins=80, density=True, fc=(0,1,1,1))
 
@@ -265,7 +275,10 @@ class mcmc_analysis(fourdvel):
             if true_exist:
                 ax.plot([true_model_up_scale,true_model_up_scale], [0,np.max(hist_values)],linewidth=3, color="red")
 
-            ax.set_xlim([0.8,1.2])
+            # plot mean
+            ax.plot([mean_value, mean_value],[0, np.nanmax(hist_values)],'k-')
+
+            ax.set_xlim([0.1,1.6])
             ax.set_xlabel("ratio",fontsize=15)
             ax.tick_params(labelsize=15)
             ax.get_yaxis().set_ticks([])
@@ -273,10 +286,43 @@ class mcmc_analysis(fourdvel):
             ax.set_ylabel("Probability Density", fontsize=15)
 
             # title
-            ax.set_title('Up scale', fontsize=15)
+            ax.set_title('Up scale: '+str(mean_value), fontsize=15)
 
         fig.savefig(self.estimation_dir+"/dist_up_scale.png",bbox_inches='tight')
 
+        if with_power:
+            # Display the power
+            power = trace.get_values('power')
+    
+            fig = plt.figure(5,figsize=(10,10))
+            for i in range(1):
+                values = power[:,0,0]
+                mean_value = np.nanmean(values)
+    
+                ax = fig.add_subplot(111)
+                hist_values, bin_borders, patches = ax.hist(values, bins=80, density=True, fc=(0,1,1,1))
+    
+                bin_centers = bin_borders[:-1] + np.diff(bin_borders)/2
+                n_smooth = self.find_envelope(bin_centers, hist_values)
+                #ax.plot(bin_centers,n_smooth,linewidth=3,color="black")
+    
+                if true_exist:
+                    ax.plot([true_power,true_power], [0,np.max(hist_values)],linewidth=3, color="red")
+    
+                # plot mean
+                ax.plot([mean_value, mean_value],[0, np.nanmax(hist_values)],'k-')
+    
+                ax.set_xlim([0.1,1.8])
+                ax.set_xlabel("ratio",fontsize=15)
+                ax.tick_params(labelsize=15)
+                ax.get_yaxis().set_ticks([])
+                ax.set_ylim(bottom=0)
+                ax.set_ylabel("Probability Density", fontsize=15)
+    
+                # title
+                ax.set_title('Power: '+str(mean_value), fontsize=15)
+
+        fig.savefig(self.estimation_dir+"/dist_power.png",bbox_inches='tight')
 
 def main(iargs=None):
 

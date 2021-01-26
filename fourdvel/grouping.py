@@ -87,7 +87,7 @@ class grouping(fourdvel):
                 if sate == 'csk' and self.proj == "Rutford":
                     trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(3)+'_0')
                 elif sate == "csk" and self.proj == "Evans":
-                    trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(2)+'0')
+                    trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(3)+'_0')
                 elif sate == "s1":
                     trackdir = os.path.join(directory[sate],'track_' + str(track_num))
                 else:
@@ -923,6 +923,7 @@ def main():
     if group.proj == "Rutford":
 
         # Add additional signatures to the velo model
+        print("add signatures to velo model...")
         group.add_signatures_grid_set_ref_velo_model()
 
 if __name__=='__main__':

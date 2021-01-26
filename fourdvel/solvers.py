@@ -361,6 +361,8 @@ class solvers(fourdvel):
 
                 else:
                     #print(tide_name, j)
+                    #print("G: ", G)
+                    #print("k: ", k)
                     cols.append(G[:,k][:,None])
                     # Record the index of the parameter
                     if secular_included:
@@ -507,16 +509,36 @@ class solvers(fourdvel):
         return model_vec
 
     def pad_to_orig_model_vec(self, map_estimate, mode):
-        if not mode in ["linear","nonlinear"]:
+        if not mode in ["linear","nonlinear","optimize_nonlinear"]:
             raise Exception("Undefined mode")
+
+        if mode=="optimize_nonlinear":
+            secular = map_estimate[0:3]
+            tidal = map_estimate[3:-2]
+
+            model_vec = np.zeros(shape=(self.n_params,1))
+            model_vec[0][0] = secular[0]
+            model_vec[1][0] = secular[1]
+            model_vec[2][0] = secular[2]
+
+            compressed_model_vec_no_secular = tidal
+
+            i = 0
+            print("kept entries: ", self.kept_model_vec_entries)
+            for j in self.kept_model_vec_entries:
+                model_vec[j] = compressed_model_vec_no_secular[i]
+                i+=1
+    
+            return model_vec
+ 
 
         if mode=="nonlinear":
             secular = map_estimate['secular'][0]
             tidal = map_estimate['tidal'][:,0]
             grounding = map_estimate['grounding'][0][0]
     
-            compressed_model_vec = np.hstack((secular, tidal))
-            print("compressed_model_vec: ", compressed_model_vec)
+            #compressed_model_vec = np.hstack((secular, tidal))
+            #print("compressed_model_vec: ", compressed_model_vec)
 
             compressed_model_vec_no_secular = tidal
     
@@ -572,6 +594,7 @@ class solvers(fourdvel):
         print("task_name: ", self.task_name)
 
         reweight = True
+        nonlinear_scaling = False
         for point in self.point_set:
             #if point != self.float_lonlat_to_int5d((-82.5, -78.6)):
             if point != run_point:
@@ -583,6 +606,8 @@ class solvers(fourdvel):
             velo_model = self.grid_set_velo[point]
             print("true up scale: ", velo_model[2])
             true_up_scale = velo_model[2]
+
+            print("true model velo: ", velo_model[0:2])
 
             ## Design matrix ## 
             # Obtain design matrix
@@ -687,19 +712,46 @@ class solvers(fourdvel):
             with self.bmc_model as model:
                 # Find the number of tidal model parameters
                 _ , P = d_mat_EN_ta.shape
-    
-                # E, N, U
-                self.model_vec_secular=pm.Normal('secular', mu=0, sigma=2, shape=(1,3))
-    
-                # Tidal components
-                self.model_vec_tidal=pm.Normal('tidal', mu=0, sigma=2, shape=(P,1))
 
-                # Grounding level
-                self.grounding=pm.Normal('grounding', mu=-1, sigma=2, shape=(1,1))
+                ## Set priors version 1, used until 2021.01.13 ##
+                prior_group = 0
+                if prior_group == 0:
+                    print("prior group 0")
+                    # E, N, U
+                    self.model_vec_secular=pm.Normal('secular', mu=0, sigma=2, shape=(1,3))
+        
+                    # Tidal components
+                    self.model_vec_tidal=pm.Normal('tidal', mu=0, sigma=2, shape=(P,1))
+    
+                    # Grounding level
+                    self.grounding=pm.Normal('grounding', mu=-1, sigma=2, shape=(1,1))
+    
+                    # Vertical displacement scaling
+                    if self.task_name == "tides_2":
+                        self.up_scale=pm.Normal('up_scale', mu=0.8, sigma=0.5, shape=(1,1))
 
-                # Vertical displacement scaling
-                if self.task_name == "tides_2":
-                    self.up_scale=pm.Normal('up_scale', mu=0.8, sigma=0.5, shape=(1,1))
+                    # Vertical displacement nonlinear scaling
+                    if nonlinear_scaling:
+                        self.power = pm.Normal("power", mu=0.8, sigma=0.4, shape=(1,1))
+
+                ## added 2021.01.13 ##
+                elif prior_group == 1:
+                    print("prior group 1")
+                    # E, N, U
+                    self.model_vec_secular=pm.Normal('secular', mu=0, sigma=2, shape=(1,3))
+        
+                    # Tidal components
+                    self.model_vec_tidal=pm.Normal('tidal', mu=0, sigma=2, shape=(P,1))
+    
+                    # Grounding level
+                    self.grounding = pm.Uniform('grounding', lower= self.up_lower, upper = self.up_upper, shape=(1,1))
+
+                    # Vertical displacement scaling
+                    if self.task_name == "tides_2":
+                        self.up_scale=pm.Uniform('up_scale', lower=0, upper=1.2, shape=(1,1))
+                   
+                else:
+                    raise Exception()
 
                 # Displacement E & N
                 dis_EN_ta = tt_d_mat_EN_ta.dot(self.model_vec_tidal)
@@ -710,9 +762,27 @@ class solvers(fourdvel):
                     # Based on parameters
                     dis_U_ta = tt_d_mat_U_ta.dot(self.model_vec_tidal)
                     dis_U_tb = tt_d_mat_U_tb.dot(self.model_vec_tidal)
+
                 elif self.task_name == "tides_2":
+                    # nonlinear scaling
+                    if nonlinear_scaling:
+                        max_val = 3.1
+
+                        hh_sign = tt.sgn(tt_dis_U_ta)
+                        hh_hat = tt_dis_U_ta / (hh_sign * max_val)
+                        hh_hat_nonlinear_amp = tt.abs_(hh_hat) ** self.power
+                        hh_nonlinear = hh_hat_nonlinear_amp * (hh_sign * max_val)
+                        tt_dis_U_ta = hh_nonlinear
+
+                        hh_sign = tt.sgn(tt_dis_U_tb)
+                        hh_hat = tt_dis_U_tb / (hh_sign * max_val)
+                        hh_hat_nonlinear_amp = tt.abs_(hh_hat) ** self.power
+                        hh_nonlinear = hh_hat_nonlinear_amp * (hh_sign * max_val)
+                        tt_dis_U_tb = hh_nonlinear
+
                     # Based on external time series
-                    op_order = "clip first"
+                    #op_order = "clip first"
+                    op_order = "scale first"
                     if op_order == "scale first":
                         # Scale U
                         dis_U_ta = tt_dis_U_ta * self.up_scale
@@ -793,6 +863,7 @@ class solvers(fourdvel):
 
                 # Perform MCMC smapling
                 n_steps = 4000
+                #n_steps = 8000
                 #n_steps = 100
                 if MAP_or_Sample == 'Sample':
                     #step = pm.NUTS()
@@ -816,6 +887,9 @@ class solvers(fourdvel):
                     # Save the true scaling to the trace object
                     trace.true_up_scale = true_up_scale
 
+                    # Save the true power to the trace object
+                    trace.true_power = 1
+
                     # Save the trace to disk
                     pkl_name = "_".join([self.estimation_dir+"/samples_BMC",str(point[0]),str(point[1]),suffix])
                     with open(pkl_name + ".pkl","wb") as f:
@@ -832,10 +906,13 @@ class solvers(fourdvel):
     #### Below are pure optimization using scipy ############
     #########################################################
 
-    def construct_bounds(self, point):
+    def construct_bounds(self, point, x0):
 
         # Get the priors 
-        model_prior = self.model_mean_prior_set[point]
+        if self.model_mean_prior_set:
+            model_prior = self.model_mean_prior_set[point]
+        else:
+            model_prior = np.asarray(x0).reshape((len(x0),1))
 
         no_secular_up = self.no_secular_up
         up_short_period = self.up_short_period
@@ -884,15 +961,30 @@ class solvers(fourdvel):
         return bounds
 
     def run_optimize(self, run_point=None):
-        # Supported tasks: "tides_1 (with/without grounding)" and "tides_2 (TODO)"
-        model_vec_set = {}
+        # Supported tasks: "tides_1 (with/without grounding)" and "tides_2 (In development)"
 
-        for point in self.point_set:
+        # prepare dicts for results
+        model_vec_set = {}
+        grounding_set = {}
+        up_scale_set = {}
+
+        verbose = True
+        for i, point in enumerate(self.point_set):
+            # only run test point
             if run_point and point!=run_point:
                 continue
 
-            print("optimize at: ", point)
+            # Get velo model
+            velo_model = self.grid_set_velo[point]
+            
+            #if velo_model[2]>0.5:
+            #    continue
+            
+            print("velo model: ", velo_model)
 
+            print("optimizing: ", point, i,'/',len(self.point_set))
+
+            # Get true model vec
             if self.true_model_vec_set:
                 true_model_vec = self.true_model_vec_set[point]
             else:
@@ -900,11 +992,19 @@ class solvers(fourdvel):
 
             print("true model vec\n", true_model_vec)
 
+            # Get task name
             print("task name: ", self.task_name)
             
             # Obtain design matrix
             # row size: N_offsets
             d_mat_EN_ta, d_mat_EN_tb, d_mat_U_ta, d_mat_U_tb = self.stack_design_mat_set[point]
+
+            # The design_matrix may be empty, then stop here
+            if len(d_mat_EN_ta)==0:
+                model_vec_set[point] = np.zeros(shape=(self.n_params,1)) + np.nan
+                grounding_set[point] = np.nan
+                up_scale_set[point] = np.nan
+                continue
 
             if self.task_name == "tides_1":
                 remove_tidal_up = False
@@ -959,7 +1059,7 @@ class solvers(fourdvel):
                 vec_mat[2*i,    3*i:3*(i+1)] = vec1
                 vec_mat[2*i+1,  3*i:3*(i+1)] = vec2
 
-            # Prepare tide-based Up displacement(TODO)
+            # Prepare up displacement
             if self.task_name == "tides_2":
                 tide_height_master_model, tide_height_slave_model = self.up_disp_set[point]
                 dis_U_ta_model = tide_height_master_model.reshape(len(tide_height_master_model),1)
@@ -995,11 +1095,27 @@ class solvers(fourdvel):
                 # scaling
                 if self.task_name == "tides_2":
                     x0.append(1)
-            else:
-                raise Exception()
 
-            print("compressed_true_model_vec: ", compressed_true_model_vec)
-            print("x0: ", x0)
+            # Cannot find true model vec set, use velo_model for secular velocity
+            else:
+                compressed_true_model_vec = [velo_model[0], velo_model[1], 0]
+                x0 = compressed_true_model_vec.copy()
+
+                # tidal
+                for ind in self.kept_model_vec_entries:
+                    compressed_true_model_vec.append(0)
+                    x0.append(0)
+
+                # grounding
+                x0.append(-1)
+                
+                # scaling
+                if self.task_name == "tides_2":
+                    x0.append(1)
+
+            if verbose:
+                print("compressed_true_model_vec: ", compressed_true_model_vec)
+                print("x0: ", x0)
 
             # Compare the forward problems
             # tides_1: without grounding 
@@ -1023,23 +1139,42 @@ class solvers(fourdvel):
             #method = "differential_evolution"
             #method = "shgo"
             #method = "dual_annealing"
-            #method = "SLSQP"
-            method = "trust-constr"
+
+            #method = "Nelder-Mead"
+            #method = "Powell"
+            #method = "CG"
+            #method = "BFGS"
+            #method = "Newton-CG"
+            #method = "L-BFGS-B"
+            #method = "TNC"
+            #method = "COBYLA"
+            method = "SLSQP"
+            #method = "trust-constr"
+            #method = "dogleg"
+            #method = "trust-ncg"
+            #method = "trust-krylov"
+            #method = "trust-exact"
 
             # Create bounds for parameters
-            bounds = self.construct_bounds(point)
+            bounds = self.construct_bounds(point, x0)
+
+            if verbose:
+                # This is used to determine the number of parameters
+                print('bounds: ', bounds)
+
             lb = [value[0] for value in bounds]
             ub = [value[1] for value in bounds]
-            print("lb: ", lb)
-            print("ub: ", ub)
-            bounds_obj = scipy.optimize.Bounds(lb, ub)
-            #print(bounds_obj)
 
-            # This is used to determine the number of parameters
-            print('bounds: ', bounds)
+            if verbose:
+                print("lb: ", lb)
+                print("ub: ", ub)
+            
+            # Create bound object
+            bounds_obj = scipy.optimize.Bounds(lb, ub)
 
             if method == "basinhopping":
                 res = scipy.optimize.basinhopping(forward, x0, minimizer_kwargs={"args": args_1})
+            
             elif method == "differential_evolution":
                 res = scipy.optimize.differential_evolution(forward, bounds, args_1)
 
@@ -1049,29 +1184,49 @@ class solvers(fourdvel):
             elif method == "dual_annealing":
                 res = scipy.optimize.dual_annealing(forward, bounds, args_1)
 
-            elif method == "SLSQP":
-                res = scipy.optimize.minimize(forward, x0, args=args_1, method='SLSQP', bounds=bounds_obj)
+            elif method in ["Nelder-Mead", "dogleg", "trust-ncg", "trust-krylov", "trust-exact","CG","BFGS","Newton-CG"]:
+                res = scipy.optimize.minimize(forward, x0, args=args_1, method=method)
 
-            elif method == "trust-constr":
-                res = scipy.optimize.minimize(forward, x0, args=args_1, method='trust-constr', bounds=bounds_obj)
- 
+            elif method in ["SLSQP", "trust-constr", "Powell", "L-BFGS-B", "TNC", "COBYLA"]:
+                res = scipy.optimize.minimize(forward, x0, args=args_1, method=method, bounds=bounds_obj)
+
             else:
                 raise Exception()
             
             elapsed_time = time.time() - start_time
 
-            print("Optimizer: ", res)
-            print("Elapased time: ", elapsed_time)
+            # save the result
+            model_vec = self.pad_to_orig_model_vec(res.x, mode="optimize_nonlinear")
+            model_vec_set[point] = model_vec
 
-            model_vec_set[point] = res.x
+            # if jac of grounding is non-zero
+            if abs(res.jac[-2])>0:
+                grounding_set[point] = res.x[-2]
+            else:
+                grounding_set[point] = np.nan
 
-            print("Result: ")
-            print(res.x)
-            print(compressed_true_model_vec)
-            
-            print(stop)
+            grounding_set[point] = res.x[-2]
 
-        return model_vec_set
+            up_scale_set[point] = res.x[-1]
+
+            if verbose:
+                print("Method: ", method)
+                print("Optimizing result details: ", res)
+                print("Elapased time: ", elapsed_time)
+
+                print("Result: ")
+                print("obtained model: ", res.x, "grounding: ", res.x[-2])
+                print("true model: ", compressed_true_model_vec)
+
+            #print("x estimated: ", " ".join(map(str,res.x)))
+            #print("x jac estimated: ", " ".join(map(str,res.jac)))
+            #print("x model velo: ", " ".join(map(str,velo_model)))
+            #print("x true model vec: ", " ".join(map(str,compressed_true_model_vec)))
+
+        result_set = (model_vec_set, grounding_set, up_scale_set)
+
+        print(stop)
+        return result_set
 
 # Some forward problem calculation used by non-linear optimization
 def forward_linear(x, *T):
@@ -1104,7 +1259,8 @@ def forward(x, *T):
         dis_U_ta = np.matmul(d_mat_U_ta, x[3:-1,None])
         dis_U_tb = np.matmul(d_mat_U_tb, x[3:-1,None])
     elif task_name == "tides_2":
-        op_order = "clip first"
+        op_order = "scale first"
+        #op_order = "clip first"
         if op_order == "scale first":
             dis_U_ta = dis_U_ta_model * x[-1]
             dis_U_tb = dis_U_tb_model * x[-1]

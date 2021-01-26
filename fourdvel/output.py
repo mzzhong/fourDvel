@@ -16,10 +16,12 @@ def createParser():
 
     parser = argparse.ArgumentParser( description='driver of fourdvel')
     
-    parser.add_argument('-p','--param_file', dest='param_file',type=str,help='parameter file',required=True)
+    parser.add_argument('-p','--param_file', dest='param_file', type=str, help='parameter file', required=True)
 
-    parser.add_argument('-q','--quant_list_name', dest='quant_list_name',type=str,help='quant_list_name',default=None)
-    
+    parser.add_argument('-q','--quant_list_name', dest='quant_list_name', type=str, help='quant_list_name', default=None)
+
+    #parser.add_argument('-t','--task_name', dest='task_name', type=str, help='task_name',default=None)
+   
     return parser
 
 def cmdLineParse(iargs = None):
@@ -209,63 +211,84 @@ class output(fourdvel):
         this_result_folder = self.estimation_dir
         test_id = self.test_id
 
-        state='est'
-
         with open(this_result_folder + '/' 
                     + str(test_id) + '_' + 'grid_set_others.pkl','rb') as f:
             this_grid_set = pickle.load(f)
 
- 
-        with open(this_result_folder + '/' 
-                    + str(test_id) + '_' + 'grid_set_others.pkl','rb') as f:
-            this_grid_set = pickle.load(f)
+        quant_list=["up_scale", "optimal_grounding_level", "height"]
 
+        states = ['true', 'est']
 
-        quant_list=["up_scale", "optimal_grounding_level"]
-
-        for quant_name in quant_list:
-
-            print('Output quantity name: ', quant_name)
-            grid_set_quant = {}
-
-            output_keys = this_grid_set.keys()
-            for point in output_keys:
-
-                #if quant_name.startswith('optimal'):
-                #    print(stop)
-
-                # Ad hoc
-                if quant_name == "optimal_grounding_level":
-
-                    if not quant_name in this_grid_set[point].keys():
-                        continue
-
-                    if self.grid_set_velo[point][2]<=0.4:
-                        continue
-
-                    try:
-                        if this_grid_set[point][quant_name]=='external':
+        for state in states:
+            for quant_name in quant_list:
+                print('Output quantity name: ', quant_name)
+                grid_set_quant = {}
+    
+                output_keys = this_grid_set.keys()
+                for point in output_keys:
+    
+                    # Ad hoc treatment to grounding
+                    if quant_name == "optimal_grounding_level":
+   
+                        # If the data doesn't exist 
+                        if not quant_name in this_grid_set[point].keys():
                             continue
-                    except:
-                        pass
-
-                    try:
-                        if this_grid_set[point][quant_name]<=-2.8:
+   
+                        # Remove the stagnent points 
+                        if self.grid_set_velo[point][2]<=0.4:
                             continue
-                    except:
-                        pass
+    
+                        try:
+                            if this_grid_set[point][quant_name]=='external':
+                                continue
+                        except:
+                            pass
+   
+                        ## If the value is too small 
+                        #try:
+                        #    if this_grid_set[point][quant_name]<=-2.8:
+                        #        continue
+                        #except:
+                        #    pass
+    
+                    # Record everything, including np.nan
+                    # np.nan is filtered in write_dict_to_xyz
+                    if quant_name in ["up_scale"]:
+                        
+                        if state == "true":
+                            grid_set_quant[point] = this_grid_set[point].get("true_" + quant_name, np.nan)
+                        else:
+                            optimal_grounding_level = this_grid_set[point].get(quant_name, np.nan)
 
-                #if quant_name.startswith('optimal'):
-                #    print(stop)
-        
-                # Record everything, including np.nan
-                # np.nan is filtered in write_dict_to_xyz
-                grid_set_quant[point] = this_grid_set[point][quant_name]
+                    elif quant_name in ["optimal_grounding_level"]:
 
-            # Write to xyz file.
-            xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + 'others' + '_' + quant_name + '.xyz')
-            
-            self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
+                        if state == "true":
+                            grid_set_quant[point] = this_grid_set[point].get("true_" + quant_name, np.nan)
+                        else:
+                            optimal_grounding_level = this_grid_set[point].get(quant_name, np.nan)
+                            crsp_up_scale = this_grid_set[point].get("up_scale",np.nan)
+                       
+                            if "grounding_level_up_scale" in this_grid_set[point]: 
+                                grid_set_quant[point] = optimal_grounding_level * crsp_up_scale
+                            else:
+                                grid_set_quant[point] = optimal_grounding_level
+
+                        # convert from int to float
+                        grid_set_quant[point] = grid_set_quant[point] / (10**6)
+    
+                    elif quant_name in ["height"]:
+                        if state == "true":
+                            grid_set_quant[point] = this_grid_set[point].get(quant_name, np.nan)
+                        else:
+                            grid_set_quant[point] = np.nan
+
+                    else:
+                        raise Exception()
+
+                # Write to xyz file.
+                xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + 'others' + '_' + quant_name + '.xyz')
+                
+                self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
 
         return 0
 

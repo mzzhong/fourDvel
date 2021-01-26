@@ -54,13 +54,13 @@ class driver_fourdvel():
 
         # Explantion:
         # tides_1: conventional linear model (BM 2017). Summation of a family of sinusoidal functions.
-        # Include modification: introduce grounding
+        # Introduce modification: introduce grounding/clipping to the time series
 
         # Inversion method: 
         # (1) Bayesian_Linear (without grounding) 
         # (2) Bayesian_Linear_MCMC (without grounding, same result as (1), but sampling-based) (turned off)
-        # (3) Bayesian_MCMC (with grounding, which barely works) (turned off)
-        # (4) Nonlinaer optimization (with grounding, which barely workds) (turned off)
+        # (3) Bayesian_MCMC (with grounding introduced, which is difficult to work) (turned off)
+        # (4) Nonlinaer optimization (with grounding, which is difficult to workd) (turned off)
 
         # tides_2: single point MCMC to detect grounding, can take external vertical model to constrain the vertical displacement
         # This is non-linear, as we want to simutaneously infer grounding and tidal params
@@ -73,7 +73,7 @@ class driver_fourdvel():
         # Add vertical data into linear model
         # Estimate the vertical scaling only
         # Enumerate the grounding level
-        # Check the residual to seclect the best grounding level
+        # Check the residual to select the best grounding level
         # Inversion method: 
         # (1) Bayesian_Linear
 
@@ -189,7 +189,6 @@ class driver_fourdvel():
             # Debug this tile for Rutford
             #if count_tile >= start_tile and count_tile < stop_tile and tile == self.float_lonlat_to_int5d((-83.0, -78.6)):
 
-
             ################################################################################
                 #print("Find the tile", tile)
                 #print('***  Start a new tile ***')
@@ -205,6 +204,9 @@ class driver_fourdvel():
                     print("Set test point to be the first point in point_set")
                     tasks.test_point = point_set[0]
                     test_point = tasks.test_point
+
+                # Set the tile
+                tasks.tile = tile
 
                 # Reset the test point if the test_point is not in the current point set
                 if test_point in point_set:
@@ -235,23 +237,25 @@ class driver_fourdvel():
                 for point in point_set:
                     tracks_set[point] = grid_set[point]
 
-                # Run it
-                # Default is False for recording
+                # Run the task
+                # Recording is False by default
                 simple_count = True
                 if simple_count == True and skip_this_tile == False:
 
                     print("Running tile: ", tile)
 
-                    ## Tides ###
+                    ## Estimate tasks ###
                     if task_name in self.estimate_tasks:
 
-                        recorded = False
-
+                        # do the estimation
                         all_sets = tasks.estimate(point_set = point_set, tracks_set = tracks_set)
 
-                        # Save the results
-                        # Update (only for parallel call)
-                        if use_threading and tasks.inversion_method == 'Bayesian_Linear':
+                        # save the results
+                        recorded = False
+                        
+                        # update (only for parallel call)
+                        if (use_threading and task_name in ["tides_1", "tides_3"] and tasks.inversion_method == 'Bayesian_Linear') or \
+                            (use_threading and task_name in ["tides_2"] and tasks.inversion_method == "Nonlinear_Optimization"):
         
                             # Save the results to disk
                             point_result_folder = self.estimation_dir + '/point_result'
@@ -280,7 +284,7 @@ class driver_fourdvel():
                             print("Having problem recording this tile: ", tile)
                             raise Exception()
 
-                    ## Prediction evaluiation ###
+                    ## Analysis tasks ###
                     elif task_name in self.analysis_tasks:
 
                         if task_name == "prediction_evaluation":
@@ -335,6 +339,7 @@ class driver_fourdvel():
     
             # Chop into multiple threads. 
             nthreads = 10
+            #nthreads = 5
             #nthreads = 1
             self.nthreads = nthreads
             total_number = n_tiles
@@ -415,6 +420,15 @@ class driver_fourdvel():
             print("Loading the results...")
             point_results = os.listdir(self.estimation_dir + '/point_result')
 
+            # Intialization
+            tasks.grid_set_true_tide_vec = {}
+            tasks.grid_set_tide_vec = {}
+            tasks.grid_set_tide_vec_uq = {}
+            tasks.grid_set_resid_of_secular = {}
+            tasks.grid_set_resid_of_tides = {}
+            tasks.grid_set_others = {}
+ 
+            # Loop through the results
             for ip, point_pkl in enumerate(point_results):
                 print(ip)
                 pklfile = self.estimation_dir + '/point_result/' + point_pkl
@@ -434,7 +448,7 @@ class driver_fourdvel():
                 #tasks.grid_set_analysis.update(all_sets['analysis_set'])
 
         ## Save the final results in dictionary manager
-        forceSaveTides = False
+        forceSaveTides = True
         forceSaveAnalysis = False
 
         if (task_name in self.estimate_tasks and tasks.single_point_mode == False) or (task_name in self.estimate_tasks and forceSaveTides == True):
