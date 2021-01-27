@@ -1452,7 +1452,7 @@ class fourdvel(basics):
         # End of building.
 
 
-    def modify_G_set(self, point_set, G_set, offsetfields_set, grounding_level):
+    def modify_G_set(self, point_set, G_set, offsetfields_set,grounding_level,gl_name):
 
         # Extract the stack of up displacement from the tide model
         up_disp_set = self.get_up_disp_set(point_set, offsetfields_set)
@@ -1473,9 +1473,7 @@ class fourdvel(basics):
 
             offsetfields = offsetfields_set[point]
 
-            if self.external_grounding_level_file is None:
-                given_grounding_level = grounding_level
-            else:
+            if gl_name == "external":
                 # Try to get the value from external file
                 try:
                     given_grounding_level = grounding_level[point]['optimal_grounding_level']
@@ -1485,7 +1483,22 @@ class fourdvel(basics):
 
                 if np.isnan(given_grounding_level):
                     given_grounding_level = -10
+            
+            elif gl_name == "optimal":
+                # Try to get the value from others_set
+                try:
+                    given_grounding_level_int = grounding_level[point]['optimal_grounding_level']
+                    given_grounding_level = given_grounding_level_int / (10**6)
+                    print("optimal grounding level: ", given_grounding_level)
+                except:
+                    given_grounding_level = -10
 
+                if np.isnan(given_grounding_level):
+                    given_grounding_level = -10
+
+            elif gl_name == "float":
+                given_grounding_level = grounding_level
+ 
             G_set[point] = self.modify_G(point=point, offsetfields=offsetfields, G=G, tide_height_master = tide_height_master, tide_height_slave = tide_height_slave, grounding_level = given_grounding_level)
 
         return G_set

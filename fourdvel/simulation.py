@@ -734,7 +734,6 @@ class simulation(fourdvel):
                 #print("grounding indicator is index 2")
                 grounding_indicator = velo_model[2]
 
-
             # Note that the stacked design mat/up displacement may be empty 
             # because there is no data.
             # In this case, the stacked_design_mat is a empty list
@@ -768,13 +767,14 @@ class simulation(fourdvel):
 
                 # Grounding
                 # When grounding_indicator is larger than 1 (I use velo_model[2] and velo_model[3]):
-                if grounding_indicator > 0:
+                if grounding_indicator >= 0:
                     #print("Perform clipping at: ", self.simulation_grounding_level)
                     dis_U_ta[dis_U_ta < self.simulation_grounding_level] = self.simulation_grounding_level
                     dis_U_tb[dis_U_tb < self.simulation_grounding_level] = self.simulation_grounding_level
 
                 #if point == self.test_point:
                 #    print("Test point")
+                #    print(grounding_indicator, self.simulation_grounding_level)
                 #    print(stop)
     
                 # Find tide induced offset

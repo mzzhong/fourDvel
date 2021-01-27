@@ -120,8 +120,16 @@ class estimate(configure):
             #print("Design matrix set (G)\n:", linear_design_mat_set[self.test_point])
             print("Design matrix (obs) set is Done")
 
-            if task_name == "tides_3":
-                # Enumerate grounding
+            # tides_1: simple linear model
+            if task_name == "tides_1":
+
+                enum_grounding_level_int = [None]
+
+            # tides_3: enumerating grounding level
+            elif task_name == "tides_3":
+
+                ###### Prepare enumerating grounding #########
+
                 #enum_grounding_level = [-10]
 
                 enum_space = 0.05
@@ -139,19 +147,28 @@ class estimate(configure):
                 #enum_grounding_level = [-1.78, -1.76, -1.74, -1.72, -1.70, -1.68, -1.66, -1.64]
                 #enum_grounding_level = [-1.700, -1.695, -1.690, -1.685, -1.680, -1.675, -1.670, -1.665]
 
-                # Three modes: redo, continue, import
+                ###################################################
+
+                # Set the mode (redo, continue, import)
                 #enum_grounding_run_mode = "redo"
                 enum_grounding_run_mode = "continue"
 
+                # First make the enumerated gl be integers (10e6)
+                if enum_grounding_run_mode in ["redo", "continue"]:
+                    enum_grounding_level_int = [int(round(gl*(10**6))) if gl else None for gl in enum_grounding_level]
+
+                #############################################
                 if enum_grounding_run_mode == "redo":
-                    pass
+                    
+                    completed_enum_gl = []
 
                 elif enum_grounding_run_mode == "continue":
+
+                    # Load previous others_set
                     point_result_folder = self.estimation_dir + '/point_result'
                     tile_lon, tile_lat = self.tile
                     point_name = str(tile_lon) + '_' + str(tile_lat)
 
-                    # load previous others_set
                     tile_result_pkl_file = point_result_folder + "/" + point_name + ".pkl"
                     if os.path.exists(tile_result_pkl_file):
                         with open(tile_result_pkl_file,"rb") as f:
@@ -163,45 +180,63 @@ class estimate(configure):
                     else:
                         completed_enum_gl = []
 
+                    # Check if all grounding levels have been enumerated
+                    if set(enum_grounding_level_int) == set(completed_enum_gl):
+                        print("All grounding line values have been completed")
+                        enum_grounding_level_int = ['optimal']
+                    # Then remove the enumerated values from the existing list
+                    else:
+                        enum_grounding_level_int = enum_grounding_level_int - completed_enum_gl
+                        enum_grounding_level_int = sorted(list(enum_grounding_level_int))
+
+                    print(enum_grounding_level_int)
+
                 else:
-                    enum_grounding_level = ['external']
+                    enum_grounding_level_int = ['external']
                     # Currently the external grounding file is saved in ${id}_grid_set_others.pkl
                     with open(self.external_grounding_level_file,'rb') as f:
                         external_grounding_level = pickle.load(f)
+
             else:
-                enum_grounding_level = [None]
+                raise Exception()
 
-            # Make the enumerated gl be integers (10e6)
-            enum_grounding_level_int = [int(round(gl*(10**6))) if gl else None for gl in enum_grounding_level]
 
-            # Loop through the grounding level
+            ### Main: Loop through the grounding level ##
             for ienum, grounding_level_int in enumerate(enum_grounding_level_int):
-                
-                if enum_grounding_run_mode == "continue" and grounding_level_int in completed_enum_gl:
-                    print("Completed and skip: ", grounding_level_int/ 10**6)
-                    continue
 
-                grounding_level = grounding_level_int / (10**6)
-                print("New enumeration: ", ienum, grounding_level)
-               
-                # Inversion with enforced grounding level ("tides_3")
-                if grounding_level is not None:
+                # Default inversion ("tides_1")
+                if grounding_level_int is None:
+                     linear_design_mat_set = linear_design_mat_set_orig
+
+                # Inversion with the grounding level ("tides_3")
+                else:
                     # Make a deep copy of dictionary of design matrix
                     linear_design_mat_set = copy.deepcopy(linear_design_mat_set_orig)
 
-                    if grounding_level == 'external':
+                    # Find grounding level
+                    if grounding_level_int == 'external':
                         given_grounding_level = external_grounding_level
+                        gl_name = "external"
+
+                    elif grounding_level_int == "optimal":
+                        given_grounding_level = others_set
+                        gl_name = "optimal"
+
                     else:
-                        given_grounding_level = grounding_level
+                        # Skip the completed enumeration 
+                        if enum_grounding_run_mode == "continue" and grounding_level_int in completed_enum_gl:
+                            print("Completed and skip: ", grounding_level_int/ 10**6)
+                            continue
+
+                        # Convert integer enumeration to float
+                        grounding_level = grounding_level_int / (10**6)
+                        print("New enumeration: ", ienum, grounding_level)
+                        gl_name = "float"
 
                     # Modifying G matrix to add direct modeling of vertical displacement
-                    linear_design_mat_set = self.modify_G_set(point_set, linear_design_mat_set, offsetfields_set, grounding_level = given_grounding_level)
+                    linear_design_mat_set = self.modify_G_set(point_set, linear_design_mat_set, offsetfields_set, grounding_level = given_grounding_level, gl_name = gl_name)
                     print("Modified matrix (obs) set is Done")
 
-                # Default inversion ("tides_1")
-                else:
-                     linear_design_mat_set = linear_design_mat_set_orig
-    
                 # Model prior.
                 invCm_set = self.model_prior_set(point_set)
                 print("Model prior set Done")
@@ -253,14 +288,19 @@ class estimate(configure):
                 ############ Some additional work ##############################
                 
                 print('Additional work for tides_3 saving the results')
-                if self.task_name == "tides_3":
+                # if it is tides_3 and this is a new enumerated grounding_level_int
+                if self.task_name == "tides_3" and isinstance(grounding_level_int, int):
                     # Save the corresponding up_scale and residuals
                     self.export_to_others_set_wrt_gl(point_set, grounding_level_int, model_vec_set, model_likelihood_set, resid_of_tides_set, others_set)
 
             # Select the optimal grounding level
             # If mode is tides_3 and the enumeration is actually done
             if self.task_name == "tides_3" and enum_grounding_level[0] is not None:
+                
+                # Select the optimal grounding level
                 self.select_optimal_grounding_level(point_set, others_set)
+        
+                # Show the results at test_point 
                 optimal_grounding_level_int = others_set[self.test_point]["optimal_grounding_level"]
                 optimal_grounding_level = optimal_grounding_level_int / 10**6
 

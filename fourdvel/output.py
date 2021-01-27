@@ -227,7 +227,7 @@ class output(fourdvel):
                 output_keys = this_grid_set.keys()
                 for point in output_keys:
     
-                    # Ad hoc treatment to grounding
+                    # Ad hoc treatment of grounding level
                     if quant_name == "optimal_grounding_level":
    
                         # If the data doesn't exist 
@@ -238,18 +238,16 @@ class output(fourdvel):
                         if self.grid_set_velo[point][2]<=0.4:
                             continue
     
-                        try:
-                            if this_grid_set[point][quant_name]=='external':
-                                continue
-                        except:
-                            pass
+                        if this_grid_set[point][quant_name]=='external':
+                            continue
    
-                        ## If the value is too small 
-                        #try:
-                        #    if this_grid_set[point][quant_name]<=-2.8:
-                        #        continue
-                        #except:
-                        #    pass
+                        # Remove very low grounding level, note the value is integer
+                        if this_grid_set[point][quant_name]/(10**6) <= -2.8:
+                            continue
+
+                        # Remove points with fewer than 2 tracks
+                        if len(self.grid_set[point])<=1:
+                            continue
     
                     # Record everything, including np.nan
                     # np.nan is filtered in write_dict_to_xyz
@@ -281,7 +279,7 @@ class output(fourdvel):
                             grid_set_quant[point] = this_grid_set[point].get(quant_name, np.nan)
                         else:
                             grid_set_quant[point] = np.nan
-
+                    
                     else:
                         raise Exception()
 
