@@ -11,16 +11,12 @@ import time
 import copy
 
 import numpy as np
+from scipy import stats
 
 import matplotlib.pyplot as plt
-from matplotlib import cm
-import seaborn as sns
 
 import datetime
 from datetime import date
-
-import multiprocessing
-from multiprocessing import Value
 
 from configure import configure
 from display import display
@@ -91,7 +87,7 @@ class estimate(configure):
             with open(tmp_dataset_pkl_name,"rb") as f:
                 all_data_set = pickle.load(f)
 
-        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set, height_set) = all_data_set
+        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set, height_set, demfactor_set) = all_data_set
 
         print("Data set formation Done")
 
@@ -127,26 +123,39 @@ class estimate(configure):
 
             # tides_3: enumerating grounding level
             elif task_name == "tides_3":
-
                 ###### Prepare enumerating grounding #########
+                gl_option = 0
+                
+                if gl_option == 0:
 
-                #enum_grounding_level = [-10]
+                    gl_list_option = 2
 
-                enum_space = 0.05
-                #enum_space = 0.1
+                    if gl_list_option == 0:
+                        enum_space = 0.1
+                        gl_low = -3.0
+                        gl_high = -0.0
 
-                #gl_low = -2.2
-                #gl_high = -0.7
+                    if gl_list_option == 1:
+                        enum_space = 0.05
+                        gl_low  =   -3.0
+                        gl_high =   -0.0
 
-                gl_low = -3.0
-                gl_high = -0.0
+                    if gl_list_option == 2:
+                        enum_space = 0.025
+                        gl_low  =   -3.0
+                        gl_high =   -0.0
+ 
+                    enum_grounding_level = np.arange(gl_low, gl_high+1e-6, enum_space)
+                    print(enum_grounding_level)
+               
+                elif gl_option == 1:
 
-                enum_grounding_level = np.arange(gl_low, gl_high+1e-6, enum_space)
+                    enum_grounding_level = [-10]
 
-                #enum_grounding_level = [-1.80, -1.75, -1.70, -1.65, -1.60, -1.55, -1.50]
-                #enum_grounding_level = [-1.78, -1.76, -1.74, -1.72, -1.70, -1.68, -1.66, -1.64]
-                #enum_grounding_level = [-1.700, -1.695, -1.690, -1.685, -1.680, -1.675, -1.670, -1.665]
-
+                else:
+                    raise Exception()
+    
+                #print("enum_grounding_level: ", enum_grounding_level)
                 ###################################################
 
                 # Set the mode (redo, continue, import)
@@ -156,6 +165,8 @@ class estimate(configure):
                 # First make the enumerated gl be integers (10e6)
                 if enum_grounding_run_mode in ["redo", "continue"]:
                     enum_grounding_level_int = [int(round(gl*(10**6))) if gl else None for gl in enum_grounding_level]
+
+                #print("enum_grounding_level_int: ", enum_grounding_level_int)
 
                 #############################################
                 if enum_grounding_run_mode == "redo":
@@ -181,25 +192,47 @@ class estimate(configure):
                         completed_enum_gl = []
 
                     # Check if all grounding levels have been enumerated
-                    if set(enum_grounding_level_int) == set(completed_enum_gl):
+                    if set(enum_grounding_level_int).issubset(set(completed_enum_gl)):
                         print("All grounding line values have been completed")
                         enum_grounding_level_int = ['optimal']
                     # Then remove the enumerated values from the existing list
                     else:
-                        enum_grounding_level_int = enum_grounding_level_int - completed_enum_gl
+                        enum_grounding_level_int = set(enum_grounding_level_int) - set(completed_enum_gl)
                         enum_grounding_level_int = sorted(list(enum_grounding_level_int))
+                    print("Remaining enumeration: ", enum_grounding_level_int)
 
-                    print(enum_grounding_level_int)
-
-                else:
+                elif enum_grounding_run_mode == "external":
                     enum_grounding_level_int = ['external']
                     # Currently the external grounding file is saved in ${id}_grid_set_others.pkl
                     with open(self.external_grounding_level_file,'rb') as f:
                         external_grounding_level = pickle.load(f)
 
+                else:
+                    raise Exception()
+
+                # To save the computing time, check if the point set is on the ice shelf
+                # If not, just make the -10 the only enumeration
+                if not self.check_point_set_with_bbox(point_set, bbox="ice_shelf"):
+                    point_set_on_ice_shelf = False
+                    enum_grounding_level = [-10]
+                    enum_grounding_level_int = [int(round(gl*(10**6))) if gl else None for gl in enum_grounding_level]
+                    
+                    if set(enum_grounding_level_int).issubset(set(completed_enum_gl)):
+                        print("grounding level -10 has been completed")
+                        enum_grounding_level_int = ['optimal']
+                    else:
+                        # Only keep -10 in the list, if I accidentally enumerated other grounding levels before.
+                        enum_grounding_level_int = set(enum_grounding_level_int) - set(completed_enum_gl)
+                        enum_grounding_level_int = sorted(list(enum_grounding_level_int))
+
+                    print("Outside of the ice shelf, reset enum grounding level: ", enum_grounding_level_int)
+                else:
+                    point_set_on_ice_shelf = True
+
+                print("final enum_grounding_level_int: ", enum_grounding_level_int)
+
             else:
                 raise Exception()
-
 
             ### Main: Loop through the grounding level ##
             for ienum, grounding_level_int in enumerate(enum_grounding_level_int):
@@ -223,7 +256,8 @@ class estimate(configure):
                         gl_name = "optimal"
 
                     else:
-                        # Skip the completed enumeration 
+                        # Skip the completed enumeration if
+                        # (1) continue mode (2) did this before
                         if enum_grounding_run_mode == "continue" and grounding_level_int in completed_enum_gl:
                             print("Completed and skip: ", grounding_level_int/ 10**6)
                             continue
@@ -232,6 +266,7 @@ class estimate(configure):
                         grounding_level = grounding_level_int / (10**6)
                         print("New enumeration: ", ienum, grounding_level)
                         gl_name = "float"
+                        given_grounding_level = grounding_level
 
                     # Modifying G matrix to add direct modeling of vertical displacement
                     linear_design_mat_set = self.modify_G_set(point_set, linear_design_mat_set, offsetfields_set, grounding_level = given_grounding_level, gl_name = gl_name)
@@ -271,7 +306,7 @@ class estimate(configure):
                 model_likelihood_set = self.get_model_likelihood_set(point_set, linear_design_mat_set, data_vec_set, model_vec_set, invCd_set)
                 print('Model likelihood calculation Done')
                 model_likelihood_point = model_likelihood_set[self.test_point]
-                print("Model likelihood at this point: ", model_likelihood_point)
+                print("Model likelihood at this point and grounding level: ", model_likelihood_point, grounding_level_int)
 
                 # Convert to tidal params.
                 tide_vec_set = self.model_vec_set_to_tide_vec_set(point_set, model_vec_set)
@@ -306,9 +341,31 @@ class estimate(configure):
 
                 print("Optimal grounding level before scaling: ", optimal_grounding_level)
 
-                print(others_set[self.test_point]['optimal_grounding_level'])
-                print(others_set[self.test_point]['grounding_level_model_likelihood'])
-                print(others_set[self.test_point]['grounding_level_up_scale'])
+                print("####")
+                print("optimal gl: ", others_set[self.test_point]['optimal_grounding_level'])
+                print("gl model likelihood: ", others_set[self.test_point]['grounding_level_model_likelihood'])
+                print("gl up scale: ", others_set[self.test_point]['grounding_level_up_scale'])
+                print("gl prob: ", others_set[self.test_point]['grounding_level_prob'])
+                print("gl credible interval: ", others_set[self.test_point]['grounding_level_credible_interval'])
+                print("####")
+
+                # plot gl marginal dist at test point
+                plot_gl_dist = 0
+                if plot_gl_dist:
+                    gls = []
+                    gl_probs = [] 
+                    for grounding_level_int, gl_prob in sorted(others_set[self.test_point]["grounding_level_prob"].items()):
+                        gls.append(grounding_level_int / 10**6)
+                        gl_probs.append(gl_prob)
+                    
+                    print("sum of probs: ", np.nansum(gl_probs))
+                    print("probs: ", gls, gl_probs)
+
+                    fig = plt.figure(1, figsize=(7,7))
+                    ax = fig.add_subplot(111)
+                    ax.plot(gls, gl_probs, "k")
+                    fig.savefig("prob.png")
+                    plt.close(1)
 
                 if not np.isnan(optimal_grounding_level_int):
                     up_scale = others_set[self.test_point]['grounding_level_up_scale'][optimal_grounding_level_int]

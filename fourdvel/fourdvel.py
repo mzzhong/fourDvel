@@ -16,7 +16,6 @@ import numpy as np
 
 from matplotlib import cm
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 import datetime
 from datetime import date
@@ -251,6 +250,9 @@ class fourdvel(basics):
                                 self.single_point_mode = True
                             except:
                                 continue
+                    if self.test_point is None:
+                        print("Cannot find test point ", test_point_id)
+                        raise Exception()
                 else:
                     self.test_point = None
                 
@@ -523,6 +525,46 @@ class fourdvel(basics):
 
         print("Done with reading parameters")
         return 0
+
+    def check_point_set_with_bbox(self, point_set, bbox):
+
+        if bbox == "ice_shelf":
+            if self.proj == "Rutford":
+                bbox_s, bbox_n, bbox_e, bbox_w = None, self.float_to_int5d(-78.30), None, None
+            elif self.proj == "Evans":
+                bbox_s, bbox_n, bbox_e, bbox_w = None, self.float_to_int5d(-75.80), None, None
+            else:
+                raise Exception()
+
+        else:
+            bbox_s, bbox_n, bbox_e, bbox_w = bbox
+
+        lons = []
+        lats = []
+        for point in point_set:
+            lons.append(point[0])
+            lats.append(point[1])
+
+        lons = np.asarray(lons)
+        lats = np.asarray(lats)
+
+        if bbox_s is not None:
+            if np.nanmax(lats)<bbox_s:
+                return False
+            
+        if bbox_n is not None:
+            if np.nanmin(lats)>bbox_n:
+                return False
+ 
+        if bbox_e is not None:
+            if np.nanmin(lons)>bbox_e:
+                return False
+
+        if bbox_w is not None:
+            if np.nanmax(lons)<bbox_w:
+                return False
+ 
+        return True
             
     def get_CSK_trackDates_from_log(self):
         import csv
@@ -921,9 +963,6 @@ class fourdvel(basics):
         
         grid_set = self.grid_set
 
-        fig = plt.figure(1, figsize=(8,8))
-        ax = fig.add_subplot(111)
-        
         vec_count = {}
         plotx = {}
         ploty = {}
@@ -955,6 +994,8 @@ class fourdvel(basics):
         
         symbol = ['r.','g.','b.','c.','k.','m.','y.','w.']
 
+        fig = plt.figure(1, figsize=(8,8))
+        ax = fig.add_subplot(111)
         for track_count in sorted(plotx.keys()):
             print(track_count,len(plotx[track_count]))
             ax.plot(plotx[track_count],ploty[track_count], color=colors[track_count-1], marker='.',markersize=0.3, linestyle='None', label=str(track_count) + ' Track: ' + str(vec_count[track_count]))
@@ -1027,7 +1068,6 @@ class fourdvel(basics):
         return
 
     def get_timings_tide_heights(self):
-
         # From (date + time fraction) to tide_heights
         self.timings_tide_heights = {}
         t_origin = self.t_origin.date()
@@ -1090,9 +1130,56 @@ class fourdvel(basics):
 
     def get_up_disp_set(self, point_set, offsetfields_set):
 
-        up_disp_set = {}
-        for point in point_set:
-            up_disp_set[point] = self.get_up_disp_for_point(point, offsetfields_set[point])
+        up_disp_mode = "varying"
+
+        if up_disp_mode == "single":
+            up_disp_set = {}
+            for point in point_set:
+                up_disp_set[point] = self.get_up_disp_for_point(point, offsetfields_set[point])
+
+        elif up_disp_mode == "varying":
+            up_disp_data_folder = "/marmot-nobak/mzzhong/insarRoutines/tide_model_time_series/001"
+            
+            # load time axis
+            pklfilename = 'taxis.pkl'
+            with open(up_disp_data_folder + '/' + pklfilename, "rb") as f:
+                taxis = pickle.load(f)
+            #print(taxis, taxis[1] -taxis[0])
+ 
+            up_disp_set = {}
+            for point in point_set:
+
+                check_result = 0
+                # Compare the old and new up disp data
+                if check_result:
+                    (m0, s0) = self.get_up_disp_for_point(point, offsetfields_set[point])
+                    (m1, s1) = self.get_up_varying_disp_for_point(point, up_disp_data_folder, taxis, offsetfields_set[point])
+
+                    lon_int, lat_int = point
+                    pklfilename = str(lon_int) + '_' + str(lat_int) + '.pkl'
+                    filepath = up_disp_data_folder + '/' + pklfilename
+
+                    if os.path.exists(filepath):
+                        fig = plt.figure(1, figsize=(8,8))
+
+                        with open(filepath, "rb") as f:
+                            up_disp = pickle.load(f)
+
+                        ax = fig.add_subplot(411)
+                        ax.plot(m0)
+                        ax = fig.add_subplot(412)
+                        ax.plot(m1 - m0)
+                        ax = fig.add_subplot(413)
+                        ax.plot(taxis, self.tide_data)
+                        ax = fig.add_subplot(414)
+                        ax.plot(taxis, up_disp - self.tide_data)
+
+                        fig.savefig("m0_m1.png")
+ 
+                        print(stop)
+
+                # get the up disp data
+                up_disp_set[point] = self.get_up_varying_disp_for_point(point, up_disp_data_folder, taxis, offsetfields_set[point])
 
         return up_disp_set
 
@@ -1113,6 +1200,44 @@ class fourdvel(basics):
 
         return (tide_height_master, tide_height_slave)
 
+    def get_up_varying_disp_for_point(self, point, up_disp_data_folder, taxis, offsetfields):
+
+        lon_int, lat_int = point
+        pklfilename = str(lon_int) + '_' + str(lat_int) + '.pkl'
+        filepath = up_disp_data_folder + '/' + pklfilename
+
+        # The tide atomic data doesn't exist
+        if not os.path.exists(filepath):
+            up_disp = np.asarray(self.tide_data)
+
+        # The tide atomic data exists
+        else:
+            with open(filepath, "rb") as f:
+                up_disp = pickle.load(f)
+
+        # Get timings for master and slave        
+        ta_arr = []
+        tb_arr = []
+        for i in range(len(offsetfields)):
+            # (offsetfields[i][0] - t_origin).days + offsetfields[i][4]
+            ta = (offsetfields[i][0] - self.t_origin.date()).days + offsetfields[i][4]
+            tb = (offsetfields[i][1] - self.t_origin.date()).days + offsetfields[i][4]
+
+            ta_arr.append(ta)
+            tb_arr.append(tb)
+
+        ta_arr = np.asarray(ta_arr)
+        tb_arr = np.asarray(tb_arr)
+
+        # Important! Need to enforce 0.001 delta here. Using taxis[1]-taxis[0] will cause problem due to float precision 
+        t_delta = 0.001
+        ta_inds = np.round((ta_arr - taxis[0])/t_delta).astype(np.int)
+        tb_inds = np.round((tb_arr - taxis[0])/t_delta).astype(np.int)
+
+        tide_height_master = up_disp[ta_inds]
+        tide_height_slave = up_disp[tb_inds]
+
+        return (tide_height_master, tide_height_slave)
 
     def get_stack_design_mat_set(self, point_set, design_mat_set, offsetfields_set):
 
@@ -1294,7 +1419,7 @@ class fourdvel(basics):
         # Load external tidal model
         self.get_tidal_model()
 
-        # Find the tide height for all
+        # Find the tide height for all, if a single time seris is used
         self.get_timings_tide_heights()
 
         # Find all the design matrix
@@ -1477,7 +1602,7 @@ class fourdvel(basics):
                 # Try to get the value from external file
                 try:
                     given_grounding_level = grounding_level[point]['optimal_grounding_level']
-                    print("optimal grounding level: ", given_grounding_level)
+                    #print("optimal grounding level at this point is: ", given_grounding_level)
                 except:
                     given_grounding_level = -10
 
@@ -1489,7 +1614,7 @@ class fourdvel(basics):
                 try:
                     given_grounding_level_int = grounding_level[point]['optimal_grounding_level']
                     given_grounding_level = given_grounding_level_int / (10**6)
-                    print("optimal grounding level: ", given_grounding_level)
+                    #print("optimal grounding level at this point is: ", given_grounding_level)
                 except:
                     given_grounding_level = -10
 
@@ -2027,6 +2152,41 @@ class fourdvel(basics):
 
         return 0
 
+    def calc_hpdi(self, x, y, alpha=0.9):
+
+        if np.isnan(y[0]):
+            return (np.nan, np.nan)
+
+        if len(x)<2:
+            return (np.nan, np.nan)
+        
+        l = len(x)
+        shortest_l = l 
+        
+        # total mass
+        total_mass = np.nansum(y)
+        max_mass = 0 
+        for i in range(l-1):
+            for j in range(i+1,l):
+                # calculate mass
+                mass = np.nansum(y[i:j+1])
+                # print(mass, total_mass)
+                if mass/total_mass >= alpha:
+                    if (j-i+1<shortest_l) or ((j-i+1==shortest_l) and mass > max_mass):
+                        shortest_l = j-i+1
+                        max_mass = mass
+                        best_i = i 
+                        best_j = j
+        return (x[best_i], x[best_j])
+
+        #try:
+        #    return (x[best_i], x[best_j])
+        #except:
+        #    print("Unbounded error")
+        #    print(x)
+        #    print(y)
+        #    return (np.nan, np.nan)
+        
     def select_optimal_grounding_level(self, point_set, others_set):
 
         select_mode = "likelihood"
@@ -2040,7 +2200,7 @@ class fourdvel(basics):
             if select_mode == "resid":
                 min_value = float("inf")
 
-                for grounding_level, resids in sorted(others_set[point]['grounding_level_resids'].items()):
+                for grounding_level_int, resids in sorted(others_set[point]['grounding_level_resids'].items()):
 
                     # Do selection based on the full root mean squre error
                     # range_rmse can be np.nan (np.nan < number is False)
@@ -2050,22 +2210,47 @@ class fourdvel(basics):
 
                     if full_rmse < min_value:
                         min_value = full_rmse
-                        others_set[point]["optimal_grounding_level"]  = grounding_level
+                        others_set[point]["optimal_grounding_level"]  = grounding_level_int
 
                         # Need to add up_scale here (TODO)
             
             elif select_mode == "likelihood":
                 min_value = float("inf")
 
-                for grounding_level, likelihood in sorted(others_set[point]['grounding_level_model_likelihood'].items()):
+                likelihoods = []
+                for grounding_level_int, likelihood in sorted(others_set[point]['grounding_level_model_likelihood'].items()):
 
                     if likelihood < min_value:
                         min_value = likelihood
 
-                        others_set[point]["optimal_grounding_level"]  = grounding_level
+                        others_set[point]["optimal_grounding_level"]  = grounding_level_int
 
                         # Save the corresponding up_scale
-                        others_set[point]["up_scale"] = others_set[point]['grounding_level_up_scale'][grounding_level]
+                        others_set[point]["up_scale"] = others_set[point]['grounding_level_up_scale'][grounding_level_int]
+
+                    likelihoods.append(likelihood)
+                
+                ## Get the probability ##
+                # normalize the likelihood
+                likelihoods = np.asarray(likelihoods)
+                likelihoods = likelihoods - np.nanmin(likelihoods)
+                
+                # Sum up the denominator
+                prob_sum = np.nansum(np.exp(-likelihoods))
+                gl_probs = np.exp(-likelihoods) / prob_sum
+                others_set[point]["grounding_level_prob"] = {}
+
+                # Save the probs
+                cnt = 0
+                for grounding_level_int, likelihood in sorted(others_set[point]['grounding_level_model_likelihood'].items()):
+                    others_set[point]["grounding_level_prob"][grounding_level_int] = gl_probs[cnt]
+                    cnt+=1
+
+                # Calculate credible interval
+                gls = np.asarray(sorted(others_set[point]['grounding_level_model_likelihood'].keys())) / 10**6
+                gl_ci = self.calc_hpdi(gls, gl_probs)
+
+                others_set[point]["grounding_level_credible_interval"] = gl_ci
 
             else:
                 raise Exception()
@@ -2224,6 +2409,7 @@ class fourdvel(basics):
             if np.isnan(m[0,0]):
                 model_likelihood_set[point] = np.nan
             else:
+                # calculate model likelihood which is "posterior prob = *  exp(-model_likelihood)"
                 model_likelihood = 0.5 * (d - G @ m).T @ invCd @ (d - G @ m)
                 model_likelihood_set[point] = model_likelihood[0,0]
        
@@ -2430,11 +2616,15 @@ class fourdvel(basics):
                     thres_for_v = 0.4
                     thres_for_amp = 0.1
 
+                    thres_for_v = 0.1
+                    thres_for_amp = 0.1
+
                     amp_full = (amp_alf**2 + amp_crf**2)**0.5
 
                     # Remove some invalid phase values
                     if v_model>thres_for_v and amp_alf>thres_for_amp:
-                        if self.proj == "Rutford" and lat<-77.8:
+                        #if self.proj == "Rutford" and lat<-77.8:
+                        if self.proj == "Rutford":
                             pass
 
                         #elif self.proj == "Evans" and lat<-75.85:
@@ -2626,6 +2816,8 @@ class fourdvel(basics):
                 if tide_name == 'O1':
                     ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
                     thres = 0.1
+                    # 2021.01.29
+                    thres = 0.06
 
                     # value in velocity model > 0
                     #if (ampU > thres) or (state=='uq') :
@@ -2678,9 +2870,13 @@ class fourdvel(basics):
                 if tide_name == 'M2':
                     ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
                     thres = 0.3
+                    # 2021.01.29
+                    thres = 0.1
+                    # 2021.02.03
+                    thres = 0.01
 
-                    #if ampU >=thres or state == 'uq':
-                    if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
+                    if ampU >=thres or state == 'uq':
+                    #if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
                         # Find the phase
                         value = t_vec[3+k*6+5]
 
@@ -2731,6 +2927,8 @@ class fourdvel(basics):
                 if tide_name == 'N2':
                     ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
                     thres = 0.1
+                    # 2021.01.29
+                    thres = 0.04
 
                     if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
                         # Find the phase

@@ -115,6 +115,7 @@ class grouping(fourdvel):
                 lon_list = np.linspace(lon0, lon0 + lon_interval*(xsize-1), xsize)
                 lat_list = np.linspace(lat0, lat0 + lat_interval*(ysize-1), ysize)
 
+
                 # Read in the data
                 los = dataset.GetRasterBand(1).ReadAsArray()
                 azi = dataset.GetRasterBand(2).ReadAsArray()

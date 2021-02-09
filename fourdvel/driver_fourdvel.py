@@ -13,7 +13,6 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 from matplotlib import cm
-import seaborn as sns
 
 import datetime
 from datetime import date
@@ -114,37 +113,6 @@ class driver_fourdvel():
         # Get the basics
         self.estimation_dir = self.tasks.estimation_dir
 
-    def check_point_set_with_bbox(self, point_set):
-
-        lons = []
-        lats = []
-        for point in point_set:
-            lons.append(point[0])
-            lats.append(point[1])
-
-        lons = np.asarray(lons)
-        lats = np.asarray(lats)
-
-        bbox_s, bbox_n, bbox_e, bbox_w = self.tasks.bbox
-
-        if bbox_s is not None:
-            if np.nanmax(lats)<bbox_s:
-                return False
-            
-        if bbox_n is not None:
-            if np.nanmin(lats)>bbox_n:
-                return False
- 
-        if bbox_e is not None:
-            if np.nanmin(lons)>bbox_e:
-                return False
-
-        if bbox_w is not None:
-            if np.nanmax(lons)<bbox_w:
-                return False
- 
-        return True
-
     def driver_serial_tile(self, start_tile=None, stop_tile=None, use_threading = False, all_grid_sets=None, threadId=None):
 
         task_name = self.task_name
@@ -218,7 +186,6 @@ class driver_fourdvel():
                     print("Test point is provided but doesn't match this tile")
                     skip_this_tile = True
                     
-
                 if skip_this_tile == False:
                     print("The tile to work on: ", tile)
                     print("start tile and stop tile: ", start_tile, stop_tile)
@@ -228,7 +195,7 @@ class driver_fourdvel():
                 #print('Number of points in this tile: ', len(point_set))
 
                 # Check if the point_set is in the bbox
-                if not self.check_point_set_with_bbox(point_set):
+                if not self.tasks.check_point_set_with_bbox(point_set, self.tasks.bbox):
                     print("This point set is not in bbox: ", lon, lat)
                     skip_this_tile = True
 
@@ -243,6 +210,7 @@ class driver_fourdvel():
                 if simple_count == True and skip_this_tile == False:
 
                     print("Running tile: ", tile)
+                    print("Number of points in this tile: ", len(point_set))
 
                     ## Estimate tasks ###
                     if task_name in self.estimate_tasks:
@@ -448,7 +416,7 @@ class driver_fourdvel():
                 #tasks.grid_set_analysis.update(all_sets['analysis_set'])
 
         ## Save the final results in dictionary manager
-        forceSaveTides = True
+        forceSaveTides = False
         forceSaveAnalysis = False
 
         if (task_name in self.estimate_tasks and tasks.single_point_mode == False) or (task_name in self.estimate_tasks and forceSaveTides == True):

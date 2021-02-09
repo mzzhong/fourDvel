@@ -4,8 +4,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import cm
 
-import seaborn as sns
-
 from fourdvel import fourdvel
 
 import numpy as np

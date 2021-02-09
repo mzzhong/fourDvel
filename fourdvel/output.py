@@ -20,6 +20,8 @@ def createParser():
 
     parser.add_argument('-q','--quant_list_name', dest='quant_list_name', type=str, help='quant_list_name', default=None)
 
+    parser.add_argument('--npc','--no_phase_correction', dest='no_phase_correction', action='store_true')
+
     #parser.add_argument('-t','--task_name', dest='task_name', type=str, help='task_name',default=None)
    
     return parser
@@ -42,6 +44,8 @@ class output(fourdvel):
         self.estimation_dir = os.path.join(self.estimations_dir,str(test_id))
 
         self.display = display(param_file)
+
+        self.no_phase_correction = inps.no_phase_correction
 
     def run_output_residual(self):
 
@@ -215,7 +219,7 @@ class output(fourdvel):
                     + str(test_id) + '_' + 'grid_set_others.pkl','rb') as f:
             this_grid_set = pickle.load(f)
 
-        quant_list=["up_scale", "optimal_grounding_level", "height"]
+        quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level", "height"]
 
         states = ['true', 'est']
 
@@ -235,7 +239,10 @@ class output(fourdvel):
                             continue
    
                         # Remove the stagnent points 
-                        if self.grid_set_velo[point][2]<=0.4:
+                        #if self.grid_set_velo[point][2]<=0.4:
+                        if self.grid_set_velo[point][2]<=0.2:
+                        #if self.grid_set_velo[point][2]<=0.1:
+
                             continue
     
                         if this_grid_set[point][quant_name]=='external':
@@ -245,6 +252,11 @@ class output(fourdvel):
                         if this_grid_set[point][quant_name]/(10**6) <= -2.8:
                             continue
 
+                        # Remove based obtained credible level
+                        gl_ci = grid_set_gl_ci.get(point, np.nan)
+                        if np.isnan(gl_ci) or gl_ci>=0.4:
+                            continue
+
                         # Remove points with fewer than 2 tracks
                         if len(self.grid_set[point])<=1:
                             continue
@@ -252,11 +264,10 @@ class output(fourdvel):
                     # Record everything, including np.nan
                     # np.nan is filtered in write_dict_to_xyz
                     if quant_name in ["up_scale"]:
-                        
                         if state == "true":
                             grid_set_quant[point] = this_grid_set[point].get("true_" + quant_name, np.nan)
                         else:
-                            optimal_grounding_level = this_grid_set[point].get(quant_name, np.nan)
+                            grid_set_quant[point] = this_grid_set[point].get(quant_name, np.nan)
 
                     elif quant_name in ["optimal_grounding_level"]:
 
@@ -273,6 +284,13 @@ class output(fourdvel):
 
                         # convert from int to float
                         grid_set_quant[point] = grid_set_quant[point] / (10**6)
+
+                    elif quant_name in ["grounding_level_credible_interval"]:
+                        if state == "true":
+                            grid_set_quant[point] = np.nan
+                        else:
+                            ci = this_grid_set[point].get("grounding_level_credible_interval", (np.nan, np.nan))
+                            grid_set_quant[point] = ci[1] - ci[0]
     
                     elif quant_name in ["height"]:
                         if state == "true":
@@ -282,6 +300,9 @@ class output(fourdvel):
                     
                     else:
                         raise Exception()
+
+                if quant_name in ["grounding_level_credible_interval"]:
+                    grid_set_gl_ci = grid_set_quant
 
                 # Write to xyz file.
                 xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + 'others' + '_' + quant_name + '.xyz')
@@ -447,6 +468,14 @@ class output(fourdvel):
                             "Msf_horizontal_displacement_group"
                             ]
 
+        sub_quant_names_for_groups = {}
+        sub_quant_names_for_groups["Msf_horizontal_displacement_group"] = ["Msf_along_flow_displacement_amplitude",
+                                                                            "Msf_along_flow_displacement_phase",
+                                                                            "Msf_along_flow_displacement_phase_in_deg",
+                                                                            
+                                                                            "Msf_cross_flow_displacement_amplitude", 
+                                                                            "Msf_cross_flow_displacement_phase",
+                                                                            "Msf_horizontal_displacement_amplitude"]
 
 
         states = {}
@@ -458,160 +487,197 @@ class output(fourdvel):
         # Look through the sets
         phase_center = {}
 
+        # Used for save the results from true and est to get bias
+        saved_grid_set_quant_results = {}
+
         for state in output_states:
-           
+
+            print("\n")
+            print("###########################")
             print("current state: ", state)
-            
-            this_grid_set = states[state]
+
+            if state in ["true","est","uq"]:
+                this_grid_set = states[state]
 
             # Loop through the quantities.
             for quant_name in quant_list:
 
                 ## Derive the point set
-                # Down sample for velocity vector.
-                if quant_name == 'secular_horizontal_velocity':
-                    output_keys = []
+                # normal states
+                if state in ["true", "est", "uq"]:
                     
-                    for point in this_grid_set.keys():
-
-                        lon, lat = point
-                        lon_ind = np.round(lon/self.lon_step_int)
-                        lat_ind = np.round(lat/self.lat_step_int) 
-
-                        if self.resolution == 100:
-                            downsample = 50
-                        elif self.resolution == 500:
-                            downsample = 10
-                        elif self.resolution == 1000:
-                            downsample = 5
-                        elif self.resolution == 2000:
-                            downsample = 5
-                        else:
-                            raise Exception()
-
-                        if lon_ind % downsample==0 and lat_ind % downsample==0:
-                            output_keys.append((lon,lat))
-
-                    output_keys = set(output_keys)
-
-                else:
-                    output_keys = this_grid_set.keys()
-                    print(len(output_keys))
-                    #input("Wait")
-
-                # Note that: For "true", there is no output_keys in test_mode 3.
-
-                print('Output quantity name: ', quant_name)
-
-                # Initialization
-                grid_set_quant = {}
-
-                # check if this is a single or group quant_name
-                if quant_name.endswith("group"):
-
-                    print("group name")
-                    if quant_name == "Msf_horizontal_displacement_group":
-                        sub_quant_names = ["Msf_along_flow_displacement_amplitude",
-                                           "Msf_along_flow_displacement_phase",
-                                           "Msf_along_flow_displacement_phase_in_deg",
-
-                                           "Msf_cross_flow_displacement_amplitude", 
-                                           "Msf_cross_flow_displacement_phase",
-                                           "Msf_horizontal_displacement_amplitude"]
-
-                        for sub_quant_name in sub_quant_names:
-                            grid_set_quant[sub_quant_name] = {}
-
-                    else:
-                        raise Exception("Undefined group name")
-                    
-                    for point in output_keys:
-
-                        # The vector is not nan
-                        if not np.isnan(this_grid_set[point][0,0]):
-
-                            quant_group = self.tide_vec_to_quantity(tide_vec = this_grid_set[point], quant_name = quant_name, point = point, state=state)
-
-                            # save it into grid_set_quant
-                            for sub_quant_name in sub_quant_names:
-                                grid_set_quant[sub_quant_name][point] = quant_group[sub_quant_name]
-
-                # Normal single mode
-                else:
-                    sub_quant_names = [quant_name]
-                    grid_set_quant[quant_name] = {}
-
-                    #print(output_keys)
-                    #print(len(output_keys))
-                    #print(quant_name)
-                    #input("Press Enter to continue...")
-
-                    for point in output_keys:
-
-                    
-                        # Only record points where inverse problem can be done, Cm_p exists.
-                        if not np.isnan(this_grid_set[point][0,0]):
-                            # It is possible that some tides are not in the model. This is taken care of in the called method.
-
-                            quant = self.tide_vec_to_quantity(tide_vec = this_grid_set[point],quant_name = quant_name, point=point, state=state)
+                    # down sample for velocity vector.
+                    if quant_name == 'secular_horizontal_velocity':
+                        output_keys = []
+                        
+                        for point in this_grid_set.keys():
     
-                            # Here we record everything, if Cm_p exists, including nan futher filtered by tide_vec_to_quantity.
-                            grid_set_quant[quant_name][point] = quant
-
-                # Output the result
-                #if state=="est" and quant_name == "secular_horizontal_speed":
-
-                #print(grid_set_quant.keys())
-                    #for point, v in grid_set_quant[quant_name].items():
-                    #    if not np.isnan(v):
-                    #        print(point,v)
-                
-                ########    End of extraction   #############
-
-                ## Do phase correction for mean phase
-                do_correction = True
-                ## Do phase correction with the mean phase of true model
-                do_correction_with_true = False
-
-                for sub_quant_name in sub_quant_names:
-
-                    if (state=='true' or state=='est') and 'phase' in sub_quant_name:
-
-                        values = np.asarray(list(grid_set_quant[sub_quant_name].values()))
-                        count = np.count_nonzero(~np.isnan(values))
-
-                        if count>0:
-                            if do_correction_with_true ==True and \
-                                            sub_quant_name in phase_center and \
-                                            state == "est":
-                                print("In phase center: ",sub_quant_name)
-                                center = phase_center[sub_quant_name]
+                            lon, lat = point
+                            lon_ind = np.round(lon/self.lon_step_int)
+                            lat_ind = np.round(lat/self.lat_step_int) 
+    
+                            if self.resolution == 100:
+                                downsample = 50
+                            elif self.resolution == 500:
+                                downsample = 10
+                            elif self.resolution == 1000:
+                                downsample = 5
+                            elif self.resolution == 2000:
+                                downsample = 5
                             else:
-                                print("Calculate th mean phase")
-                                center = np.nansum(values) /count
+                                raise Exception()
+    
+                            if lon_ind % downsample==0 and lat_ind % downsample==0:
+                                output_keys.append((lon,lat))
+    
+                        output_keys = set(output_keys)
+    
+                    else:
+                        output_keys = this_grid_set.keys()
+                        print(len(output_keys))
 
-                            # Do correction
-                            if do_correction and not "in_deg" in sub_quant_name:
+                    # Note that: For "true", there is no output_keys in data_mode 3.
+                    print('Output quantity name: ', quant_name)
+    
+                    # Initialization
+                    grid_set_quant = {}
+    
+                    # Check if this is a single or group quant_name
+                    # group mode
+                    if quant_name.endswith("group"):
+                        print("group name")
+                        if quant_name == "Msf_horizontal_displacement_group":
+                            sub_quant_names = sub_quant_names_for_groups[quant_name]
+                            
+                            for sub_quant_name in sub_quant_names:
+                                grid_set_quant[sub_quant_name] = {}
+    
+                        else:
+                            raise Exception("Undefined group name")
+                        
+                        for point in output_keys:
+                            # The vector is not nan
+                            if not np.isnan(this_grid_set[point][0,0]):
+                                quant_group = self.tide_vec_to_quantity(tide_vec = this_grid_set[point], quant_name = quant_name, point = point, state=state)
+    
+                                # Save it into grid_set_quant
+                                for sub_quant_name in sub_quant_names:
+                                    grid_set_quant[sub_quant_name][point] = quant_group[sub_quant_name]
+    
+    
+                    # Normal single mode
+                    else:
+                        sub_quant_names = [quant_name]
+                        grid_set_quant[quant_name] = {}
+    
+                        for point in output_keys:
+                        
+                            # Only record points where inverse problem can be done, Cm_p exists.
+                            if not np.isnan(this_grid_set[point][0,0]):
+                                # It is possible that some tides are not in the model. This is taken care of in the called method.
+    
+                                quant = self.tide_vec_to_quantity(tide_vec = this_grid_set[point],quant_name = quant_name, point=point, state=state)
+        
+                                # Here we record everything, if Cm_p exists, including nan futher filtered by tide_vec_to_quantity.
+                                grid_set_quant[quant_name][point] = quant
+    
+                    # Output the result
+                    #if state=="est" and quant_name == "secular_horizontal_speed":
+    
+                    #print(grid_set_quant.keys())
+                        #for point, v in grid_set_quant[quant_name].items():
+                        #    if not np.isnan(v):
+                        #        print(point,v)
+                    
+                    ########    End of extraction   #############
+    
+                    ## Do phase correction for mean phase
+                    do_correction = True
+                    if self.no_phase_correction:
+                        do_correction = False
+    
+                    ## Do phase correction with the mean phase of true model
+                    do_correction_with_true = False
+    
+                    for sub_quant_name in sub_quant_names:
+    
+                        if (state=='true' or state=='est') and 'phase' in sub_quant_name:
+    
+                            values = np.asarray(list(grid_set_quant[sub_quant_name].values()))
+                            count = np.count_nonzero(~np.isnan(values))
+    
+                            if count>0:
+                                if do_correction_with_true ==True and \
+                                                sub_quant_name in phase_center and \
+                                                state == "est":
+                                    print("In phase center: ",sub_quant_name)
+                                    center = phase_center[sub_quant_name]
+                                else:
+                                    print("Calculate th mean phase")
+                                    center = np.nansum(values) /count
+    
+                                # Do correction
+                                if do_correction and not "in_deg" in sub_quant_name:
+    
+                                    print("Do mean phase shift")
+                                    print("The mean phase is: ", center)
+                                    for point in grid_set_quant[sub_quant_name].keys():
+                                        grid_set_quant[sub_quant_name][point] -= center
+                                else:
+                                    print("Skip mean phase shift: ", sub_quant_name)
+                                    print("The mean phase is: ", center)
+    
+                                if state=="true":
+                                    print("Give the mean phase of true model to phase center dictionary")
+                                    phase_center[sub_quant_name] = center
+    
+                    ######## End of mean phase correction   #####
+                elif state == "bias":
+                    # Note that: For "true", there is no output_keys in data_mode 3.
+                    print('Output quantity name: ', quant_name)
+    
+                    # Initialization
+                    grid_set_quant = {}
+    
+                    # Check if this is a single or group quant_name
+                    # group mode
+                    if quant_name.endswith("group"):
+                        print("group name")
+                        if quant_name == "Msf_horizontal_displacement_group":
+                            sub_quant_names = sub_quant_names_for_groups[quant_name]
+                            for sub_quant_name in sub_quant_names:
+                                grid_set_quant[sub_quant_name] = {}
+                        else:
+                            raise Exception("Undefined group name")
+ 
+                    # normal single mode
+                    else:
+                        sub_quant_names = [quant_name]
+                        grid_set_quant[quant_name] = {}
 
-                                print("Do mean phase shift")
-                                for point in grid_set_quant[sub_quant_name].keys():
-                                    grid_set_quant[sub_quant_name][point] -= center
-                            else:
-                                print("Skip mean phase shift: ", sub_quant_name)
-                                print("The mean phase is: ", center)
+                    for sub_quant_name in sub_quant_names:
+                        true_grid_set_quant = saved_grid_set_quant_results[("true", sub_quant_name)]
+                        est_grid_set_quant = saved_grid_set_quant_results[("est", sub_quant_name)]
 
-                            if state=="true":
-                                print("Give the mean phase of true model to phase center dictionary")
-                                phase_center[sub_quant_name] = center
-
-                ########    End of mean phase correction   #####
-
+                        for point in true_grid_set_quant.keys():
+                            if point in est_grid_set_quant:
+                                if isinstance(true_grid_set_quant[point], float):
+                                    grid_set_quant[sub_quant_name][point] = est_grid_set_quant[point] - true_grid_set_quant[point]
+                                elif isinstance(true_grid_set_quant[point], tuple):
+                                    grid_set_quant[sub_quant_name][point] = tuple([est_grid_set_quant[point][j]-true_grid_set_quant[point][j] for j in range(len(true_grid_set_quant[point]))])
+                                else:
+                                    raise Exception()
+                # Unknown states 
+                else:
+                    raise Exception()
+    
                 #### Write to xyz file #####
-
                 for sub_quant_name in sub_quant_names:
                     xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + sub_quant_name + '.xyz')
                     self.display.write_dict_to_xyz(grid_set_quant[sub_quant_name], xyz_name = xyz_name)
 
+                    # Save the results
+                    saved_grid_set_quant_results[(state, sub_quant_name)] = grid_set_quant[sub_quant_name]
 
         return 0                
 
@@ -626,7 +692,12 @@ def main(iargs=None):
     if out.output_est:  output_states.append("est")
     if out.output_uq:   output_states.append("uq")
 
+    # bias
+    output_states.append("bias")
+
     if out.output_others: out.run_output_others()
+
+    #return
 
     quant_list_name = inps.quant_list_name
 
