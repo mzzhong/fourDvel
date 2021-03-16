@@ -526,7 +526,7 @@ class configure(fourdvel):
         # true_tide_vev_set is the same for all satellites
 
         # data_info_set is deprecated
-        final_data_info_set = {}
+        final_data_info_set = collections.defaultdict(list)
 
         # The three key result sets
         final_data_vec_set = {}
@@ -562,6 +562,8 @@ class configure(fourdvel):
                     elif len(data_vec_set_dict[sate_name][point])>0:
                         final_data_vec_set[point] = data_vec_set_dict[sate_name][point]
 
+                final_data_info_set[point] = final_data_info_set[point] + data_info_set_dict[sate_name][point]
+
                 final_noise_sigma_set[point] = final_noise_sigma_set[point] + noise_sigma_set_dict[sate_name][point]
                 final_offsetfields_set[point] = final_offsetfields_set[point] + offsetfields_set_dict[sate_name][point]
 
@@ -572,6 +574,7 @@ class configure(fourdvel):
 
         print('======= SUMMARY OF DATA SET FORMATION ========')
         print("Summary (include all satellites: )")
+        print('Total number of data info at test point: ', len(final_data_info_set[test_point]))
         print('Total number of offsetfields at test point: ', len(final_offsetfields_set[test_point]))
         print('Total length of noise_sigma pair at test point: ', len(final_noise_sigma_set[test_point]))
         print('Total length of offset measurement: ', len(final_data_vec_set[test_point]))

@@ -85,7 +85,7 @@ class driver_fourdvel():
         # Need to load the results
         # All grid_set except than grid_set needs to be updated
 
-        self.analysis_tasks = ["prediction_evaluation"]
+        self.analysis_tasks = ["residual_vs_tide_height","residual_analysis"]
 
         # Set the task
         if self.task_name in self.estimate_tasks:
@@ -255,12 +255,7 @@ class driver_fourdvel():
                     ## Analysis tasks ###
                     elif task_name in self.analysis_tasks:
 
-                        if task_name == "prediction_evaluation":
-
-                            all_sets = tasks.point_set_prediction_evaluation(point_set = point_set, tracks_set = tracks_set)
-
-                        else:
-                            raise Exception()
+                        all_sets = tasks.point_set_prediction_evaluation(point_set = point_set, tracks_set = tracks_set, task_name = task_name)
 
                         all_grid_sets['grid_set_analysis'].update(all_sets['analysis_set'])
 
@@ -416,7 +411,8 @@ class driver_fourdvel():
                 #tasks.grid_set_analysis.update(all_sets['analysis_set'])
 
         ## Save the final results in dictionary manager
-        forceSaveTides = False
+        forceSaveTides = True
+
         forceSaveAnalysis = False
 
         if (task_name in self.estimate_tasks and tasks.single_point_mode == False) or (task_name in self.estimate_tasks and forceSaveTides == True):

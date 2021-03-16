@@ -89,7 +89,7 @@ class simulation(fourdvel):
         self.verti_scale = 1
 
         # Models are represented in displacement.
-        model_num = 16
+        model_num = self.simulation_model_num
 
         if model_num == 1:
 
@@ -242,26 +242,48 @@ class simulation(fourdvel):
             # according to inference and Murray 2007, 
             # linearly scale params in Murray 2007 and make Msf amp = 35.00
             # Displacement.        
-            tidesRut_params['K2'] =    [0.817,  160.31,    29.1,   99]
+            tidesRut_params['K2'] =    [0.817,      160.31,     29.1,       99]
 
-            tidesRut_params['N2'] =    [0.0,   163,    28.174,   24.343]   # new N2
+            tidesRut_params['N2'] =    [0.0,        163,        28.174,     24.343]     # new N2
 
-            tidesRut_params['S2'] =    [0.9567, 154.53,    101.6,  115]
+            tidesRut_params['S2'] =    [0.9567,     154.53,     101.6,      115]
 
-            tidesRut_params['M2'] =    [0.6826, 176.33,    167.274,  120.427]   # new M2
+            tidesRut_params['M2'] =    [0.6826,     176.33,     167.274,    120.427]    # new M2
 
-            tidesRut_params['K1'] =    [0.5008,  -147.35,     49,     73]
-            tidesRut_params['P1'] =    [0.6325,  -176.12,   16.6,   64]
+            tidesRut_params['K1'] =    [0.5008,     -147.35,    49,         73]
+            tidesRut_params['P1'] =    [0.6325,     -176.12,    16.6,       64]
 
-            tidesRut_params['O1'] =    [0.6958, -143.32,   35.212,     113.694] # new O1
+            tidesRut_params['O1'] =    [0.6958,     -143.32,    35.212,     113.694]    # new O1
 
-            tidesRut_params['Mf'] =    [6.6943, 157.98,  2.9,    163]        # Mf
+            tidesRut_params['Mf'] =    [6.6943,     157.98,     2.9,        163]        # Mf
 
-            tidesRut_params['Msf'] =   [35.00,  260,   0.3,    164]          # New Msf
+            tidesRut_params['Msf'] =   [35.00,      260,        0.3,        164]        # New Msf
 
-            tidesRut_params['Mm'] =    [13.2831, -19.52,  1.6,    63]
-            tidesRut_params['Ssa'] =   [70.4744, -167.22,  1.5,    179]
-            tidesRut_params['Sa'] =    [50.5497, -163.61,  0.2,    179]
+            tidesRut_params['Mm'] =    [13.2831,    -19.52,     1.6,        63]
+            tidesRut_params['Ssa'] =   [70.4744,    -167.22,    1.5,        179]
+            tidesRut_params['Sa'] =    [50.5497,    -163.61,    0.2,        179]
+
+        if model_num == 17:
+            # Same as model 16 for horizontal components
+            # Use the params from CATS2008 for vertical motion
+            tidesRut_params['M2'] =    [0.6826,     176.33,     167.26,     120.42]
+            tidesRut_params['S2'] =    [0.9567,     154.53,     110.60,     -11.10]  
+            tidesRut_params['N2'] =    [0.0,        163,        28.17,      24.34]
+            tidesRut_params['K2'] =    [0.817,      160.31,     24.20,      -162.39]
+
+
+            tidesRut_params['K1'] =    [0.5008,     -147.35,    37.43,      36.92]
+            tidesRut_params['O1'] =    [0.6958,     -143.32,    35.24,      113.74]
+            tidesRut_params['P1'] =    [0.6325,     -176.12,    13.99,      12.85]
+            tidesRut_params['Q1'] =    [0.6325,     -176.12,    7.93,       10.62]
+
+            tidesRut_params['Mf'] =    [6.6943,     157.98,     2.00,       5.28]
+            tidesRut_params['Msf'] =   [35.00,      260,        1.73,       11.96]
+
+            tidesRut_params['Mm'] =    [13.2831,    -19.52,     0.0,        63]
+            tidesRut_params['Ssa'] =   [70.4744,    -167.22,    0.0,        179]
+            tidesRut_params['Sa'] =    [50.5497,    -163.61,    0.0,        179]
+
 
         if model_num == 2:
 
@@ -846,7 +868,7 @@ class simulation(fourdvel):
                     dis_U_ta = tide_height_master.reshape(len(tide_height_master),1)
                     dis_U_tb = tide_height_slave.reshape(len(tide_height_slave),1)
 
-                # Grounding
+                # Grounding (first scaling then clipping)
                 # When grounding_indicator is larger than 1 (I use velo_model[2] and velo_model[3]):
                 if grounding_indicator >= 0:
                     #print("Perform clipping at: ", self.simulation_grounding_level)

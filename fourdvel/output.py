@@ -21,7 +21,7 @@ def createParser():
     parser.add_argument('-q','--quant_list_name', dest='quant_list_name', type=str, help='quant_list_name', default=None)
 
     parser.add_argument('--npc','--no_phase_correction', dest='no_phase_correction', action='store_true')
-
+    
     #parser.add_argument('-t','--task_name', dest='task_name', type=str, help='task_name',default=None)
    
     return parser
@@ -207,6 +207,10 @@ class output(fourdvel):
 
                 xyz_name = os.path.join(this_result_folder, '_'.join([str(test_id), state, quant_name, str(compare_id), compare_prefix]) + '.xyz')
                 self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
+
+                xyz_name_2 = os.path.join(this_result_folder, '_'.join([str(test_id), state, quant_name]) + '.xyz')
+                self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name_2)
+
 
         return 0
 
@@ -417,6 +421,8 @@ class output(fourdvel):
 
 
         quant_list = [  'secular_horizontal_speed',
+                        'secular_east_velocity',
+                        'secular_north_velocity',
                         'secular_up_velocity',
                         'secular_horizontal_velocity',
 
@@ -456,6 +462,8 @@ class output(fourdvel):
 
         if quant_list_name == "BM_2017":
             quant_list = [  'secular_horizontal_speed',
+                            'secular_east_velocity',
+                            'secular_north_velocity',
                             'secular_up_velocity',
                             'secular_horizontal_velocity',
     
@@ -693,7 +701,8 @@ def main(iargs=None):
     if out.output_uq:   output_states.append("uq")
 
     # bias
-    output_states.append("bias")
+    if out.output_true and out.output_est:
+        output_states.append("bias")
 
     if out.output_others: out.run_output_others()
 
@@ -711,7 +720,7 @@ def main(iargs=None):
             out.run_output_difference(compare_id=620, compare_prefix='true')
         elif out.proj == "Rutford":
             # Rutford
-            out.run_output_difference(compare_id=2020104656, compare_prefix='true')
+            out.run_output_difference(compare_id=202007042, compare_prefix='true')
         else:
             raise Exception()
 

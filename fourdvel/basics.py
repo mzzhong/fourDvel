@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # Author: Minyan Zhong
-# Development starts in Aug, 2018
+# Aug, 2018
 
 import numpy as np
 import datetime
@@ -290,3 +290,67 @@ class basics():
         min_cov[18] = 8
 
         return min_cov
+
+    def read_ris_tides_params(self):
+
+        # Read in tide params exported from TMD MATLAB code
+        ris_tides_params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/RIS_tides_params.txt"
+        f = open(ris_tides_params_file)
+        lines = f.readlines()
+        n_tides = len(lines)//6
+        print(n_tides)
+
+        ris_tides_params={}
+        tide_names = []
+        for i in range(n_tides):
+            tide_name1 = lines[i*6].rstrip()
+
+
+            cos_amp = float(lines[i*6+1].split()[1])
+            sin_amp = float(lines[i*6+2].split()[1])
+            ph = float(lines[i*6+3].split()[1])
+            pf = float(lines[i*6+4].split()[1])
+            pu = float(lines[i*6+5].split()[1])
+
+            print(tide_name1, cos_amp, sin_amp, ph, pf, pu)
+
+            ris_tides_params[(tide_name1,"cos_x")] = cos_amp
+            ris_tides_params[(tide_name1,"sin_x")] = sin_amp
+            ris_tides_params[(tide_name1,"ph")] = ph
+            ris_tides_params[(tide_name1,"pf")] = pf
+            ris_tides_params[(tide_name1,"pu")] = pu
+
+            tide_names.append(tide_name1.capitalize())
+
+        # Convert to standard params
+        n_tides = len(tide_names)
+        for i, tide_name in enumerate(tide_names):
+            tide_name1 = tide_name.lower()
+            
+            # Get the extracted value
+            cos_amp = ris_tides_params[(tide_name1,"cos_x")]
+            sin_amp = ris_tides_params[(tide_name1,"sin_x")]
+            ph = ris_tides_params[(tide_name1,"ph")]
+            pf = ris_tides_params[(tide_name1,"pf")]
+            pu = ris_tides_params[(tide_name1,"pu")]
+
+            #exp_sig = pf * cos_amp * np.cos(omega * taxis + ph + pu) \
+            #            - pf * sin_amp * np.sin(omega * taxis + ph + pu); 
+
+            # Get normal amplitude and phase
+            phi = ph+pu
+
+            cos_coe =   pf * (cos_amp * np.cos(phi) - sin_amp * np.sin(phi))
+            sin_coe = - pf * (cos_amp * np.sin(phi) + sin_amp * np.cos(phi))
+
+            #exp_sig = cos_coe * np.cos(omega * taxis) + sin_coe * np.sin(omega * taxis);
+            tide_amp = np.sqrt(cos_coe**2 + sin_coe**2)
+            tide_phase = np.arctan2(cos_coe, sin_coe)
+            tide_phase_deg = tide_phase / np.pi * 180
+            tide_phase_min = tide_phase / (2 * np.pi) * self.tide_periods[tide_name] * 60 * 24
+
+            # Save the amplitude and phase
+            ris_tides_params[(tide_name1, "tide_amp")] = tide_amp
+            ris_tides_params[(tide_name1, "tide_phase")] = tide_phase
+
+        return (tide_names, ris_tides_params)

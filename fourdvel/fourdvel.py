@@ -13,8 +13,8 @@ import pathlib
 import glob
 
 import numpy as np
+from scipy.interpolate import interp1d
 
-from matplotlib import cm
 import matplotlib.pyplot as plt
 
 import datetime
@@ -87,6 +87,20 @@ class fourdvel(basics):
                 self.s1_data[it] = []
 
             self.satellite_constants()
+
+
+        # Get a map from track_num to track_ind
+        # This is more convienet for analysis
+        self.track_num_to_track_ind = {}
+        self.track_ind_to_track_num = {}
+        for i, track_num in enumerate(self.csk_tracks):
+            self.track_num_to_track_ind[('csk', track_num)] = ('csk',i)
+            self.track_ind_to_track_num[('csk',i)] = ('csk',track_num)
+
+        for i, track_num in enumerate(self.s1_tracks):
+            self.track_num_to_track_ind[('s1',track_num)] = ('s1',i)
+            self.track_ind_to_track_num[('s1',i)] = ('s1',track_num)
+
 
         # Related folders
         #self.design_mat_folder = './design_mat'
@@ -454,6 +468,9 @@ class fourdvel(basics):
                     self.simulation_use_external_up = False
                 print('simulation_use_external_up: ',value)
 
+            if name == 'simulation_model_num':
+                self.simulation_model_num = int(value)
+                print('simulation_model_num: ',value)
 
             ## External up ##
             if name == 'external_up_disp_file':
@@ -1062,7 +1079,7 @@ class fourdvel(basics):
         
                 self.tide_taxis = taxis
                 self.tide_data = data
-                self.tide_t_delta = self.tide_taxis[1] - self.tide_taxis[0]
+                self.tide_t_delta = 0.001
             else:
                 raise Exception("Tide file does not exist: " + tide_file)
         return
@@ -1130,7 +1147,8 @@ class fourdvel(basics):
 
     def get_up_disp_set(self, point_set, offsetfields_set):
 
-        up_disp_mode = "varying"
+        up_disp_mode = "single"
+        #up_disp_mode = "varying"
 
         if up_disp_mode == "single":
             up_disp_set = {}
@@ -1976,6 +1994,7 @@ class fourdvel(basics):
         # Sigmas of model parameters.
         inf_permiss = 0
         inf_restrict = 100000
+        inf_restrict = 10**8
  
         inv_sigma = np.zeros(shape=(num_params, num_params))
 
@@ -2217,8 +2236,10 @@ class fourdvel(basics):
             elif select_mode == "likelihood":
                 min_value = float("inf")
 
+                grounding_levels = []
                 likelihoods = []
                 for grounding_level_int, likelihood in sorted(others_set[point]['grounding_level_model_likelihood'].items()):
+                    #print(grounding_level_int, likelihood)
 
                     if likelihood < min_value:
                         min_value = likelihood
@@ -2228,29 +2249,52 @@ class fourdvel(basics):
                         # Save the corresponding up_scale
                         others_set[point]["up_scale"] = others_set[point]['grounding_level_up_scale'][grounding_level_int]
 
+                    grounding_levels.append(grounding_level_int)
                     likelihoods.append(likelihood)
-                
-                ## Get the probability ##
-                # normalize the likelihood
-                likelihoods = np.asarray(likelihoods)
-                likelihoods = likelihoods - np.nanmin(likelihoods)
-                
-                # Sum up the denominator
-                prob_sum = np.nansum(np.exp(-likelihoods))
-                gl_probs = np.exp(-likelihoods) / prob_sum
-                others_set[point]["grounding_level_prob"] = {}
 
-                # Save the probs
-                cnt = 0
-                for grounding_level_int, likelihood in sorted(others_set[point]['grounding_level_model_likelihood'].items()):
-                    others_set[point]["grounding_level_prob"][grounding_level_int] = gl_probs[cnt]
-                    cnt+=1
+                grounding_levels = np.asarray(grounding_levels)
+                likelihoods = np.asarray(likelihoods)
+
+                # Need to consider the case if the enumeration is not even
+                # Do interpolation on [-3,0] spacing = 0.01
+                interp_fun = interp1d(grounding_levels, likelihoods, kind='linear')
+
+                gls_interp = np.arange(min(grounding_levels),max(grounding_levels)+1e-6, 10**(-2) * 10**6)
+                likelihoods_interp = interp_fun(gls_interp)
+
+                ## Get the probability ##
+                # normalize the likelihood in log space
+                # Sum up the denominator
+                likelihoods_interp = likelihoods_interp - np.nanmin(likelihoods_interp)
+                prob_sum = np.nansum(np.exp(-likelihoods_interp))
+                gl_probs_interp = np.exp(-likelihoods_interp) / prob_sum
 
                 # Calculate credible interval
-                gls = np.asarray(sorted(others_set[point]['grounding_level_model_likelihood'].keys())) / 10**6
-                gl_ci = self.calc_hpdi(gls, gl_probs)
+                #gl_ci = self.calc_hpdi(gls_interp/10**6, gl_probs_interp)
+                #others_set[point]["grounding_level_credible_interval"] = gl_ci
 
-                others_set[point]["grounding_level_credible_interval"] = gl_ci
+                # For test point
+                if point == self.test_point:
+                    print('optimal gl: ', others_set[point]["optimal_grounding_level"])
+                    print('interpolating on : ')
+                    print(grounding_levels)
+                    print(likelihoods)
+
+                    #print('credible interval: ', gl_ci)
+
+                    # Plot the probability
+                    fig = plt.figure(200, figsize=(7,7))
+                    ax = fig.add_subplot(211)
+                    ax.plot(grounding_levels, likelihoods, 'k')
+                    ax.plot(gls_interp, likelihoods_interp, 'r')
+                    ax = fig.add_subplot(212)
+                    ax.plot(gls_interp, gl_probs_interp)
+                    fig.savefig('200.png')
+
+                    # Save the probability 
+                    others_set[point]["grounding_level_prob"] = {}
+                    for i in range(len(gl_probs_interp)):
+                        others_set[point]["grounding_level_prob"][gls_interp[i]] = gl_probs_interp[i]
 
             else:
                 raise Exception()
@@ -2869,14 +2913,22 @@ class fourdvel(basics):
             for tide_name in modeling_tides:
                 if tide_name == 'M2':
                     ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
-                    thres = 0.3
+
+                    # old way
+                    #thres = 0.3
+                    #if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
+
+                    # Explanation: I use M2 phase as the proxy for semi-dirunal phase variation
+                    # To keep the any many data points as possible, I need to lower the criterion
+
                     # 2021.01.29
                     thres = 0.1
                     # 2021.02.03
-                    thres = 0.01
+                    #thres = 0.01
+                    
+                    if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
+                    #if ampU >=thres or state == 'uq':
 
-                    if ampU >=thres or state == 'uq':
-                    #if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
                         # Find the phase
                         value = t_vec[3+k*6+5]
 
