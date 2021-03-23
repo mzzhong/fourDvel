@@ -1147,13 +1147,30 @@ class fourdvel(basics):
 
     def get_up_disp_set(self, point_set, offsetfields_set):
 
-        up_disp_mode = "single"
+        # Same as the input time series for vertical motion
+        #up_disp_mode = "single"
+
+        # Use parameterized vertical motion (10 constituents)
+        up_disp_mode = "parametric_single"
+
+        # Use self-derived vertical motion
         #up_disp_mode = "varying"
 
         if up_disp_mode == "single":
             up_disp_set = {}
             for point in point_set:
-                up_disp_set[point] = self.get_up_disp_for_point(point, offsetfields_set[point])
+                up_disp_set[point] = self.get_up_single_disp_for_point(point, offsetfields_set[point])
+
+        elif up_disp_mode == "parametric_single":
+            
+            if self.proj == "Rutford":
+                tide_cons, tide_params = self.read_ris_tides_params()
+            else:
+                raise ValueError()
+
+            up_disp_set = {}
+            for point in point_set:
+                up_disp_set[point] = self.get_up_parametric_single_disp_for_point(point, offsetfields_set[point], tide_cons, tide_params)
 
         elif up_disp_mode == "varying":
             up_disp_data_folder = "/marmot-nobak/mzzhong/insarRoutines/tide_model_time_series/001"
@@ -1170,7 +1187,7 @@ class fourdvel(basics):
                 check_result = 0
                 # Compare the old and new up disp data
                 if check_result:
-                    (m0, s0) = self.get_up_disp_for_point(point, offsetfields_set[point])
+                    (m0, s0) = self.get_up_single_disp_for_point(point, offsetfields_set[point])
                     (m1, s1) = self.get_up_varying_disp_for_point(point, up_disp_data_folder, taxis, offsetfields_set[point])
 
                     lon_int, lat_int = point
@@ -1199,9 +1216,12 @@ class fourdvel(basics):
                 # get the up disp data
                 up_disp_set[point] = self.get_up_varying_disp_for_point(point, up_disp_data_folder, taxis, offsetfields_set[point])
 
+        else:
+            raise ValueError()
+
         return up_disp_set
 
-    def get_up_disp_for_point(self, point, offsetfields):
+    def get_up_single_disp_for_point(self, point, offsetfields):
 
         tide_height_master = []
         tide_height_slave = []
@@ -1215,6 +1235,47 @@ class fourdvel(basics):
 
         tide_height_master = np.asarray(tide_height_master)
         tide_height_slave = np.asarray(tide_height_slave)
+
+        return (tide_height_master, tide_height_slave)
+
+    def get_up_parametric_single_disp_for_point(self, point, offsetfields, tide_cons, tide_params):
+
+        # timings
+        master_timings = []
+        slave_timings = []
+        for i in range(len(offsetfields)):
+            timing_a = (offsetfields[i][0], round(offsetfields[i][4],4))
+            timing_b = (offsetfields[i][1], round(offsetfields[i][4],4))
+
+            ta = (timing_a[0] - self.t_origin.date()).days + timing_a[1]
+            tb = (timing_b[0] - self.t_origin.date()).days + timing_b[1]
+
+            master_timings.append(ta)
+            slave_timings.append(tb)
+    
+        master_timings = np.asarray(master_timings)
+        slave_timings = np.asarray(slave_timings)
+
+        # tide heights
+        tide_height_master = 0
+        tide_height_slave = 0
+        for tide_name in tide_cons:
+            amp = tide_params[(tide_name.lower(), "tide_amp")]
+            phase = tide_params[(tide_name.lower(), "tide_phase")]
+            omega = self.tide_omegas[tide_name]
+
+            tide_height_master = tide_height_master + amp * np.sin(omega * master_timings + phase)
+            tide_height_slave = tide_height_slave + amp * np.sin(omega * slave_timings + phase)
+
+        tide_height_master = np.asarray(tide_height_master)
+        tide_height_slave = np.asarray(tide_height_slave)
+
+        #if point == self.test_point:
+        #    print(master_timings)
+        #    print(slave_timings)
+        #    print(tide_height_master)
+        #    print(tide_height_slave)
+        #    print(stop)
 
         return (tide_height_master, tide_height_slave)
 
@@ -1595,7 +1656,7 @@ class fourdvel(basics):
         # End of building.
 
 
-    def modify_G_set(self, point_set, G_set, offsetfields_set,grounding_level,gl_name):
+    def modify_G_set(self, point_set, G_set, offsetfields_set, grounding_level, gl_name):
 
         # Extract the stack of up displacement from the tide model
         up_disp_set = self.get_up_disp_set(point_set, offsetfields_set)
@@ -1636,12 +1697,20 @@ class fourdvel(basics):
                 except:
                     given_grounding_level = -10
 
+                # If invalid, set it to be -10
                 if np.isnan(given_grounding_level):
                     given_grounding_level = -10
 
             elif gl_name == "float":
                 given_grounding_level = grounding_level
- 
+
+            elif gl_name == "auto":
+                given_grounding_level = grounding_level[point]
+
+            else:
+                raise ValueError()
+
+            # modify G
             G_set[point] = self.modify_G(point=point, offsetfields=offsetfields, G=G, tide_height_master = tide_height_master, tide_height_slave = tide_height_slave, grounding_level = given_grounding_level)
 
         return G_set
@@ -2148,26 +2217,38 @@ class fourdvel(basics):
     ## For linear model, tides_3 ##
     def export_to_others_set_wrt_gl(self, point_set, grounding_level, model_vec_set, model_likelihood_set, resid_set, others_set):
 
-        # up scale
+        if isinstance(grounding_level, int):
+            mode = 'const'
+        elif isinstance(grounding_level, dict):
+            mode = 'point'
+        else:
+            raise ValueError()
+
         for point in point_set:
+            if mode == 'const':
+                grounding_level_point = grounding_level
+            elif mode == 'point':
+                grounding_level_point = grounding_level[point]
+            else:
+                raise ValueError()
+
+            # up scale
             if not 'grounding_level_up_scale' in others_set[point].keys():
                 others_set[point]['grounding_level_up_scale'] = {}
 
-            others_set[point]['grounding_level_up_scale'][grounding_level] = self.extract_up_scale(model_vec_set[point])
+            others_set[point]['grounding_level_up_scale'][grounding_level_point] = self.extract_up_scale(model_vec_set[point])
 
-        # model likelihood
-        for point in point_set:
+            # model likelihood
             if not 'grounding_level_model_likelihood' in others_set[point].keys():
                 others_set[point]['grounding_level_model_likelihood'] = {}
 
-            others_set[point]['grounding_level_model_likelihood'][grounding_level] = model_likelihood_set[point]
+            others_set[point]['grounding_level_model_likelihood'][grounding_level_point] = model_likelihood_set[point]
 
-        # residual
-        for point in point_set:
+            # residual
             if not 'grounding_level_resids' in others_set[point].keys():
                 others_set[point]['grounding_level_resids'] = {}
 
-            others_set[point]['grounding_level_resids'][grounding_level] = resid_set[point]
+            others_set[point]['grounding_level_resids'][grounding_level_point] = resid_set[point]
 
         return 0
 
@@ -2205,17 +2286,78 @@ class fourdvel(basics):
         #    print(x)
         #    print(y)
         #    return (np.nan, np.nan)
+
+    def calc_hpdi_v2(self, x, y, alpha=0.9):
+
+        if np.isnan(y[0]):
+            return (np.nan, np.nan)
+
+        if len(x)<2:
+            return (np.nan, np.nan)
+
+        l = len(x)
+        alpha = 0.9 
+        max_ind = np.argmax(y)
+        left = max_ind
+        right = max_ind
         
-    def select_optimal_grounding_level(self, point_set, others_set):
+        total_mass = np.nansum(y)
+        
+        mass = y[max_ind]
+        # Expand from the max point
+        while mass < total_mass * alpha:
+            #print(left, right, mass)
+        
+            if left > 0:
+                left_candi = y[left - 1]
+            else:
+                left_candi = None
+        
+            if right < l-1:
+                right_candi = y[right+1]
+            else:
+                right_candi = None
+        
+            # Both are at the end, which should not be possible
+            if left_candi is not None and right_candi is not None:
+                if left_candi > right_candi:
+                    left -= 1
+                    mass += y[left]
+                else:
+                    right += 1
+                    mass += y[right]
+        
+            elif left_candi is not None:
+                left -= 1
+                mass += y[left]
+        
+            elif right_candi is not None:
+                right += 1
+                mass += y[right]
+        
+            else:
+                raise Exception("hpdi_error")
+
+        return (x[left], x[right])
+
+    def select_optimal_grounding_level(self, point_set, grid_set_velo, others_set):
 
         select_mode = "likelihood"
  
         for point in point_set:
+            velo_model = grid_set_velo[point]
 
+            # Set true value
+            others_set[point]["true_optimal_grounding_level"] = self.simulation_grounding_level
+            others_set[point]["true_up_scale"] = velo_model[2]
+
+            # Set estimation value
             # default value is nan
             # e.g. if range_rmse is np.nan, optimal grounding level is np.nan
             others_set[point]["optimal_grounding_level"] = np.nan
-            
+            others_set[point]["up_scale"] = np.nan
+
+            # resid based (deprecated) 
             if select_mode == "resid":
                 min_value = float("inf")
 
@@ -2233,17 +2375,21 @@ class fourdvel(basics):
 
                         # Need to add up_scale here (TODO)
             
+            # likelihood based
             elif select_mode == "likelihood":
                 min_value = float("inf")
 
                 grounding_levels = []
                 likelihoods = []
+
+                # go from small to large gl
                 for grounding_level_int, likelihood in sorted(others_set[point]['grounding_level_model_likelihood'].items()):
                     #print(grounding_level_int, likelihood)
 
                     if likelihood < min_value:
                         min_value = likelihood
 
+                        # Save the optimal grounding level
                         others_set[point]["optimal_grounding_level"]  = grounding_level_int
 
                         # Save the corresponding up_scale
@@ -2255,41 +2401,63 @@ class fourdvel(basics):
                 grounding_levels = np.asarray(grounding_levels)
                 likelihoods = np.asarray(likelihoods)
 
-                # Need to consider the case if the enumeration is not even
-                # Do interpolation on [-3,0] spacing = 0.01
-                interp_fun = interp1d(grounding_levels, likelihoods, kind='linear')
+                # calculate credible interval
+                if len(grounding_levels)>=2:
+                    # Need to consider the case if the enumeration is not even
+                    # Do interpolation on [-3,0] spacing = 0.01
+                    interp_fun = interp1d(grounding_levels, likelihoods, kind='linear')
+    
+                    gls_interp = np.arange(min(grounding_levels),max(grounding_levels)+1e-6, 10**(-2) * 10**6)
+                    likelihoods_interp = interp_fun(gls_interp)
+    
+                    ## Get the probability ##
+                    # normalize the likelihood in log space
+                    # Sum up the denominator
+                    likelihoods_interp = likelihoods_interp - np.nanmin(likelihoods_interp)
+                    prob_sum = np.nansum(np.exp(-likelihoods_interp))
+                    gl_probs_interp = np.exp(-likelihoods_interp) / prob_sum
+    
+                    # Calculate credible interval
+                    #if point == self.test_point:
+                    #    start_time = time.time()
+                    #    gl_ci = self.calc_hpdi(gls_interp/10**6, gl_probs_interp)
+                    #    elapsed_time = time.time() - start_time
+                    #    print("Elapased time: ", elapsed_time)
+                    #    print(gl_ci)
+                    #    print(stop)
+                    #    start_time = time.time()
+                    #    gl_ci_2 = self.calc_hpdi_v2(gls_interp/10**6, gl_probs_interp)
+                    #    elapsed_time = time.time() - start_time
+                    #    print("Elapased time: ", elapsed_time)
+                    #    print(gl_ci_2)
+    
+                    gl_ci_2 = self.calc_hpdi_v2(gls_interp/10**6, gl_probs_interp)
+                else:
+                    gls_interp = grounding_levels
+                    gl_probs_interp = np.ones(shape=(1,))
+                    gl_ci_2 = (np.nan, np.nan)
+                
+                others_set[point]["grounding_level_credible_interval"] = gl_ci_2
 
-                gls_interp = np.arange(min(grounding_levels),max(grounding_levels)+1e-6, 10**(-2) * 10**6)
-                likelihoods_interp = interp_fun(gls_interp)
-
-                ## Get the probability ##
-                # normalize the likelihood in log space
-                # Sum up the denominator
-                likelihoods_interp = likelihoods_interp - np.nanmin(likelihoods_interp)
-                prob_sum = np.nansum(np.exp(-likelihoods_interp))
-                gl_probs_interp = np.exp(-likelihoods_interp) / prob_sum
-
-                # Calculate credible interval
-                #gl_ci = self.calc_hpdi(gls_interp/10**6, gl_probs_interp)
-                #others_set[point]["grounding_level_credible_interval"] = gl_ci
-
-                # For test point
+                # For test point, save and show the result
                 if point == self.test_point:
-                    print('optimal gl: ', others_set[point]["optimal_grounding_level"])
-                    print('interpolating on : ')
-                    print(grounding_levels)
-                    print(likelihoods)
+                    show_test_point = False
+                    if show_test_point:
+                        print('optimal gl: ', others_set[point]["optimal_grounding_level"])
+                        #print('interpolating on : ')
+                        #print(grounding_levels)
+                        #print(likelihoods)
 
-                    #print('credible interval: ', gl_ci)
+                        print('credible interval: ', others_set[point]["grounding_level_credible_interval"])
 
-                    # Plot the probability
-                    fig = plt.figure(200, figsize=(7,7))
-                    ax = fig.add_subplot(211)
-                    ax.plot(grounding_levels, likelihoods, 'k')
-                    ax.plot(gls_interp, likelihoods_interp, 'r')
-                    ax = fig.add_subplot(212)
-                    ax.plot(gls_interp, gl_probs_interp)
-                    fig.savefig('200.png')
+                        # Plot the probability
+                        fig = plt.figure(200, figsize=(7,7))
+                        ax = fig.add_subplot(211)
+                        ax.plot(grounding_levels, likelihoods, 'k')
+                        ax.plot(gls_interp, likelihoods_interp, 'r')
+                        ax = fig.add_subplot(212)
+                        ax.plot(gls_interp, gl_probs_interp)
+                        fig.savefig('200.png')
 
                     # Save the probability 
                     others_set[point]["grounding_level_prob"] = {}
@@ -2297,7 +2465,7 @@ class fourdvel(basics):
                         others_set[point]["grounding_level_prob"][gls_interp[i]] = gl_probs_interp[i]
 
             else:
-                raise Exception()
+                raise ValueError("unknown select mode")
 
         return 0
 

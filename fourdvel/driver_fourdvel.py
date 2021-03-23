@@ -301,8 +301,8 @@ class driver_fourdvel():
             print('Total number of tiles: ', n_tiles)
     
             # Chop into multiple threads. 
-            nthreads = 10
-            #nthreads = 5
+            #nthreads = 10
+            nthreads = 5
             #nthreads = 1
             self.nthreads = nthreads
             total_number = n_tiles
@@ -393,29 +393,33 @@ class driver_fourdvel():
  
             # Loop through the results
             for ip, point_pkl in enumerate(point_results):
-                print(ip)
-                pklfile = self.estimation_dir + '/point_result/' + point_pkl
-                
-                with open(pklfile,"rb") as f:
-                    all_sets = pickle.load(f)
-
-                if all_sets['true_tide_vec_set'] is not None:
-                    tasks.grid_set_true_tide_vec.update(all_sets['true_tide_vec_set'])
-                
-                tasks.grid_set_tide_vec.update(all_sets['tide_vec_set'])
-                tasks.grid_set_tide_vec_uq.update(all_sets['tide_vec_uq_set'])
-                tasks.grid_set_resid_of_secular.update(all_sets['resid_of_secular_set'])
-                tasks.grid_set_resid_of_tides.update(all_sets['resid_of_tides_set'])
-                tasks.grid_set_others.update(all_sets['others_set'])
-                
-                #tasks.grid_set_analysis.update(all_sets['analysis_set'])
+                if point_pkl.endswith('.pkl'):
+                    print(ip)
+    
+                    pklfile = self.estimation_dir + '/point_result/' + point_pkl
+                    
+                    with open(pklfile,"rb") as f:
+                        all_sets = pickle.load(f)
+    
+                    if all_sets['true_tide_vec_set'] is not None:
+                        tasks.grid_set_true_tide_vec.update(all_sets['true_tide_vec_set'])
+                    
+                    tasks.grid_set_tide_vec.update(all_sets['tide_vec_set'])
+                    tasks.grid_set_tide_vec_uq.update(all_sets['tide_vec_uq_set'])
+                    tasks.grid_set_resid_of_secular.update(all_sets['resid_of_secular_set'])
+                    tasks.grid_set_resid_of_tides.update(all_sets['resid_of_tides_set'])
+                    tasks.grid_set_others.update(all_sets['others_set'])
+                    
+                    #tasks.grid_set_analysis.update(all_sets['analysis_set'])
 
         ## Save the final results in dictionary manager
+        forceUnSaveTides = False
+
         forceSaveTides = True
 
         forceSaveAnalysis = False
 
-        if (task_name in self.estimate_tasks and tasks.single_point_mode == False) or (task_name in self.estimate_tasks and forceSaveTides == True):
+        if ((task_name in self.estimate_tasks and tasks.single_point_mode == False) or (task_name in self.estimate_tasks and forceSaveTides == True)) and (forceUnSaveTides==False):
 
             print("Write results to disk")
             print("The task is estimate")

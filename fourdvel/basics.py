@@ -294,11 +294,14 @@ class basics():
     def read_ris_tides_params(self):
 
         # Read in tide params exported from TMD MATLAB code
+        print("Reading RIS tide model...")
         ris_tides_params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/RIS_tides_params.txt"
         f = open(ris_tides_params_file)
         lines = f.readlines()
+        f.close()
+
         n_tides = len(lines)//6
-        print(n_tides)
+        print("n_tides: ", n_tides)
 
         ris_tides_params={}
         tide_names = []

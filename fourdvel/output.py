@@ -223,9 +223,13 @@ class output(fourdvel):
                     + str(test_id) + '_' + 'grid_set_others.pkl','rb') as f:
             this_grid_set = pickle.load(f)
 
+        # credible interval needs to before grounding level for filtering purposes
         quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level", "height"]
 
         states = ['true', 'est']
+
+        # Used for save the results from true and est to get bias
+        saved_grid_set_quant_results = {}
 
         for state in states:
             for quant_name in quant_list:
@@ -233,7 +237,12 @@ class output(fourdvel):
                 grid_set_quant = {}
     
                 output_keys = this_grid_set.keys()
+
                 for point in output_keys:
+
+                    # The point should be tuple. However, there are exceptions for the key, e.g. current_auto_enum_stage
+                    if not isinstance(point, tuple):
+                        continue
     
                     # Ad hoc treatment of grounding level
                     if quant_name == "optimal_grounding_level":
@@ -246,20 +255,21 @@ class output(fourdvel):
                         #if self.grid_set_velo[point][2]<=0.4:
                         if self.grid_set_velo[point][2]<=0.2:
                         #if self.grid_set_velo[point][2]<=0.1:
-
                             continue
     
                         if this_grid_set[point][quant_name]=='external':
                             continue
-   
-                        # Remove very low grounding level, note the value is integer
-                        if this_grid_set[point][quant_name]/(10**6) <= -2.8:
-                            continue
+  
+                        if state == 'est':
+                            optimal_grounding_level = this_grid_set[point][quant_name]/(10**6) 
+                            # Remove very low grounding level, note the value is integer
+                            if optimal_grounding_level <= -2.8:
+                                continue
 
-                        # Remove based obtained credible level
-                        gl_ci = grid_set_gl_ci.get(point, np.nan)
-                        if np.isnan(gl_ci) or gl_ci>=0.4:
-                            continue
+                            # Remove based obtained credible level
+                            gl_ci = grid_set_gl_ci.get(point, np.nan)
+                            if np.isnan(gl_ci) or gl_ci>=0.4:
+                                continue
 
                         # Remove points with fewer than 2 tracks
                         if len(self.grid_set[point])<=1:
@@ -267,51 +277,90 @@ class output(fourdvel):
     
                     # Record everything, including np.nan
                     # np.nan is filtered in write_dict_to_xyz
+
+                    # up_scale
                     if quant_name in ["up_scale"]:
                         if state == "true":
                             grid_set_quant[point] = this_grid_set[point].get("true_" + quant_name, np.nan)
-                        else:
+                        elif state == 'est':
                             grid_set_quant[point] = this_grid_set[point].get(quant_name, np.nan)
 
+                    # optimal grounding level
                     elif quant_name in ["optimal_grounding_level"]:
 
                         if state == "true":
                             grid_set_quant[point] = this_grid_set[point].get("true_" + quant_name, np.nan)
-                        else:
-                            optimal_grounding_level = this_grid_set[point].get(quant_name, np.nan)
+                        elif state == 'est':
+                            optimal_grounding_level_int = this_grid_set[point].get(quant_name, np.nan)
+                            optimal_grounding_level = optimal_grounding_level_int / 10**6
+
                             crsp_up_scale = this_grid_set[point].get("up_scale",np.nan)
                        
                             if "grounding_level_up_scale" in this_grid_set[point]: 
                                 grid_set_quant[point] = optimal_grounding_level * crsp_up_scale
                             else:
                                 grid_set_quant[point] = optimal_grounding_level
-
-                        # convert from int to float
-                        grid_set_quant[point] = grid_set_quant[point] / (10**6)
+                        else:
+                            raise ValueError()
 
                     elif quant_name in ["grounding_level_credible_interval"]:
                         if state == "true":
                             grid_set_quant[point] = np.nan
-                        else:
+                        elif state == 'est':
                             ci = this_grid_set[point].get("grounding_level_credible_interval", (np.nan, np.nan))
                             grid_set_quant[point] = ci[1] - ci[0]
-    
+                        else:
+                            raise ValueError()
+
                     elif quant_name in ["height"]:
                         if state == "true":
                             grid_set_quant[point] = this_grid_set[point].get(quant_name, np.nan)
-                        else:
+                        elif state == 'est':
                             grid_set_quant[point] = np.nan
-                    
+
+                        else:
+                            raise ValueError()
                     else:
                         raise Exception()
 
-                if quant_name in ["grounding_level_credible_interval"]:
+                if state == 'est' and quant_name in ["grounding_level_credible_interval"]:
                     grid_set_gl_ci = grid_set_quant
 
                 # Write to xyz file.
                 xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + 'others' + '_' + quant_name + '.xyz')
                 
                 self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
+
+                # Save the results
+                saved_grid_set_quant_results[(state, quant_name)] = grid_set_quant
+
+        # bias
+        state = 'bias'
+        for quant_name in  ['optimal_grounding_level', 'up_scale']:
+            print('Output quantity name: ', quant_name)
+            grid_set_quant = {}
+    
+            output_keys = this_grid_set.keys()
+
+            true_grid_set_quant = saved_grid_set_quant_results[("true", quant_name)]
+            est_grid_set_quant = saved_grid_set_quant_results[("est", quant_name)]
+
+            for point in output_keys:
+
+                if not isinstance(point, tuple):
+                    continue
+ 
+                grid_set_quant[point] = est_grid_set_quant.get(point,np.nan) - true_grid_set_quant.get(point,np.nan)
+
+            # Write to xyz file.
+            xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + 'others' + '_' + quant_name + '.xyz')
+
+            #print(grid_set_quant)
+            #print(sorted(grid_set_quant.keys()))
+            #print(len(grid_set_quant.keys()))
+            #print(stop)
+            
+            self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
 
         return 0
 
@@ -706,7 +755,7 @@ def main(iargs=None):
 
     if out.output_others: out.run_output_others()
 
-    #return
+    return
 
     quant_list_name = inps.quant_list_name
 
