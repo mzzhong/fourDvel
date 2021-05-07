@@ -990,44 +990,64 @@ class analysis(configure):
         if show_analysis:
 
             ### Show results with all tracks merged
+            plot_start_date = datetime.datetime(2013, 7, 1)
+            plot_stop_date = datetime.datetime(2014, 9, 1)
+
+            camp_start_date = datetime.datetime(2013,8,1)
+            camp_stop_date = datetime.datetime(2013,8,1)
+
+            plot_start_day = 7800
+            plot_stop_day = 8300
 
             ### 1. Continous time series ####
             fig = plt.figure(100, figsize=(13,7))
             ax = fig.add_subplot(111)
-            ax.plot(tide_taxis, tide_data,"black",linewidth=0.3)
+            ax.tick_params(labelsize=15)
+            
+            #ax.plot(tide_taxis, tide_data,"black",linewidth=0.3)
+            #ax.set_xlim([plot_start_day, plot_stop_day])
+            #ax.set_xlabel("Days (since 1992-01-01)",fontsize=15)
             #ax.plot(taxis, np.absolute(data_vec_residual_track[::2]),"r.",markersize=10)
-            ax.set_xlim([taxis[0]-1,taxis[-1]+1])
+            #ax.set_xlim([taxis[0]-1,taxis[-1]+1])
 
+            ax.plot(np.asarray(tide_taxis) - plot_start_day, tide_data,"black",linewidth=0.3)
+            ax.set_xlim([0, plot_stop_day - plot_start_day])
+            ax.set_xlabel("Time (days)",fontsize=15)
+
+            # yaxis
             ax.set_ylim([-4.5,4.5])
-            ax.set_ylabel("vertical displacement (m)",fontsize=15)
+            ax.set_ylabel("Tidal displacement (m)",fontsize=15)
 
             # 2013.06.01 to 2014.06.01, 7823 days, 8188 days
-            ax.set_xlim([7800, 8300])
-            ax.set_xlabel("days since 1992-01-01",fontsize=15)
+            #off1 = (datetime.date(2013,8,1) - self.t_origin.date()).days
+            #off2 = (datetime.date(2014,9,1) - self.t_origin.date()).days
 
-            off1 = (datetime.date(2013,8,1) - self.t_origin.date()).days
-            off2 = (datetime.date(2014,9,1) - self.t_origin.date()).days
+            off1 = (datetime.date(2013,8,1) - self.t_origin.date()).days - plot_start_day
+            off2 = (datetime.date(2014,9,1) - self.t_origin.date()).days - plot_start_day
 
-            ax.plot([off1,off1],[-5,5],linewidth=5)
-            ax.plot([off2,off2],[-5,5],linewidth=5)
+            ax.plot([off1,off1],[-5,5],linewidth=4, color='blue')
+            ax.plot([off2,off2],[-5,5],linewidth=4, color='blue')
             
-
             ax.text(off1+10,-3.65, "2013-08-01",fontsize=15)
             ax.text(off2-63,-3.65, "2014-08-01",fontsize=15)
 
-            # Plot the acquisitions on the time series
+            # Plot the acquisitions on the tide time series
             plot_acquisition_times = 1
             if plot_acquisition_times:
-                ax.plot([tide_taxis[0],tide_taxis[-1]],[-1.7,-1.7],color='red', linewidth=5,linestyle='--')
+                #ax.plot([tide_taxis[0],tide_taxis[-1]],[-1.7,-1.7],color='red', linewidth=5,linestyle='--')
+                ax.plot([tide_taxis[0] - plot_start_day, tide_taxis[-1] - plot_start_day],[-1.7,-1.7], color='orange', linewidth=4,linestyle='--')
 
                 np.random.seed(2021)
                 colors = np.random.rand(len(data_info)*3).reshape(len(data_info),3)
+
+                count_track = 0
                 for i, track in enumerate(data_info):
                     track_name, data_num = track
                     track_num = track_name[0]
                     sate_name = track_name[1]
     
                     if data_num>0:
+                        count_track += 1
                         print(track_name)
                         #print(data_info)
                         #print(pair_acq_time)
@@ -1042,9 +1062,11 @@ class analysis(configure):
                         master_time_track = [pair_t[0] for pair_t in pair_acq_time_track]
                         slave_time_track = [pair_t[1] for pair_t in pair_acq_time_track]
     
-                        ax.plot(master_time_track, master_tide_proxy_track, '.',color=colors[i,:], markersize=10,label="track "+str(track_num))
+                        #ax.plot(master_time_track, master_tide_proxy_track, '.',color=colors[i,:], markersize=10,label="track "+str(track_num))
+                        #ax.plot(np.asarray(master_time_track) - plot_start_day, master_tide_proxy_track, '.',color=colors[i,:], markersize=10,label="track "+ str(track_num))
+                        ax.plot(np.asarray(master_time_track) - plot_start_day, master_tide_proxy_track, '.',color=colors[i,:], markersize=10,label="track "+ str(count_track))
     
-                ax.legend()
+                ax.legend(prop={'size': 12}, loc='lower left')
     
             figname="_".join((self.point2str(point), "vertical_displacement")) + ".png"
 
@@ -1293,6 +1315,7 @@ def main():
     ana = analysis(simple_mode=False)
     #ana.point_time_series()
     ana.get_tidal_model()
+    print(stop)
     ana.grounding_demonstration()
 
 if __name__=="__main__":

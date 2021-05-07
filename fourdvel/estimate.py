@@ -124,8 +124,8 @@ class estimate(configure):
             # tides_3: enumerating grounding level
             elif task_name == "tides_3":
                 
-                tides_3_mode = "find_optimal_gl"
-                #tides_3_mode = "invert_optimal_gl"
+                #tides_3_mode = "find_optimal_gl"
+                tides_3_mode = "invert_optimal_gl"
 
                 print("tides_3_mode: ", tides_3_mode)
 
@@ -165,7 +165,7 @@ class estimate(configure):
                         # Load the auto enumeration stage if exists
                         if "current_auto_enum_stage" in others_set:
                             current_auto_enum_stage = others_set['current_auto_enum_stage']
-                    
+
                     else:
                         completed_enum_gl = []
 
@@ -185,21 +185,21 @@ class estimate(configure):
                 
                 elif gl_option == "manual":
 
-                    gl_list_option = 3
+                    gl_list_option = 6
 
                     if gl_list_option == 0:
                         enum_space = 0.1
-                        gl_low = -3.0
-                        gl_high = -0.0
+                        gl_low = -4.0
+                        gl_high = 0.0
 
                     if gl_list_option == 1:
                         enum_space = 0.05
-                        gl_low  =   -3.0
+                        gl_low  =   -4.0
                         gl_high =   -0.0
 
                     if gl_list_option == 2:
                         enum_space = 0.025
-                        gl_low  =   -3.0
+                        gl_low  =   -4.0
                         gl_high =   -0.0
 
                     if gl_list_option == 3:
@@ -211,6 +211,16 @@ class estimate(configure):
                         enum_space = 0.1
                         gl_low  =   -2
                         gl_high =   -1
+
+                    if gl_list_option == 5:
+                        enum_space = 0.1
+                        gl_low  =   -4.0
+                        gl_high =   4.0
+
+                    if gl_list_option == 6:
+                        enum_space = 0.1
+                        gl_low  =   -4.0
+                        gl_high =   -3.0
  
                     enum_grounding_level = np.arange(gl_low, gl_high+1e-6, enum_space)
                     print(enum_grounding_level)
@@ -229,7 +239,10 @@ class estimate(configure):
                             enum_grounding_level_int = set(enum_grounding_level_int) - set(completed_enum_gl)
                             enum_grounding_level_int = sorted(list(enum_grounding_level_int))
 
-                    print("Remaining gl values for manual eumeration: ", enum_grounding_level_int)
+                    print("Remaining gl values for manual eumeration if passing the ice shelf check: ", enum_grounding_level_int)
+
+                    # Mark that the next stage will be done (for manual mode)
+                    others_set['current_auto_enum_stage'] = 3
                
                 elif gl_option == 'auto':
                     # set the parameters for auto
@@ -266,11 +279,14 @@ class estimate(configure):
                     # Derive the gl values to be enumerated
                     if current_auto_enum_stage == 0:
                         enum_space = 0.1
-                        gl_low  =   -3
-                        gl_high =   0
+                        gl_low  =   -4.0
+                        gl_high =   4.0
 
-                        #gl_low = -2
-                        #gl_high = -1
+                        gl_low = -4.0
+                        gl_high = -1.0
+
+                        gl_low = -4.0
+                        gl_high = 0.0
 
                         enum_grounding_level = np.arange(gl_low, gl_high+1e-6, enum_space)
 
@@ -293,12 +309,16 @@ class estimate(configure):
                         for point in point_set:
                             optimal_gl = others_set[point]["optimal_grounding_level"]
 
+                            # The optimal_gl can be -10 * 10**6, so the gl_low may be meaningless
+                            # Thie case is taken care of in the sanity check for ice shelf below
+
+                            # If optimal_gl is not NaN
                             if not np.isnan(optimal_gl):
                                 gl_low = optimal_gl/10**6 - auto_enum_stages[next_auto_enum_stage][0]
                             else:
                                 # the inversion actually fails, but to make it easier for parallel computation,
-                                # set the gl_low to be -3, other values also work
-                                gl_low = -3.0
+                                # set the gl_low to be -4, other values also work
+                                gl_low = -4.0
 
                             enum_space = auto_enum_stages[next_auto_enum_stage][1]
                             enum_grounding_level_auto_mode_set[point] = [int(round(gl_low * 10**6)), int(round(enum_space * 10**6))]
@@ -328,7 +348,7 @@ class estimate(configure):
                     print("Current auto enum stage: ", current_auto_enum_stage)
                     print("Next auto enum stage: ", next_auto_enum_stage)
                     
-                    # Mark that the next stage will be done
+                    # Mark that the next stage will be done (for auto mode)
                     others_set['current_auto_enum_stage'] = next_auto_enum_stage
 
                 elif gl_option == 'external':
@@ -383,6 +403,10 @@ class estimate(configure):
             else:
                 raise ValueError("Unknown task name")
 
+
+            ### Get up displacement set ###
+            up_disp_set = self.get_up_disp_set(point_set, offsetfields_set)
+
             ### Main: Loop through the grounding level ###
             for ienum, enum_grounding_level in enumerate(enum_grounding_level_int):
 
@@ -401,7 +425,24 @@ class estimate(configure):
                         gl_name = "external"
 
                     elif enum_grounding_level == "optimal":
-                        given_grounding_level = others_set
+                        # Load the prescaled optimal grounding level
+                        optimal_gl_data_mode = 1
+                        # option = 0, use the one in others_set
+                        if optimal_gl_data_mode == 0:
+                            given_grounding_level = others_set
+                        # option = 1, use the one filtered and saved as xyz file
+                        elif optimal_gl_data_mode == 1:
+                            grounding_level_prescale_xyz_file = os.path.join(self.estimations_dir, str(self.test_id), str(self.test_id) + '_est_others_optimal_grounding_level_prescale.xyz')
+                            data_dict = self.read_xyz_into_dict(grounding_level_prescale_xyz_file)
+
+                            # Set the given grounding level
+                            given_grounding_level = {}
+                            for point in data_dict:
+                                given_grounding_level[point] = {}
+                                given_grounding_level[point]['optimal_grounding_level'] = int(round(data_dict[point] * 10**6))
+                        else:
+                            raise ValueError()
+
                         gl_name = "optimal"
 
                     else:
@@ -409,7 +450,7 @@ class estimate(configure):
                             grounding_level_int = enum_grounding_level
 
                             # convert integer enumeration to float
-                            grounding_level = enum_grounding_level_int / (10**6)
+                            grounding_level = grounding_level_int / (10**6)
                             print("New enumeration: ", ienum, grounding_level)
                             gl_name = "float"
                             given_grounding_level = grounding_level
@@ -428,8 +469,10 @@ class estimate(configure):
                                 # Need to distinguish if on ice shelf
                                 if point_set_on_ice_shelf:
                                     grounding_level_int_point = gl_low_int + enum_grounding_level * gl_enum_spacing_int
-                                    # clip the value to be winthin [-3, 3]
-                                    grounding_level_int_point = np.clip(grounding_level_int_point, a_min=-3 * 10**6, a_max=3 * 10**6)
+                                    # clip the value to be winthin the requred range
+                                    gl_a_min = -4
+                                    gl_a_max = +4
+                                    grounding_level_int_point = np.clip(grounding_level_int_point, a_min = gl_a_min * 10**6, a_max = gl_a_max * 10**6)
                                 else:
                                     # -10 * 10**6
                                     grounding_level_int_point = enum_grounding_level
@@ -446,7 +489,7 @@ class estimate(configure):
                             raise ValueError("Unknown gl_option")
 
                     # Modifying G matrix to add direct modeling of vertical displacement
-                    linear_design_mat_set = self.modify_G_set(point_set, linear_design_mat_set, offsetfields_set, grounding_level = given_grounding_level, gl_name = gl_name)
+                    linear_design_mat_set = self.modify_G_set(point_set, linear_design_mat_set, offsetfields_set, up_disp_set, grounding_level = given_grounding_level, gl_name = gl_name)
                     print("Modified matrix (obs) set is Done")
 
                 # Model prior.
@@ -507,10 +550,9 @@ class estimate(configure):
 
             ## End of enumeration ##
 
-
             # Select the optimal grounding level
             # If mode is tides_3 and the enumeration is actually done
-            forceUpdateOthers = True 
+            forceUpdateOthers = False
             if self.task_name == "tides_3" and (tides_3_mode == "find_optimal_gl" or forceUpdateOthers):
                 
                 # Select the optimal grounding level
@@ -542,10 +584,19 @@ class estimate(configure):
                     #print("sum of probs: ", np.nansum(gl_probs))
                     #print("probs: ", gls, gl_probs)
 
+                    gl_ci = others_set[self.test_point]['grounding_level_credible_interval']
+
                     fig = plt.figure(1, figsize=(7,7))
                     ax = fig.add_subplot(111)
                     ax.tick_params(axis='both', labelsize=10)
                     ax.plot(gls, gl_probs, "k")
+                    ax.plot(gls, gl_probs, "k.")
+
+                    ax.plot([gl_ci[0], gl_ci[0]], [0,max(gl_probs)], "r")
+                    ax.plot([gl_ci[1], gl_ci[1]], [0,max(gl_probs)], "r")
+
+                    ax.set_xlim([-4, 0])
+                    
                     ax.set_ylabel("probability density",fontsize=15)
                     ax.set_xlabel("grounding level",fontsize=15)
                     fig.savefig("prob.png")
@@ -558,6 +609,9 @@ class estimate(configure):
                     print("Optimal grounding level after scaling: ", optimal_grounding_level * up_scale)
                 else:
                     print("No result (NaN) at test point")
+
+            # Stop the code here for testing
+            #print(stop)
 
             ########### Show the results ########################
             # Stack the true and inverted models.

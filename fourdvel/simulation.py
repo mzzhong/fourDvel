@@ -284,7 +284,38 @@ class simulation(fourdvel):
             tidesRut_params['Ssa'] =   [70.4744,    -167.22,    0.0,        179]
             tidesRut_params['Sa'] =    [50.5497,    -163.61,    0.0,        179]
 
+        if model_num == 18:
+            # Same as model 16 for horizontal components
+            # Use the params from CATS2008 for vertical motion at ref point (-82, -78.8)
+            tidesRut_params['M2'] =    [0.6826,     176.33,     164.70,     120.69]
+            tidesRut_params['S2'] =    [0.9567,     154.53,     108.70,     -10.82]  
+            tidesRut_params['N2'] =    [0.0,        163,        27.70,       24.60]
+            tidesRut_params['K2'] =    [0.817,      160.31,     23.80,      -162.11]
 
+
+            tidesRut_params['K1'] =    [0.5008,     -147.35,    37.40,      36.99]
+            tidesRut_params['O1'] =    [0.6958,     -143.32,    35.20,      113.82]
+            tidesRut_params['P1'] =    [0.6325,     -176.12,    14.00,      12.92]
+            tidesRut_params['Q1'] =    [0.6325,     -176.12,    7.90,       10.72]
+
+            tidesRut_params['Mf'] =    [6.6943,     157.98,     2.00,       5.32]
+            tidesRut_params['Msf'] =   [35.00,      260,        0.00,       0.00]
+
+            tidesRut_params['Mm'] =    [13.2831,    -19.52,     1.70,        11.99]
+            tidesRut_params['Ssa'] =   [70.4744,    -167.22,    0.00,        179]
+            tidesRut_params['Sa'] =    [50.5497,    -163.61,    0.00,        179]
+
+            #M2 0.5175 1.647 120.69
+            #S2 0.5 1.087 -10.82
+            #N2 0.5274 0.277 24.6
+            #K2 0.4986 0.238 -162.11
+            #K1 0.9973 0.374 36.99
+            #O1 1.0758 0.352 113.82
+            #P1 1.0027 0.14 12.92
+            #Q1 1.1195 0.079 10.72
+            #Mf 13.6608 0.02 5.32
+            #Mm 27.5546 0.017 11.99
+ 
         if model_num == 2:
 
             # Model 2.

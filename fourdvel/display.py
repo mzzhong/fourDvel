@@ -34,132 +34,131 @@ class display(fourdvel):
         f.close()
 
         return
-     
-        # Prepare the matrix.
 
-        # First coordinate (width)
-        lon0 = -84
-        lon_interval = 0.02
-        lon1 = -68
-        lon_list = np.arange(lon0, lon1, lon_interval)
+#        # Prepare the matrix.
+#
+#        # First coordinate (width)
+#        lon0 = -84
+#        lon_interval = 0.02
+#        lon1 = -68
+#        lon_list = np.arange(lon0, lon1, lon_interval)
+#
+#        # Second coordinate (length) 
+#        lat0 = -74.5
+#        lat_interval = -0.005
+#        lat1 = -77.5
+#        lat_list = np.arange(lat0, lat1, lat_interval)
+#
+#        llon, llat = np.meshgrid(lon_list,lat_list)
+#
+#        showmat = np.zeros(llon.shape)
+#        showmat[:] = np.nan
+#
+#        #print(showmat.shape)
+#
+#        points={}
+#
+#        for key in show_dict.keys():
+#            lon,lat = key
+#            ind_x = int(round((lon-lon0)/lon_interval))
+#            ind_y = int(round((lat-lat0)/lat_interval))
+#
+#            if not (ind_y,ind_x) in points.keys():
+#                points[(ind_y,ind_x)] = (lon,lat)
+#            else:
+#                print('Confliction!')
+#                print(points[(ind_y,ind_x)])
+#                print(key)
+#                print(ind_x,ind_y)
+#                print(stop)
+#
+#            if ind_x>=0 and ind_x<len(lon_list) and ind_y>=0 and ind_y<len(lat_list):
+#                showmat[ind_y,ind_x] = show_dict[key]
+#
+#        print(len(points.keys()))
+#
+#        # Plot.
+#        fig = plt.figure(figsize=(10,7))
+#        ax = fig.add_subplot(111)
+#
+#        extent=[lon_list[0],lon_list[-1],lat_list[-1],lat_list[0]]
+#
+#        f1 = ax.imshow(showmat,cmap=plt.cm.coolwarm,vmin=0,vmax=0.15, extent=extent, aspect='auto')
+#        #f1 = ax.imshow(showmat,cmap=plt.cm.jet,vmin=0,vmax=10)
+#
+#        # Plot grounding line.
+#        f = open(self.glfile)
+#        data = f.readlines()
+#        print(len(data))
+#
+#        #subdata = [pair for pair in data if float(pair.split()[0])>=lon0 and float(pair.split()[0])<=lon1 and float(pair.split()[1])<=lat0 and float(pair.split()[1])>=lat1 ]
+#        #print(len(subdata))
+#        
+#        #x = [pair.split()[0] for pair in subdata]
+#        #y = [pair.split()[1] for pair in subdata]
+#
+#        x=[]
+#        y=[]
+#        for i in range(0,len(data),100):
+#            pair = data[i]
+#            lon = float(pair.split()[0])
+#            lat = float(pair.split()[1])
+#            x.append(lon)
+#            y.append(lat)
+#            
+#        ax.plot(x,y,'k.',label='grouding line')
+#        ax.legend(loc=3)
+#
+#        ax.set_xlim([lon_list[0],lon_list[-1]])
+#        ax.set_ylim([lat_list[-1],lat_list[0]])
+#        ax.set_xlabel('Longitude')
+#        ax.set_ylabel('Latitude')
+#
+#
+#        #ax.set_title('sensitivity of noise')
+#        cbar=fig.colorbar(f1,orientation='vertical',shrink=0.8,ticks=np.arange(0,0.201,0.05))
+#        cbar.set_label('max value in sensitivity matrix', fontsize=15)
+#
+#        #fig.colorbar(f1,orientation='horizontal',shrink=0.8)
+#        fig.savefig('temp.png',format='png')
+#        
+#        print('Done')
+#
+#        return 0
 
-        # Second coordinate (length) 
-        lat0 = -74.5
-        lat_interval = -0.005
-        lat1 = -77.5
-        lat_list = np.arange(lat0, lat1, lat_interval)
-
-        llon, llat = np.meshgrid(lon_list,lat_list)
-
-        showmat = np.zeros(llon.shape)
-        showmat[:] = np.nan
-
-        #print(showmat.shape)
-
-        points={}
-
-        for key in show_dict.keys():
-            lon,lat = key
-            ind_x = int(round((lon-lon0)/lon_interval))
-            ind_y = int(round((lat-lat0)/lat_interval))
-
-            if not (ind_y,ind_x) in points.keys():
-                points[(ind_y,ind_x)] = (lon,lat)
-            else:
-                print('Confliction!')
-                print(points[(ind_y,ind_x)])
-                print(key)
-                print(ind_x,ind_y)
-                print(stop)
-
-            if ind_x>=0 and ind_x<len(lon_list) and ind_y>=0 and ind_y<len(lat_list):
-                showmat[ind_y,ind_x] = show_dict[key]
-
-        print(len(points.keys()))
-
-        # Plot.
-        fig = plt.figure(figsize=(10,7))
-        ax = fig.add_subplot(111)
-
-        extent=[lon_list[0],lon_list[-1],lat_list[-1],lat_list[0]]
-
-        f1 = ax.imshow(showmat,cmap=plt.cm.coolwarm,vmin=0,vmax=0.15, extent=extent, aspect='auto')
-        #f1 = ax.imshow(showmat,cmap=plt.cm.jet,vmin=0,vmax=10)
-
-        # Plot grounding line.
-        f = open(self.glfile)
-        data = f.readlines()
-        print(len(data))
-
-        #subdata = [pair for pair in data if float(pair.split()[0])>=lon0 and float(pair.split()[0])<=lon1 and float(pair.split()[1])<=lat0 and float(pair.split()[1])>=lat1 ]
-        #print(len(subdata))
-        
-        #x = [pair.split()[0] for pair in subdata]
-        #y = [pair.split()[1] for pair in subdata]
-
-        x=[]
-        y=[]
-        for i in range(0,len(data),100):
-            pair = data[i]
-            lon = float(pair.split()[0])
-            lat = float(pair.split()[1])
-            x.append(lon)
-            y.append(lat)
-            
-        ax.plot(x,y,'k.',label='grouding line')
-        ax.legend(loc=3)
-
-        ax.set_xlim([lon_list[0],lon_list[-1]])
-        ax.set_ylim([lat_list[-1],lat_list[0]])
-        ax.set_xlabel('Longitude')
-        ax.set_ylabel('Latitude')
-
-
-        #ax.set_title('sensitivity of noise')
-        cbar=fig.colorbar(f1,orientation='vertical',shrink=0.8,ticks=np.arange(0,0.201,0.05))
-        cbar.set_label('max value in sensitivity matrix', fontsize=15)
-
-        #fig.colorbar(f1,orientation='horizontal',shrink=0.8)
-        fig.savefig('temp.png',format='png')
-        
-        print('Done')
-
-        return 0
-
-    def write_dict_to_xyz(self, show_dict, xyz_name):
-        
-        # Write to txt file.
-
-        f = open(xyz_name,'w')
-        cap=1000
-        for key in sorted(show_dict.keys()):
-            lon, lat = key
-
-            lon, lat = self.int5d_to_float([lon,lat])
-
-            value = show_dict[key]
-
-            # More then one value (velocity vector).
-            if isinstance(value,tuple):
-                if not np.isnan(value[0]):
-                    record = str(lon)+' '+str(lat)
-                    for irec in range(len(value)):
-                        record = record + ' ' + str(value[irec])
-                    record = record + '\n'
-                    f.write(record)
-            else:
-
-                # Only output valid values.
-                value = min(value,cap)
-                if not np.isnan(value):
-                    f.write(str(lon)+' '+str(lat)+' '+str(value)+'\n')
-
-        f.close()
-        return
+#    def write_dict_to_xyz(self, show_dict, xyz_name):
+#        
+#        # Write to txt file.
+#
+#        f = open(xyz_name,'w')
+#        cap=1000
+#        for key in sorted(show_dict.keys()):
+#            lon, lat = key
+#
+#            lon, lat = self.int5d_to_float([lon,lat])
+#
+#            value = show_dict[key]
+#
+#            # More then one value (velocity vector).
+#            if isinstance(value,tuple):
+#                if not np.isnan(value[0]):
+#                    record = str(lon)+' '+str(lat)
+#                    for irec in range(len(value)):
+#                        record = record + ' ' + str(value[irec])
+#                    record = record + '\n'
+#                    f.write(record)
+#            else:
+#
+#                # Only output valid values.
+#                value = min(value,cap)
+#                if not np.isnan(value):
+#                    f.write(str(lon)+' '+str(lat)+' '+str(value)+'\n')
+#
+#        f.close()
+#        return
  
     def tide_symbols(self,tide_name):
         pass
-
 
     def display_vecs(self, stacked_vecs, row_names, column_names, label):
 

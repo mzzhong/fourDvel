@@ -224,7 +224,7 @@ class output(fourdvel):
             this_grid_set = pickle.load(f)
 
         # credible interval needs to before grounding level for filtering purposes
-        quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level", "height"]
+        quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "height"]
 
         states = ['true', 'est']
 
@@ -245,10 +245,12 @@ class output(fourdvel):
                         continue
     
                     # Ad hoc treatment of grounding level
-                    if quant_name == "optimal_grounding_level":
+                    if quant_name.startswith("optimal_grounding_level"):
+
+                        quant_name_orig = 'optimal_grounding_level'
    
                         # If the data doesn't exist 
-                        if not quant_name in this_grid_set[point].keys():
+                        if not quant_name_orig in this_grid_set[point].keys():
                             continue
    
                         # Remove the stagnent points 
@@ -257,18 +259,22 @@ class output(fourdvel):
                         #if self.grid_set_velo[point][2]<=0.1:
                             continue
     
-                        if this_grid_set[point][quant_name]=='external':
+                        if this_grid_set[point][quant_name_orig]=='external':
                             continue
   
                         if state == 'est':
-                            optimal_grounding_level = this_grid_set[point][quant_name]/(10**6) 
+                            optimal_grounding_level = this_grid_set[point][quant_name_orig]/(10**6) 
                             # Remove very low grounding level, note the value is integer
                             if optimal_grounding_level <= -2.8:
                                 continue
 
+                            #gl_ci_thres = 0.5
+                            gl_ci_thres = 1.0
+                            #gl_ci_thres = 1.5
+                            #gl_ci_thres = 100
                             # Remove based obtained credible level
                             gl_ci = grid_set_gl_ci.get(point, np.nan)
-                            if np.isnan(gl_ci) or gl_ci>=0.4:
+                            if np.isnan(gl_ci) or gl_ci>=gl_ci_thres:
                                 continue
 
                         # Remove points with fewer than 2 tracks
@@ -278,6 +284,7 @@ class output(fourdvel):
                     # Record everything, including np.nan
                     # np.nan is filtered in write_dict_to_xyz
 
+
                     # up_scale
                     if quant_name in ["up_scale"]:
                         if state == "true":
@@ -286,20 +293,32 @@ class output(fourdvel):
                             grid_set_quant[point] = this_grid_set[point].get(quant_name, np.nan)
 
                     # optimal grounding level
-                    elif quant_name in ["optimal_grounding_level"]:
+                    elif quant_name.startswith("optimal_grounding_level"):
+
+                        #if quant_name.endswith('prescale'):
+                        #print(quant_name)
+                        #print(stop)
 
                         if state == "true":
-                            grid_set_quant[point] = this_grid_set[point].get("true_" + quant_name, np.nan)
+                            grid_set_quant[point] = this_grid_set[point].get("true_" + "optimal_grounding_level", np.nan)
+
                         elif state == 'est':
-                            optimal_grounding_level_int = this_grid_set[point].get(quant_name, np.nan)
+                            optimal_grounding_level_int = this_grid_set[point].get("optimal_grounding_level", np.nan)
                             optimal_grounding_level = optimal_grounding_level_int / 10**6
 
                             crsp_up_scale = this_grid_set[point].get("up_scale",np.nan)
-                       
-                            if "grounding_level_up_scale" in this_grid_set[point]: 
-                                grid_set_quant[point] = optimal_grounding_level * crsp_up_scale
-                            else:
+
+                            # unscaled
+                            if quant_name.endswith('prescale'):
                                 grid_set_quant[point] = optimal_grounding_level
+
+                            # scaled
+                            else:
+                                if "grounding_level_up_scale" in this_grid_set[point]: 
+                                    grid_set_quant[point] = optimal_grounding_level * crsp_up_scale
+                                else:
+                                    raise ValueError()
+
                         else:
                             raise ValueError()
 
@@ -328,6 +347,7 @@ class output(fourdvel):
 
                 # Write to xyz file.
                 xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + 'others' + '_' + quant_name + '.xyz')
+                print("Saving: ", xyz_name)
                 
                 self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
 
@@ -459,6 +479,7 @@ class output(fourdvel):
                         'Msf_north_displacement_amplitude',
                         'Msf_north_displacement_phase',
 
+
                         'Mf_horizontal_displacement_amplitude',
                         'Mf_north_displacement_amplitude',
                         'Mf_north_displacement_phase',
@@ -489,6 +510,13 @@ class output(fourdvel):
                         "Msf_up_displacement_amplitude",
                         "Msf_up_displacement_phase",
 
+                        # Msf east and north
+                        "Msf_east_displacement_amplitude",
+                        "Msf_east_displacement_phase",
+
+                        "Msf_north_displacement_amplitude",
+                        "Msf_north_displacement_phase",
+
 
                         # Mf
                         'Mf_horizontal_displacement_amplitude',
@@ -503,11 +531,6 @@ class output(fourdvel):
 
                         ]
 
-#        quant_list = [
-#                        'M2_up_displacement_amplitude',
-#                        'M2_up_displacement_phase',
-#                        'O1_up_displacement_amplitude',
-#                        'O1_up_displacement_phase']
 
         if quant_list_name == "BM_2017":
             quant_list = [  'secular_horizontal_speed',
@@ -522,18 +545,18 @@ class output(fourdvel):
                             'O1_up_displacement_phase',
      
                             # Msf
-                            "Msf_horizontal_displacement_group"
+                            "Msf_horizontal_displacement_group"                            
                             ]
 
         sub_quant_names_for_groups = {}
-        sub_quant_names_for_groups["Msf_horizontal_displacement_group"] = ["Msf_along_flow_displacement_amplitude",
+        sub_quant_names_for_groups["Msf_horizontal_displacement_group"] = [ "Msf_along_flow_displacement_amplitude",
                                                                             "Msf_along_flow_displacement_phase",
                                                                             "Msf_along_flow_displacement_phase_in_deg",
                                                                             
                                                                             "Msf_cross_flow_displacement_amplitude", 
                                                                             "Msf_cross_flow_displacement_phase",
-                                                                            "Msf_horizontal_displacement_amplitude"]
 
+                                                                            "Msf_horizontal_displacement_amplitude"]
 
         states = {}
         states['true'] = self.grid_set_true_tide_vec
@@ -546,6 +569,9 @@ class output(fourdvel):
 
         # Used for save the results from true and est to get bias
         saved_grid_set_quant_results = {}
+
+        # Create a file to save mean phase
+        f_mp  = open(self.estimation_dir + '/' + 'mean_phase.txt','w')
 
         for state in output_states:
 
@@ -619,7 +645,11 @@ class output(fourdvel):
     
                                 # Save it into grid_set_quant
                                 for sub_quant_name in sub_quant_names:
-                                    grid_set_quant[sub_quant_name][point] = quant_group[sub_quant_name]
+                                    try:
+                                        grid_set_quant[sub_quant_name][point] = quant_group[sub_quant_name]
+                                    except:
+                                        print(grid_set_quant.keys())
+                                        print(stop)
     
     
                     # Normal single mode
@@ -659,21 +689,32 @@ class output(fourdvel):
                     for sub_quant_name in sub_quant_names:
     
                         if (state=='true' or state=='est') and 'phase' in sub_quant_name:
-    
+
+                            # Remove wrong phase where there is only one track
+                            for point in grid_set_quant[sub_quant_name].keys():
+                                # Need at least two track
+                                if len(self.grid_set[point])<=1:
+                                    grid_set_quant[sub_quant_name][point] = np.nan
+                        
                             values = np.asarray(list(grid_set_quant[sub_quant_name].values()))
+
+                            # count the number of non-zero values
                             count = np.count_nonzero(~np.isnan(values))
-    
+   
+                            # If there are at least one valid value 
                             if count>0:
-                                if do_correction_with_true ==True and \
-                                                sub_quant_name in phase_center and \
-                                                state == "est":
-                                    print("In phase center: ",sub_quant_name)
+                                if do_correction_with_true ==True and sub_quant_name in phase_center and state == "est":
+                                    print("In phase center: ", sub_quant_name)
                                     center = phase_center[sub_quant_name]
                                 else:
-                                    print("Calculate th mean phase")
+                                    print("Calculated the mean phase")
                                     center = np.nansum(values) /count
+
+                                # Save the mean phase
+                                f_mp.write(sub_quant_name + ' ' + str(center)+'\n')
     
                                 # Do correction
+                                # Forced no correction for "in_deg" (ad hoc)
                                 if do_correction and not "in_deg" in sub_quant_name:
     
                                     print("Do mean phase shift")
@@ -689,6 +730,7 @@ class output(fourdvel):
                                     phase_center[sub_quant_name] = center
     
                     ######## End of mean phase correction   #####
+
                 elif state == "bias":
                     # Note that: For "true", there is no output_keys in data_mode 3.
                     print('Output quantity name: ', quant_name)
@@ -724,9 +766,15 @@ class output(fourdvel):
                                     grid_set_quant[sub_quant_name][point] = tuple([est_grid_set_quant[point][j]-true_grid_set_quant[point][j] for j in range(len(true_grid_set_quant[point]))])
                                 else:
                                     raise Exception()
-                # Unknown states 
                 else:
-                    raise Exception()
+                    raise ValueError('unknown state')
+
+                # Remove some points here
+                for sub_quant_name in sub_quant_names:
+                    for point in grid_set_quant[sub_quant_name].keys():
+                        # Need at least two track
+                        if len(self.grid_set[point])<=1:
+                            grid_set_quant[sub_quant_name][point] = np.nan
     
                 #### Write to xyz file #####
                 for sub_quant_name in sub_quant_names:
@@ -735,6 +783,8 @@ class output(fourdvel):
 
                     # Save the results
                     saved_grid_set_quant_results[(state, sub_quant_name)] = grid_set_quant[sub_quant_name]
+
+        f_mp.close()
 
         return 0                
 
@@ -745,6 +795,14 @@ def main(iargs=None):
     out = output(inps)
 
     output_states = []
+
+    # override the setting
+    #out.output_true = False
+    #out.output_uq = False
+    #out.output_resid = False
+    #out.output_difference = False
+
+    # Start to output
     if out.output_true: output_states.append("true")
     if out.output_est:  output_states.append("est")
     if out.output_uq:   output_states.append("uq")
@@ -754,8 +812,6 @@ def main(iargs=None):
         output_states.append("bias")
 
     if out.output_others: out.run_output_others()
-
-    return
 
     quant_list_name = inps.quant_list_name
 

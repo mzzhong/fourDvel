@@ -196,10 +196,11 @@ class fourdvel(basics):
         self.csk_data_log = None
         self.csk_data_product_ids = None
 
+        self.up_disp_mode = None
+
         fmt = '%Y%m%d'
 
         for param in params:
-            
             try:    
                 name,value = param.split(':')
                 name = name.strip()
@@ -410,6 +411,14 @@ class fourdvel(basics):
                 print('s1_excluded_tracks: ',self.s1_excluded_tracks)
 
             # Modeling
+            if name == 'up_disp_mode':
+                self.up_disp_mode = value
+                print('up_disp_mode', value)
+
+            if name == 'up_disp_data_folder':
+                self.up_disp_data_folder = value
+                print('up_disp_data_folder', value)
+
             if name == 'modeling_tides':
                 self.modeling_tides = [x.strip() for x in value.split(',')]
                 self.n_modeling_tides = len(self.modeling_tides)
@@ -700,6 +709,7 @@ class fourdvel(basics):
                     if len(datestr)==8:
                         theDate = date(int(datestr[0:4]), int(datestr[4:6]), int(datestr[6:8]))
 
+                        # For Evans project
                         # ad hoc, remove short data on track 11
                         if track_num == 11 and theDate >= date(2017,12,20) and theDate <= date(2018,3,4):
                             continue
@@ -719,6 +729,8 @@ class fourdvel(basics):
                         # 04: 2018, 2019, 2020 data
                         #if track_num == 12 and theDate <= date(2017,12,31):
                             continue
+
+                        # For Rutford project
 
                         if theDate >= csk_start and theDate < csk_end:
                             csk_data[track_num].append(theDate)
@@ -1147,14 +1159,21 @@ class fourdvel(basics):
 
     def get_up_disp_set(self, point_set, offsetfields_set):
 
-        # Same as the input time series for vertical motion
-        #up_disp_mode = "single"
+        if self.up_disp_mode is not None:
+            up_disp_mode = self.up_disp_mode
 
-        # Use parameterized vertical motion (10 constituents)
-        up_disp_mode = "parametric_single"
+        else:
+            # Same as the input time series for vertical motion
+            #up_disp_mode = "single"
+    
+            # Use parameterized vertical motion (10 constituents)
+            up_disp_mode = "parametric_single"
+    
+            # Use self-derived vertical motion
+            #up_disp_mode = "parametric_map"
 
-        # Use self-derived vertical motion
-        #up_disp_mode = "varying"
+            print("Please check the up disp mode: ", up_disp_mode)
+            print(stop)
 
         if up_disp_mode == "single":
             up_disp_set = {}
@@ -1167,13 +1186,12 @@ class fourdvel(basics):
                 tide_cons, tide_params = self.read_ris_tides_params()
             else:
                 raise ValueError()
-
             up_disp_set = {}
             for point in point_set:
                 up_disp_set[point] = self.get_up_parametric_single_disp_for_point(point, offsetfields_set[point], tide_cons, tide_params)
 
-        elif up_disp_mode == "varying":
-            up_disp_data_folder = "/marmot-nobak/mzzhong/insarRoutines/tide_model_time_series/001"
+        elif up_disp_mode == "parametric_map":
+            up_disp_data_folder = self.up_disp_data_folder
             
             # load time axis
             pklfilename = 'taxis.pkl'
@@ -1183,7 +1201,6 @@ class fourdvel(basics):
  
             up_disp_set = {}
             for point in point_set:
-
                 check_result = 0
                 # Compare the old and new up disp data
                 if check_result:
@@ -1208,9 +1225,7 @@ class fourdvel(basics):
                         ax.plot(taxis, self.tide_data)
                         ax = fig.add_subplot(414)
                         ax.plot(taxis, up_disp - self.tide_data)
-
                         fig.savefig("m0_m1.png")
- 
                         print(stop)
 
                 # get the up disp data
@@ -1310,11 +1325,18 @@ class fourdvel(basics):
 
         # Important! Need to enforce 0.001 delta here. Using taxis[1]-taxis[0] will cause problem due to float precision 
         t_delta = 0.001
+        # Assert if this t_delta is correct
+        assert abs(taxis[1] - taxis[0] - 0.001) < 1e-3, print("t_delta is wrong")
+
+        # The index of the value
         ta_inds = np.round((ta_arr - taxis[0])/t_delta).astype(np.int)
         tb_inds = np.round((tb_arr - taxis[0])/t_delta).astype(np.int)
 
         tide_height_master = up_disp[ta_inds]
         tide_height_slave = up_disp[tb_inds]
+
+        # To save the memory
+        del up_disp
 
         return (tide_height_master, tide_height_slave)
 
@@ -1656,12 +1678,16 @@ class fourdvel(basics):
         # End of building.
 
 
-    def modify_G_set(self, point_set, G_set, offsetfields_set, grounding_level, gl_name):
+    def modify_G_set(self, point_set, G_set, offsetfields_set, up_disp_set, grounding_level, gl_name):
 
         # Extract the stack of up displacement from the tide model
-        up_disp_set = self.get_up_disp_set(point_set, offsetfields_set)
+        # up_disp_set = self.get_up_disp_set(point_set, offsetfields_set)
 
         for point in point_set:
+
+            #if point == self.test_point:
+            #    print(point)
+            #    print(grounding_level[point])
 
             G = G_set[point]
             tide_height_master_model, tide_height_slave_model = up_disp_set[point]
@@ -1690,11 +1716,21 @@ class fourdvel(basics):
             
             elif gl_name == "optimal":
                 # Try to get the value from others_set
-                try:
+                if point in grounding_level:
                     given_grounding_level_int = grounding_level[point]['optimal_grounding_level']
                     given_grounding_level = given_grounding_level_int / (10**6)
-                    #print("optimal grounding level at this point is: ", given_grounding_level)
-                except:
+
+                    #if point == self.test_point:
+                    #    print('given_grounding_level: ', given_grounding_level)
+
+                    # 2021.04.10: Manually clip value large than zero
+                    given_grounding_level = min(given_grounding_level, 0)
+
+                    # 2021.04.12: Manually set the value to be -10
+                    #given_grounding_level = -10
+                    print("In optimal mode: optimal grounding level at this point is: ", point, given_grounding_level)
+
+                else:
                     given_grounding_level = -10
 
                 # If invalid, set it to be -10
@@ -2287,7 +2323,7 @@ class fourdvel(basics):
         #    print(y)
         #    return (np.nan, np.nan)
 
-    def calc_hpdi_v2(self, x, y, alpha=0.9):
+    def calc_hpdi_v2(self, x, y, alpha=None):
 
         if np.isnan(y[0]):
             return (np.nan, np.nan)
@@ -2296,7 +2332,13 @@ class fourdvel(basics):
             return (np.nan, np.nan)
 
         l = len(x)
-        alpha = 0.9 
+
+        if alpha is None:
+            alpha = 0.95
+
+        # Set nan to zero
+        y[np.isnan(y)] = 0
+
         max_ind = np.argmax(y)
         left = max_ind
         right = max_ind
@@ -2304,6 +2346,10 @@ class fourdvel(basics):
         total_mass = np.nansum(y)
         
         mass = y[max_ind]
+
+        #print("max_ind: ", max_ind, x[max_ind], y[max_ind])
+        #print(y)
+
         # Expand from the max point
         while mass < total_mass * alpha:
             #print(left, right, mass)
@@ -2345,6 +2391,10 @@ class fourdvel(basics):
         select_mode = "likelihood"
  
         for point in point_set:
+
+            #if point != self.test_point:
+            #    continue
+
             velo_model = grid_set_velo[point]
 
             # Set true value
@@ -2404,9 +2454,10 @@ class fourdvel(basics):
                 # calculate credible interval
                 if len(grounding_levels)>=2:
                     # Need to consider the case if the enumeration is not even
-                    # Do interpolation on [-3,0] spacing = 0.01
+                    # Do interpolation on [-4,0] spacing = 0.01
                     interp_fun = interp1d(grounding_levels, likelihoods, kind='linear')
-    
+   
+                    # interpolation every 1cm (10**(-2))
                     gls_interp = np.arange(min(grounding_levels),max(grounding_levels)+1e-6, 10**(-2) * 10**6)
                     likelihoods_interp = interp_fun(gls_interp)
     
@@ -2430,8 +2481,11 @@ class fourdvel(basics):
                     #    elapsed_time = time.time() - start_time
                     #    print("Elapased time: ", elapsed_time)
                     #    print(gl_ci_2)
-    
+
+                    #print(gls_interp / 10**6)
+                    #print(gl_probs_interp) 
                     gl_ci_2 = self.calc_hpdi_v2(gls_interp/10**6, gl_probs_interp)
+
                 else:
                     gls_interp = grounding_levels
                     gl_probs_interp = np.ones(shape=(1,))
@@ -2441,7 +2495,7 @@ class fourdvel(basics):
 
                 # For test point, save and show the result
                 if point == self.test_point:
-                    show_test_point = False
+                    show_test_point = True
                     if show_test_point:
                         print('optimal gl: ', others_set[point]["optimal_grounding_level"])
                         #print('interpolating on : ')
@@ -2449,6 +2503,7 @@ class fourdvel(basics):
                         #print(likelihoods)
 
                         print('credible interval: ', others_set[point]["grounding_level_credible_interval"])
+                        print('enumerate grounding level: ', grounding_levels)
 
                         # Plot the probability
                         fig = plt.figure(200, figsize=(7,7))
@@ -2458,6 +2513,7 @@ class fourdvel(basics):
                         ax = fig.add_subplot(212)
                         ax.plot(gls_interp, gl_probs_interp)
                         fig.savefig('200.png')
+                        print(stop)
 
                     # Save the probability 
                     others_set[point]["grounding_level_prob"] = {}
@@ -2814,7 +2870,7 @@ class fourdvel(basics):
                     phase_crf = self.wrapped_deg(phase_crf)
 
                     # Record the degree value
-                    phase_crf_in_deg = self.rad2deg(phase_crf)
+                    phase_crf_in_deg = phase_crf
 
                     phase_crf = self.deg2day(phase_crf, tide_name)
 
@@ -2825,24 +2881,23 @@ class fourdvel(basics):
 
                     lon, lat = self.int5d_to_float(point)
 
-                    thres_for_v = 0.4
-                    thres_for_amp = 0.1
-
                     thres_for_v = 0.1
-                    thres_for_amp = 0.1
+                    thres_for_amp_alf = 0.075
+                    thres_for_amp_crf = 0.075
+                    thres_for_amp_crf = 0.025
 
                     amp_full = (amp_alf**2 + amp_crf**2)**0.5
 
                     # Remove some invalid phase values
-                    if v_model>thres_for_v and amp_alf>thres_for_amp:
-                        #if self.proj == "Rutford" and lat<-77.8:
+                    if v_model>thres_for_v and amp_alf>thres_for_amp_alf:
                         if self.proj == "Rutford":
+                        # Remove the northern data
+                        #if self.proj == "Rutford" and lat<-77.8:
                             pass
 
                         #elif self.proj == "Evans" and lat<-75.85:
                         elif self.proj == "Evans":
                             pass
-
                         else:
                             phase_alf = np.nan
                             phase_alf_in_deg = np.nan
@@ -2851,7 +2906,8 @@ class fourdvel(basics):
                         phase_alf_in_deg = np.nan
 
 
-                    if v_model > thres_for_v and amp_crf > thres_for_amp:
+                    # filter the phase crf
+                    if v_model > thres_for_v and amp_crf > thres_for_amp_crf:
                         if self.proj == "Rutford" and lat<-77.8:
                             pass
 
@@ -2875,9 +2931,10 @@ class fourdvel(basics):
 
                     quant["Msf_cross_flow_displacement_amplitude"] = amp_crf
                     quant["Msf_cross_flow_displacement_phase"] = phase_crf
-                    quant["Msf_cross_flow_displacement_phase"] = phase_crf_in_deg
+                    quant["Msf_cross_flow_displacement_phase_in_deg"] = phase_crf_in_deg
 
                     quant["Msf_horizontal_displacement_amplitude"] = amp_full 
+                    
                     return quant
 
                 else:
@@ -2899,11 +2956,23 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
-                    phaseE=self.velo_phase_to_dis_phase(t_vec[3+k*6+3])
 
-                    quant = self.rad2deg(phaseE)
-                    quant = self.wrapped_deg(quant)
+                    # Find the phase
+                    value = t_vec[3+k*6+3]
 
+                    if state in [ 'true','est']:
+                        phaseE=self.velo_phase_to_dis_phase(value)
+                        quant = self.rad2deg(phaseE)
+                        quant = self.deg2day(quant, tide_name)
+                        
+                    elif state in ['uq']:
+                        quant = value
+                        quant = self.rad2deg(quant)
+                        quant = self.deg2day(quant, tide_name)
+
+                    else:
+                        raise Exception("Unknown state")
+ 
                 else:
                     k=k+1
 
@@ -2922,10 +2991,23 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
-                    phaseN = self.velo_amp_to_dis_amp(t_vec[3+k*6+4],tide_name)
-                    quant = self.rad2deg(phaseN)
-                    quant = self.wrapped_deg(quant)
 
+                    # Find the phase
+                    value = t_vec[3+k*6+4]
+
+                    if state in [ 'true','est']:
+                        phaseE=self.velo_phase_to_dis_phase(value)
+                        quant = self.rad2deg(phaseE)
+                        quant = self.deg2day(quant, tide_name)
+                        
+                    elif state in ['uq']:
+                        quant = value
+                        quant = self.rad2deg(quant)
+                        quant = self.deg2day(quant, tide_name)
+
+                    else:
+                        raise Exception("Unknown state")
+ 
                 else:
                     k=k+1
 
@@ -3149,6 +3231,8 @@ class fourdvel(basics):
                     thres = 0.1
                     # 2021.01.29
                     thres = 0.04
+                    # 2021.04.06
+                    thres = 0.03
 
                     if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
                         # Find the phase

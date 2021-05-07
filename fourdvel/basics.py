@@ -2,8 +2,9 @@
 
 # Author: Minyan Zhong
 # Aug, 2018
-
+import os
 import numpy as np
+import pandas as pd
 import datetime
 import math
 import pathlib
@@ -14,6 +15,9 @@ class basics():
 
         # Set NAN value
         self.INT_NAN = -99999
+
+        # Set float to integer convertion
+        self.float2int = 10**5
 
         # Directory of Antarctic data
         self.Ant_Data_dir = '/net/kraken/bak/mzzhong/Ant_Data'
@@ -291,12 +295,15 @@ class basics():
 
         return min_cov
 
-    def read_ris_tides_params(self):
+    def read_ris_tides_params(self, params_file=None):
 
         # Read in tide params exported from TMD MATLAB code
         print("Reading RIS tide model...")
-        ris_tides_params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/RIS_tides_params.txt"
-        f = open(ris_tides_params_file)
+        
+        if params_file is None:
+            params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/RIS_tides_params.txt"
+        
+        f = open(params_file)
         lines = f.readlines()
         f.close()
 
@@ -354,6 +361,147 @@ class basics():
 
             # Save the amplitude and phase
             ris_tides_params[(tide_name1, "tide_amp")] = tide_amp
-            ris_tides_params[(tide_name1, "tide_phase")] = tide_phase
+
+            ris_tides_params[(tide_name1, "tide_phase")] = tide_phase            
+            ris_tides_params[(tide_name1, "tide_phase_deg")] = tide_phase_deg
+            ris_tides_params[(tide_name1, "tide_phase_min")] = tide_phase_min
 
         return (tide_names, ris_tides_params)
+
+    def write_dict_to_xyz(self, show_dict, xyz_name, f2i=None):
+        
+        # Write to txt file.
+        f = open(xyz_name,'w')
+        cap=1000
+        for key in sorted(show_dict.keys()):
+            lon, lat = key
+
+            if f2i is None:
+                lon, lat = self.int5d_to_float([lon,lat])
+            else:
+                lon, lat = lon/f2i, lat/f2i
+
+            value = show_dict[key]
+
+            # More then one value (velocity vector).
+            if isinstance(value,tuple):
+                if not np.isnan(value[0]):
+                    record = str(lon)+' '+str(lat)
+                    for irec in range(len(value)):
+                        record = record + ' ' + str(value[irec])
+                    record = record + '\n'
+                    f.write(record)
+            else:
+
+                # Only output valid values.
+                value = min(value,cap)
+                if not np.isnan(value):
+                    f.write(str(lon)+' '+str(lat)+' '+str(value)+'\n')
+
+        f.close()
+
+        return
+
+    def write_datamat_to_xyz(self, datamat, xaxis, yaxis, xyz_name, f2i=None):
+       
+        f = open(xyz_name,'w')
+
+        xaxis = np.asarray(xaxis) / f2i
+        yaxis = np.asarray(yaxis) / f2i
+
+        for i in range(len(yaxis)):
+            for j in range(len(xaxis)):
+                lon = xaxis[j]
+                lat = yaxis[i]
+                value = datamat[i, j]
+                if not np.isnan(value):
+                    f.write(str(lon)+' '+str(lat)+' '+str(value)+'\n')
+
+        f.close()
+
+        return
+
+    def write_UV_to_vec(self, Umat, Vmat, Imat, xaxis, yaxis, vec_name, thres_I, len_scaling, f2i=None):
+
+        # Degree.
+        angle = np.rad2deg(np.arctan2(Vmat,Umat))
+        # Length.
+        length = np.sqrt(Umat**2 + Vmat**2) * len_scaling
+
+        # Mask out small values by intensity mat
+        #quant = (angle, length)
+        angle[Imat<thres_I] = np.nan
+        length[Imat<thres_I] = np.nan
+       
+        f = open(vec_name, 'w')
+        xaxis = np.asarray(xaxis) / f2i
+        yaxis = np.asarray(yaxis) / f2i
+
+        for i in range(len(yaxis)):
+            for j in range(len(xaxis)):
+                lon = xaxis[j]
+                lat = yaxis[i]
+
+                aa = angle[i,j]
+                ll = length[i,j]
+
+                if not np.isnan(ll):
+                    f.write(str(lon)+' '+str(lat)+' '+str(aa)+' '+str(ll)+'\n')
+
+        f.close()
+
+    def read_xyz_into_dict(self, file_name, f2i=None):
+
+        if f2i is None:
+            f2i = self.float2int
+
+        data_df = pd.read_csv(file_name, delim_whitespace=True, header=None)
+        X = data_df.iloc[:,0] * f2i
+        Y = data_df.iloc[:,1] * f2i
+        values = data_df.iloc[:,2]
+        X = np.round(X).astype(np.int)
+        Y = np.round(Y).astype(np.int)
+
+        data_dict = {}
+        for i in range(len(X)):
+            data_dict[(X[i], Y[i])] = values[i]
+
+        return data_dict
+
+    def read_point_data_from_xyz(self, point, file_name, project, winsize=(1,1)):
+
+        print(file_name)
+
+        px, py = point
+
+        local_f2i = 10**4
+
+        px = int(round(px * local_f2i))
+        py = int(round(py * local_f2i))
+
+        #print(file_name)
+        #print(stop)
+
+        data_df = pd.read_csv(file_name, delim_whitespace=True, header=None)
+        X = data_df.iloc[:,0] * local_f2i
+        Y = data_df.iloc[:,1] * local_f2i
+        values = data_df.iloc[:,2]
+        X = np.round(X).astype(np.int)
+        Y = np.round(Y).astype(np.int)
+
+        # Set the window for average
+        if project == 'Rutford':
+            x_delta = int(round(0.025 * local_f2i))
+            y_delta = int(round(0.005 * local_f2i))
+        else:
+            raise Exception()
+
+        valid_x = np.absolute(X - px) <= winsize[0]*x_delta
+        valid_y = np.absolute(Y - py) <= winsize[1]*y_delta
+
+        valid_xy = np.logical_and(valid_x, valid_y)
+        #print(np.sum(valid_x), np.sum(valid_y), np.sum(valid_xy))
+
+        data_value = np.mean(values[valid_xy])
+
+        return data_value
