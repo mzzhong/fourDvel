@@ -1167,13 +1167,11 @@ class fourdvel(basics):
             #up_disp_mode = "single"
     
             # Use parameterized vertical motion (10 constituents)
-            up_disp_mode = "parametric_single"
+            up_disp_mode = "single"
     
             # Use self-derived vertical motion
             #up_disp_mode = "parametric_map"
-
             print("Please check the up disp mode: ", up_disp_mode)
-            print(stop)
 
         if up_disp_mode == "single":
             up_disp_set = {}
@@ -1972,7 +1970,6 @@ class fourdvel(basics):
         num_params = 3 + n_modeling_tides*6
         param_uq = np.zeros(shape=(num_params,1))
 
-
         # If Cm_p is invalid.
         if np.isnan(Cm_p[0,0]):
             param_uq = param_uq + np.nan
@@ -1986,7 +1983,6 @@ class fourdvel(basics):
 
         # Tide components.
         for k in range(n_modeling_tides):
-
             # E, N ,U
             for t in range(3):
         
@@ -2024,6 +2020,7 @@ class fourdvel(basics):
 
         # From variance to standard deviation (Important!).
         param_uq = np.sqrt(param_uq)
+        
         return param_uq
 
     def simple_data_uncertainty_set(self, point_set, data_vec_set, noise_sigma_set):
@@ -2181,14 +2178,13 @@ class fourdvel(basics):
 
         # If G is singular.
         if np.linalg.cond(invCm_p) < 1/sys.float_info.epsilon:
-            #print('normal')
-        #if np.linalg.cond(invCm_p) < 10**8:
-            Cm_p = np.linalg.pinv(invCm_p)
+            # This step can still have problem in rare case
+            try:
+                Cm_p = np.linalg.pinv(invCm_p)
+            except:
+                Cm_p = np.zeros(shape=invCm_p.shape) + np.nan
         else:
-            #print('singular')
             Cm_p = np.zeros(shape=invCm_p.shape) + np.nan
-
-        #print(stop)
 
         return Cm_p
 
@@ -2683,40 +2679,51 @@ class fourdvel(basics):
        
         return model_likelihood_set
 
-    def tide_vec_to_quantity(self, tide_vec, quant_name, point=None, state=None, extra_info=None):
+    def tide_vec_to_quantity(self, input_tide_vec, quant_name, point=None, state=None, extra_info=None):
 
         # modeling tides.
         modeling_tides = self.modeling_tides
         tide_periods = self.tide_periods
         tide_omegas = self.tide_omegas
 
-        t_vec = tide_vec[:,0]
+        # for uq, both est and uq are passed in a tuple
+        # The main vec is data_vec
+        if state == 'uq':
+            # input_tide_vec is tuple
+            vec1, vec2 = input_tide_vec
+
+            # reduce the dimension
+            estimation_vec = vec1[:,0]
+            data_vec = vec2[:,0]
+        else:
+            # reduce the dimension
+            data_vec = input_tide_vec[:,0]
 
         # Output nan, if not exist.
+        extra_list = ['amplitude_scaling']
         item_name = quant_name.split('_')[0]
-        if (not item_name == 'secular') and (not item_name in modeling_tides):
+        if (not item_name == 'secular') and (not item_name in modeling_tides) and (not quant_name in extra_list):
             quant = np.nan
             return quant
 
         # Secular horizontal speed.
         if quant_name == 'secular_horizontal_speed':
-            quant = np.sqrt(t_vec[0]**2 + t_vec[1]**2)
+            quant = np.sqrt(data_vec[0]**2 + data_vec[1]**2)
 
         # Secular east.
         elif quant_name == 'secular_east_velocity':
-            quant = t_vec[0]
+            quant = data_vec[0]
 
         # Secular north.
         elif quant_name == 'secular_north_velocity':
-            quant = t_vec[1]
+            quant = data_vec[1]
 
         # Secular horizontal speed.
         elif quant_name == 'secular_horizontal_velocity':
-            
             # Degree.
-            angle = np.rad2deg(np.arctan2(t_vec[1],t_vec[0]))
+            angle = np.rad2deg(np.arctan2(data_vec[1],data_vec[0]))
             # Length.
-            speed = np.sqrt(t_vec[0]**2 + t_vec[1]**2)
+            speed = np.sqrt(data_vec[0]**2 + data_vec[1]**2)
 
             if not np.isnan(angle) and speed >=0.1:
                 length = 0.2
@@ -2729,19 +2736,20 @@ class fourdvel(basics):
 
         elif quant_name == 'secular_horizontal_velocity_EN':
 
-            return np.asarray([t_vec[0], t_vec[1]])
+            return np.asarray([data_vec[0], data_vec[1]])
         
         # Secular up.
         elif quant_name == 'secular_up_velocity':
-            quant = t_vec[2]
+            quant = data_vec[2]
 
+        ################### Msf #################################
         # Msf horizontal amplitude (speed).        
         elif quant_name == 'Msf_horizontal_velocity_amplitude':
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
-                    ampE = t_vec[3+k*6]
-                    ampN = t_vec[3+k*6+1]
+                    ampE = data_vec[3+k*6]
+                    ampN = data_vec[3+k*6+1]
                     quant = np.sqrt(ampE**2 + ampN**2)
                 else:
                     k=k+1
@@ -2751,8 +2759,8 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
-                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
-                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    ampE = self.velo_amp_to_dis_amp(data_vec[3+k*6],tide_name)
+                    ampN = self.velo_amp_to_dis_amp(data_vec[3+k*6+1],tide_name)
                     quant = np.sqrt(ampE**2 + ampN**2)
                 else:
                     k=k+1
@@ -2762,7 +2770,7 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
-                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     quant = ampU
                 else:
                     k=k+1
@@ -2773,15 +2781,15 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
-                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     thres = 0.1
 
                     if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
-                        # Find the phase
-                        value = t_vec[3+k*6+5]
+
+                        value = data_vec[3+k*6+5]
 
                         if state in [ 'true','est']:
-                            phaseU=self.velo_phase_to_dis_phase(value)
+                            phaseU = self.velo_phase_to_dis_phase(value)
                             quant = self.rad2deg(phaseU)
                             quant = self.deg2day(quant, tide_name)
                             
@@ -2804,7 +2812,7 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'M2':
-                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     quant = np.sqrt(ampU**2)
                 else:
                     k=k+1
@@ -2813,128 +2821,300 @@ class fourdvel(basics):
 
             k = 0
             for tide_name in modeling_tides:
+                # k +=1 is tide_name is not "Msf"
                 if tide_name == 'Msf':
-                    
-                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6], tide_name)
-                    phaseE = self.velo_phase_to_dis_phase(t_vec[3+k*6+3])
 
-                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1], tide_name)
-                    phaseN = self.velo_phase_to_dis_phase(t_vec[3+k*6+4])
+                    if state in ['true','est']:
+                        est_vec = data_vec
+                    elif state in ['uq']:
+                        # state is uq, data_vec stores uq
+                        # estimation is passed in additonally by estimation_vec
+                        est_vec = estimation_vec 
+                    else:
+                        raise ValueError()
+ 
+                    ampE = self.velo_amp_to_dis_amp(est_vec[3+k*6], tide_name)
+                    phaseE = self.velo_phase_to_dis_phase(est_vec[3+k*6+3])
 
-                    # 2019.11.26: Calculate along flow and cross flow
+                    ampN = self.velo_amp_to_dis_amp(est_vec[3+k*6+1], tide_name)
+                    phaseN = self.velo_phase_to_dis_phase(est_vec[3+k*6+4])
+
+                    ################## Notes ####################
+                    # Calculate along flow and cross flow
                     # restore the amplitude representation
                     # The displacement is represented as amp*sin(omega*t+phase)
+
+                    # rotation matrix
+                    # [ cos(theta), -sin(theta),
+                    #   sin(theta), cos(theta)]
+                    # this rotation matrix rotatex a point counterclock wise for theta
+
+                    # In this application, we want to find the coordinates in rotated coordinate system
+                    # The rotation of the coordinate system is theta = arctan2(vn/ve)
+                    # This is equivalent to rotate a point counterclock-wise for theta1 = -theta
+                    
+                    # The calculation is:
+                    #   (a*coswt + b*sinwt)*cos(theta1) - (c*coswt + d*sinwt)*sin(theta1)
+                    # = (a*cos(theta1) - c*sin(theta1))coswt +  (b*cos(theta1) - d*sin(theta1))*sinwt
+                    # = alf_cos_term * coswt + alf_sin_term * sinwt
+
+                    # Define:
+                    # cos term: e = a*cos(theta1) - c*sin(theta1)
+                    # sin term: f = b*cos(theta1) - d*sin(theta1)
+
+                    # Here, we derive the sigma_e and sigma_f
+                    # sigma_e^2 = cos(theta1)^2 * sigma_a^2 + sin(theta1)^2 * simga_c^2
+                    # sigma_f^2 = cos(theta1)^2 * sigma_b^2 + sin(theta1)^2 * simga_d^2
+
+                    # model_vec: cosE(a), cosN(c), cosU, sinE(b), sinN(d), sinU
+                   
                     a = ampE * np.sin(phaseE) # amp of cos term
                     b = ampE * np.cos(phaseE) # amp of sin term
                     c = ampN * np.sin(phaseN) # amp of cos term
-                    d = ampN * np.cos(phaseN) # amp os sin term
+                    d = ampN * np.cos(phaseN) # amp of sin term
 
-                    # Find ve and vn
-                    ve = t_vec[0]
-                    vn = t_vec[1]
+                    # Find ve and vn, the secular velocity
+                    ve = est_vec[0]
+                    vn = est_vec[1]
 
                     # Along flow angle
                     # between -pi and pi
-                    # rotation of coordinates; add minus before
+                    # theta1 is the rotation angle of coordinates; add minus before
                     theta1 = -np.arctan2(vn,ve)
 
-                    # ALF Rotation
+                    # ALF Rotation (based on the notes above)
                     amp_cos_alf = a*np.cos(theta1) - c*np.sin(theta1)
                     amp_sin_alf = b*np.cos(theta1) - d*np.sin(theta1)
 
-                    # ALF amplitude % phase
+                    # ALF amplitude & phase
                     # e * coswt + f * sinwt
-                    # sqrt(e**2 + f**2) * cos(wt+phi)
-                    # artan(phi) = e/f
+                    # sqrt(e**2 + f**2) * sin(wt+phi)
+                    # cos(phi) = f
+                    # sin(phi) = e
+                    # tan(phi) = e/f
                     amp_alf = (amp_cos_alf**2 + amp_sin_alf**2)**(1/2)
                     phase_alf = np.arctan2(amp_cos_alf, amp_sin_alf)
 
-                    # crf rotation
+                    # CRF amplitude & phase
+                    # theta2 = theta1 - pi/2
+                    # cos(theta2) = cos(theta1 - pi/2) =  sin(theta1)
+                    # sin(theta2) = sin(theta1 - pi/2) = -cos(theta1)
+
+                    #   (a*coswt + b*sinwt)*cos(theta2) - (c*coswt + d*sinwt)*sin(theta2)
+                    # = (a*cos(theta2) - c*sin(theta2))coswt +  (b*cos(theta2) - d*sin(theta2))*sinwt
+                    # = (a*sin(theta1) + c*cos(theta1))coswt +  (b*sin(theta1) + d*cos(theta1)) * sinwt
+                    # = crf_cos_term * coswt + crf_sin_term * sinwt
+
+                    # cos and sin term after rotation (based on the notes above)
                     amp_cos_crf = a*np.sin(theta1) + c*np.cos(theta1)
                     amp_sin_crf = b*np.sin(theta1) + d*np.cos(theta1)
 
                     # crf amplitude
+                    # e * coswt + f * sinwt
+                    # sqrt(e**2 + f**2) * sin(wt+phi)
+                    # cos(phi) = f
+                    # sin(phi) = e
+                    # tan(phi) = e/f
                     amp_crf = (amp_cos_crf**2 + amp_sin_crf**2)**(1/2)
+                    # crf phase
                     phase_crf = np.arctan2(amp_cos_crf, amp_sin_crf)
 
-                    # Convert unit of phase (use days for Msf)
-                    phase_alf = self.rad2deg(phase_alf)
-                    phase_alf = self.wrapped_deg(phase_alf)
+                    ## End of coordinates transform ##
 
-                    # Record the degree value
-                    phase_alf_in_deg = phase_alf
-
-                    phase_alf = self.deg2day(phase_alf, tide_name)
-
-                    phase_crf = self.rad2deg(phase_crf)
-                    phase_crf = self.wrapped_deg(phase_crf)
-
-                    # Record the degree value
-                    phase_crf_in_deg = phase_crf
-
-                    phase_crf = self.deg2day(phase_crf, tide_name)
-
-                    # Check if the value is valid not
-                    ve_model = self.grid_set_velo[point][0]
-                    vn_model = self.grid_set_velo[point][1]
-                    v_model = (ve_model**2 + vn_model**2)**(1/2)
-
-                    lon, lat = self.int5d_to_float(point)
-
-                    thres_for_v = 0.1
-                    thres_for_amp_alf = 0.075
-                    thres_for_amp_crf = 0.075
-                    thres_for_amp_crf = 0.025
-
-                    amp_full = (amp_alf**2 + amp_crf**2)**0.5
-
-                    # Remove some invalid phase values
-                    if v_model>thres_for_v and amp_alf>thres_for_amp_alf:
-                        if self.proj == "Rutford":
-                        # Remove the northern data
-                        #if self.proj == "Rutford" and lat<-77.8:
-                            pass
-
-                        #elif self.proj == "Evans" and lat<-75.85:
-                        elif self.proj == "Evans":
-                            pass
+                    # For "true" and "est", things are completed
+                    # Record the values with some processing
+                    if state in ['true','est']:
+                        # Convert unit of phase (use days for Msf)
+                        phase_alf = self.rad2deg(phase_alf)
+                        phase_alf = self.wrapped_deg(phase_alf)
+    
+                        # Record the degree value
+                        phase_alf_in_deg = phase_alf
+    
+                        phase_alf = self.deg2day(phase_alf, tide_name)
+    
+                        phase_crf = self.rad2deg(phase_crf)
+                        phase_crf = self.wrapped_deg(phase_crf)
+    
+                        # Record the degree value
+                        phase_crf_in_deg = phase_crf
+    
+                        phase_crf = self.deg2day(phase_crf, tide_name)
+    
+                        # Check if the value is valid not
+                        ve_model = self.grid_set_velo[point][0]
+                        vn_model = self.grid_set_velo[point][1]
+                        v_model = (ve_model**2 + vn_model**2)**(1/2)
+    
+                        lon, lat = self.int5d_to_float(point)
+    
+                        thres_for_v = 0.1
+                        thres_for_amp_alf = 0.075
+                        thres_for_amp_crf = 0.075
+                        thres_for_amp_crf = 0.025
+    
+                        amp_full = (amp_alf**2 + amp_crf**2)**0.5
+    
+                        # Remove some invalid phase values
+                        if v_model>thres_for_v and amp_alf>thres_for_amp_alf:
+                            if self.proj == "Rutford":
+                            # Remove the northern data
+                            #if self.proj == "Rutford" and lat<-77.8:
+                                pass
+    
+                            #elif self.proj == "Evans" and lat<-75.85:
+                            elif self.proj == "Evans":
+                                pass
+                            else:
+                                phase_alf = np.nan
+                                phase_alf_in_deg = np.nan
                         else:
                             phase_alf = np.nan
                             phase_alf_in_deg = np.nan
-                    else:
-                        phase_alf = np.nan
-                        phase_alf_in_deg = np.nan
-
-
-                    # filter the phase crf
-                    if v_model > thres_for_v and amp_crf > thres_for_amp_crf:
-                        if self.proj == "Rutford" and lat<-77.8:
-                            pass
-
-                        #elif self.proj == "Evans" and ampU>0.5:
-                        #elif self.proj == "Evans" and lat<-75.85:
-                        elif self.proj == "Evans":
-                            pass
-
+    
+    
+                        # filter the phase crf
+                        if v_model > thres_for_v and amp_crf > thres_for_amp_crf:
+                            if self.proj == "Rutford" and lat<-77.8:
+                                pass
+    
+                            #elif self.proj == "Evans" and ampU>0.5:
+                            #elif self.proj == "Evans" and lat<-75.85:
+                            elif self.proj == "Evans":
+                                pass
+    
+                            else:
+                                phase_crf = np.nan
+                                phase_crf_in_deg = np.nan
                         else:
                             phase_crf = np.nan
                             phase_crf_in_deg = np.nan
+
+
+                        # Save the output
+                        quant = {}
+                        quant["Msf_along_flow_displacement_amplitude"] = amp_alf
+                        quant["Msf_along_flow_displacement_phase"] = phase_alf
+                        quant["Msf_along_flow_displacement_phase_in_deg"] = phase_alf_in_deg
+    
+    
+                        quant["Msf_cross_flow_displacement_amplitude"] = amp_crf
+                        quant["Msf_cross_flow_displacement_phase"] = phase_crf
+                        quant["Msf_cross_flow_displacement_phase_in_deg"] = phase_crf_in_deg
+    
+                        quant["Msf_horizontal_displacement_amplitude"] = amp_full 
+
+
+                    # For uncertainty
+                    elif state in ['uq']:
+
+                        #amp_alf = 0
+                        #phase_alf = 0
+                        #phase_alf_in_deg = 0
+
+                        #amp_crf = 0
+                        #phase_crf = 0
+                        #phase_crf_in_deg = 0
+                        #
+                        #amp_full = 0
+
+                        # Calculate the uncertainty, we need to first recover the sigma of 
+
+                        # Find the sigma of E&N amplitude and phase
+                        sigma_ampE = data_vec[3+k*6]
+                        sigma_phaseE = data_vec[3+k*6+3]
+    
+                        sigma_ampN = data_vec[3+k*6+1]
+                        sigma_phaseN = data_vec[3+k*6+4]
+
+                        #a = ampE * np.sin(phaseE) # amp of cos term
+                        #b = ampE * np.cos(phaseE) # amp of sin term
+                        #c = ampN * np.sin(phaseN) # amp of cos term
+                        #d = ampN * np.cos(phaseN) # amp of sin term
+
+                        sigma2_a = (np.sin(phaseE)**2) * (sigma_ampE**2) + ((ampE * np.cos(phaseE))**2) * (sigma_phaseE**2)
+                        sigma2_b = (np.cos(phaseE)**2) * (sigma_ampE**2) + ((ampE * np.sin(phaseE))**2) * (sigma_phaseE**2)
+
+                        sigma2_c = (np.sin(phaseN)**2) * (sigma_ampN**2) + ((ampN * np.cos(phaseN))**2) * (sigma_phaseN**2)
+                        sigma2_d = (np.cos(phaseN)**2) * (sigma_ampN**2) + ((ampN * np.sin(phaseN))**2) * (sigma_phaseN**2)
+
+                        # For along-flow, calculate the sigma2 of cos term and sin term
+                        # Notes:
+                        #amp_cos_alf = a*np.cos(theta1) - c*np.sin(theta1)
+                        #amp_sin_alf = b*np.cos(theta1) - d*np.sin(theta1)
+
+                        sigma2_amp_cos_alf = sigma2_a * np.cos(theta1)**2 + sigma2_b * np.sin(theta1)**2
+                        sigma2_amp_sin_alf = sigma2_b * np.cos(theta1)**2 + sigma2_d * np.sin(theta1)**2
+
+
+                        # For cross-flow, calculate the sigma2 of cos term and sin term
+                        # Notes:
+                        #amp_cos_crf = a*np.sin(theta1) + c*np.cos(theta1)
+                        #amp_sin_crf = b*np.sin(theta1) + d*np.cos(theta1)
+
+                        sigma2_amp_cos_crf = sigma2_a * np.sin(theta1)**2 + sigma2_c * np.cos(theta1)**2
+                        sigma2_amp_sin_crf = sigma2_b * np.sin(theta1)**2 + sigma2_d * np.cos(theta1)**2
+
+
+                        # Find the error for amplitude and phase
+                        # Notes:
+                        # Amplitude error
+                        #amp_error = (error_c_t * np.sin(phase)**2 - error_s_t * np.cos(phase)**2) / (np.sin(phase)**4 - np.cos(phase)**4)
+                        # Phase error
+                        #phase_error = (-error_c_t * np.cos(phase)**2 + error_s_t * np.sin(phase)**2) / (amp**2 * (np.sin(phase)**4 - np.cos(phase)**4))
+
+                        # We have amp_alf, phase_alf, amp_crf, phase_crf
+
+                        sigma2_amp_alf = (sigma2_amp_cos_alf * np.sin(phase_alf)**2 - sigma2_amp_sin_alf * np.cos(phase_alf)**2) / (np.sin(phase_alf)**4 - np.cos(phase_alf)**4)
+
+                        sigma2_phase_alf = (-sigma2_amp_cos_alf * np.cos(phase_alf)**2 + sigma2_amp_sin_alf * np.sin(phase_alf)**2) / (amp_alf**2 * (np.sin(phase_alf)**4 - np.cos(phase_alf)**4))
+
+                        sigma2_amp_crf = (sigma2_amp_cos_crf * np.sin(phase_crf)**2 - sigma2_amp_sin_crf * np.cos(phase_crf)**2) / (np.sin(phase_crf)**4 - np.cos(phase_crf)**4)
+
+                        sigma2_phase_crf = (-sigma2_amp_cos_crf * np.cos(phase_crf)**2 + sigma2_amp_sin_crf * np.sin(phase_crf)**2) / (amp_crf**2 * (np.sin(phase_crf)**4 - np.cos(phase_crf)**4)) 
+
+                        #print(amp_alf)
+                        #print(amp_crf)
+                        #print(phase_alf)
+                        #print(phase_crf)
+                        #print(stop)
+
+                        # Take the square root
+                        #sigma_amp_alf = np.sqrt(sigma2_amp_alf)
+                        #sigma_phase_alf = np.sqrt(sigma2_phase_alf)
+                        #sigma_amp_crf = np.sqrt(sigma2_amp_crf)
+                        #sigma_phase_crf = np.sqrt(sigma2_phase_crf)
+
+                        sigma_amp_alf = np.sqrt(abs(sigma2_amp_alf))
+                        sigma_phase_alf = np.sqrt(abs(sigma2_phase_alf))
+                        sigma_amp_crf = np.sqrt(abs(sigma2_amp_crf))
+                        sigma_phase_crf = np.sqrt(abs(sigma2_phase_crf))
+
+
+
+                        # Convert phase to days
+                        sigma_phase_alf_deg = self.rad2deg(sigma_phase_alf)
+                        sigma_phase_alf_days = self.deg2day(sigma_phase_alf_deg, tide_name)
+
+                        sigma_phase_crf_deg = self.rad2deg(sigma_phase_crf)
+                        sigma_phase_crf_days = self.deg2day(sigma_phase_crf_deg, tide_name)
+
+                        # Save the result
+                        quant = {}
+                        quant["Msf_along_flow_displacement_amplitude"] = sigma_amp_alf
+                        quant["Msf_along_flow_displacement_phase"] = sigma_phase_alf_days
+                        quant["Msf_along_flow_displacement_phase_in_deg"] = 0
+    
+    
+                        quant["Msf_cross_flow_displacement_amplitude"] = sigma_amp_crf
+                        quant["Msf_cross_flow_displacement_phase"] = sigma_phase_crf_days
+                        quant["Msf_cross_flow_displacement_phase_in_deg"] = 0
+    
+                        quant["Msf_horizontal_displacement_amplitude"] = (sigma_amp_alf ** 2 + sigma_amp_crf ** 2)**0.5
+
                     else:
-                        phase_crf = np.nan
-                        phase_crf_in_deg = np.nan
+                        raise Exception("Unknown state")
 
-                    quant = {}
-                    quant["Msf_along_flow_displacement_amplitude"] = amp_alf
-                    quant["Msf_along_flow_displacement_phase"] = phase_alf
-                    quant["Msf_along_flow_displacement_phase_in_deg"] = phase_alf_in_deg
-
-
-                    quant["Msf_cross_flow_displacement_amplitude"] = amp_crf
-                    quant["Msf_cross_flow_displacement_phase"] = phase_crf
-                    quant["Msf_cross_flow_displacement_phase_in_deg"] = phase_crf_in_deg
-
-                    quant["Msf_horizontal_displacement_amplitude"] = amp_full 
-                    
                     return quant
 
                 else:
@@ -2946,7 +3126,7 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
-                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
+                    ampE = self.velo_amp_to_dis_amp(data_vec[3+k*6],tide_name)
                     quant = ampE
                 else:
                     k=k+1
@@ -2957,11 +3137,9 @@ class fourdvel(basics):
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
 
-                    # Find the phase
-                    value = t_vec[3+k*6+3]
-
+                    value = data_vec[3+k*6+3]
                     if state in [ 'true','est']:
-                        phaseE=self.velo_phase_to_dis_phase(value)
+                        phaseE = self.velo_phase_to_dis_phase(value)
                         quant = self.rad2deg(phaseE)
                         quant = self.deg2day(quant, tide_name)
                         
@@ -2981,7 +3159,7 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
-                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    ampN = self.velo_amp_to_dis_amp(data_vec[3+k*6+1],tide_name)
                     quant = ampN
                 else:
                     k=k+1
@@ -2992,8 +3170,7 @@ class fourdvel(basics):
             for tide_name in modeling_tides:
                 if tide_name == 'Msf':
 
-                    # Find the phase
-                    value = t_vec[3+k*6+4]
+                    value = data_vec[3+k*6+4]
 
                     if state in [ 'true','est']:
                         phaseE=self.velo_phase_to_dis_phase(value)
@@ -3018,8 +3195,8 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Mf':
-                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
-                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    ampE = self.velo_amp_to_dis_amp(data_vec[3+k*6],tide_name)
+                    ampN = self.velo_amp_to_dis_amp(data_vec[3+k*6+1],tide_name)
                     quant = np.sqrt(ampE**2 + ampN**2)
                 else:
                     k=k+1
@@ -3029,7 +3206,7 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Mf':
-                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     quant = ampU
                 else:
                     k=k+1
@@ -3040,13 +3217,12 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Mf':
-                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     thres = 0.1
 
-                    if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
-                        # Find the phase
-                        value = t_vec[3+k*6+5]
+                    value = data_vec[3+k*6+5]
 
+                    if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
                         if state in [ 'true','est']:
                             phaseU=self.velo_phase_to_dis_phase(value)
                             quant = self.rad2deg(phaseU)
@@ -3067,13 +3243,16 @@ class fourdvel(basics):
 
         ################## End of Mf ###########################################
 
+
+        ################ Semidirunal and Dirunal ###############################
+
         # M2 lumped horizontal displacement amplitude.
         elif quant_name == 'M2_horizontal_displacement_amplitude':
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'M2':
-                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
-                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    ampE = self.velo_amp_to_dis_amp(data_vec[3+k*6],tide_name)
+                    ampN = self.velo_amp_to_dis_amp(data_vec[3+k*6+1],tide_name)
                     quant = np.sqrt(ampE**2 + ampN**2)
                 else:
                     k=k+1
@@ -3083,8 +3262,8 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'O1':
-                    ampE = self.velo_amp_to_dis_amp(t_vec[3+k*6],tide_name)
-                    ampN = self.velo_amp_to_dis_amp(t_vec[3+k*6+1],tide_name)
+                    ampE = self.velo_amp_to_dis_amp(data_vec[3+k*6],tide_name)
+                    ampN = self.velo_amp_to_dis_amp(data_vec[3+k*6+1],tide_name)
                     quant = np.sqrt(ampE**2 + ampN**2)
                 else:
                     k=k+1
@@ -3097,7 +3276,7 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'O1':
-                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     quant = np.sqrt(ampU**2)
                 else:
                     k=k+1
@@ -3108,7 +3287,7 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'O1':
-                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     thres = 0.1
                     # 2021.01.29
                     thres = 0.06
@@ -3117,8 +3296,8 @@ class fourdvel(basics):
                     #if (ampU > thres) or (state=='uq') :
 
                     if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq') :
-                        value = t_vec[3+k*6+5]
 
+                        value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
                             phaseU=self.velo_phase_to_dis_phase(value)
                             quant = self.rad2deg(phaseU)
@@ -3150,7 +3329,7 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'M2':
-                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     quant = np.sqrt(ampU**2)
                 else:
                     k=k+1
@@ -3162,7 +3341,7 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'M2':
-                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
 
                     # old way
                     #thres = 0.3
@@ -3179,10 +3358,9 @@ class fourdvel(basics):
                     if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
                     #if ampU >=thres or state == 'uq':
 
-                        # Find the phase
-                        value = t_vec[3+k*6+5]
-
+                        value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
+                            # Find the phase
                             phaseU=self.velo_phase_to_dis_phase(value)
                             #print("phase radian: ", phaseU)
                             quant = self.rad2deg(phaseU)
@@ -3215,7 +3393,7 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'N2':
-                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     quant = np.sqrt(ampU**2)
                 else:
                     k=k+1
@@ -3227,7 +3405,7 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'N2':
-                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     thres = 0.1
                     # 2021.01.29
                     thres = 0.04
@@ -3235,10 +3413,11 @@ class fourdvel(basics):
                     thres = 0.03
 
                     if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
-                        # Find the phase
-                        value = t_vec[3+k*6+5]
 
+                        value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
+                            # Find the phase
+
                             phaseU=self.velo_phase_to_dis_phase(value)
                             #print("phase radian: ", phaseU)
                             quant = self.rad2deg(phaseU)
@@ -3251,6 +3430,8 @@ class fourdvel(basics):
                                 #print("phaseU minute: ", phaseU)
 
                         elif state in ['uq']:
+                            # Find the phase
+
                             quant = value
                             quant = self.rad2deg(quant)
 
@@ -3270,7 +3451,7 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Q1':
-                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     quant = np.sqrt(ampU**2)
                 else:
                     k=k+1
@@ -3282,14 +3463,14 @@ class fourdvel(basics):
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Q1':
-                    ampU = self.velo_amp_to_dis_amp(t_vec[3+k*6+2],tide_name)
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     thres = 0.03
 
                     if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
-                        # Find the phase
-                        value = t_vec[3+k*6+5]
 
+                        value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
+                            # Find the phase
                             phaseU=self.velo_phase_to_dis_phase(value)
                             #print("phase radian: ", phaseU)
                             quant = self.rad2deg(phaseU)
@@ -3302,6 +3483,7 @@ class fourdvel(basics):
                                 #print("phaseU minute: ", phaseU)
 
                         elif state in ['uq']:
+                            # Find the phase
                             quant = value
                             quant = self.rad2deg(quant)
 
@@ -3315,6 +3497,16 @@ class fourdvel(basics):
                         quant = np.nan
                 else:
                     k=k+1
+
+        elif quant_name == "amplitude_scaling":
+
+            if state in ['true','est']:
+                quant = 0
+            elif state in ['uq']:
+                assert len(data_vec) == 3 + self.n_modeling_tides * 6 + 1, print("length of data vec: ", len(data_vec))
+                quant = 0
+            else:
+                raise ValueError()
 
         else:
             quant = None

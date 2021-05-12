@@ -18,7 +18,7 @@ import scipy
 
 import time
 
-plt.style.use('seaborn-darkgrid')
+#plt.style.use('seaborn-darkgrid')
 
 class solvers(fourdvel):
     def __init__(self, param_file):

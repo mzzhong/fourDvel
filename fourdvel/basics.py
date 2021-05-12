@@ -372,7 +372,8 @@ class basics():
         
         # Write to txt file.
         f = open(xyz_name,'w')
-        cap=1000
+        #cap=1000
+        cap=10**10
         for key in sorted(show_dict.keys()):
             lon, lat = key
 

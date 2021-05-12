@@ -997,11 +997,16 @@ class analysis(configure):
             camp_stop_date = datetime.datetime(2013,8,1)
 
             plot_start_day = 7800
-            plot_stop_day = 8300
+            plot_stop_day = 8200
 
             ### 1. Continous time series ####
             fig = plt.figure(100, figsize=(13,7))
+            fig.clf()
             ax = fig.add_subplot(111)
+            ax.set_facecolor("white")
+            ax.xaxis.set_visible('True')
+            ax.yaxis.set_visible('True')
+
             ax.tick_params(labelsize=15)
             
             #ax.plot(tide_taxis, tide_data,"black",linewidth=0.3)
@@ -1010,7 +1015,7 @@ class analysis(configure):
             #ax.plot(taxis, np.absolute(data_vec_residual_track[::2]),"r.",markersize=10)
             #ax.set_xlim([taxis[0]-1,taxis[-1]+1])
 
-            ax.plot(np.asarray(tide_taxis) - plot_start_day, tide_data,"black",linewidth=0.3)
+            ax.plot(np.asarray(tide_taxis) - plot_start_day, tide_data, "black", linewidth=0.3)
             ax.set_xlim([0, plot_stop_day - plot_start_day])
             ax.set_xlabel("Time (days)",fontsize=15)
 
@@ -1023,13 +1028,13 @@ class analysis(configure):
             #off2 = (datetime.date(2014,9,1) - self.t_origin.date()).days
 
             off1 = (datetime.date(2013,8,1) - self.t_origin.date()).days - plot_start_day
-            off2 = (datetime.date(2014,9,1) - self.t_origin.date()).days - plot_start_day
+            off2 = (datetime.date(2014,6,1) - self.t_origin.date()).days - plot_start_day
 
             ax.plot([off1,off1],[-5,5],linewidth=4, color='blue')
             ax.plot([off2,off2],[-5,5],linewidth=4, color='blue')
             
-            ax.text(off1+10,-3.65, "2013-08-01",fontsize=15)
-            ax.text(off2-63,-3.65, "2014-08-01",fontsize=15)
+            ax.text(off1+8,-3.65, "2013-08-01",fontsize=15)
+            ax.text(off2-55,-3.65, "2014-06-01",fontsize=15)
 
             # Plot the acquisitions on the tide time series
             plot_acquisition_times = 1
@@ -1064,7 +1069,7 @@ class analysis(configure):
     
                         #ax.plot(master_time_track, master_tide_proxy_track, '.',color=colors[i,:], markersize=10,label="track "+str(track_num))
                         #ax.plot(np.asarray(master_time_track) - plot_start_day, master_tide_proxy_track, '.',color=colors[i,:], markersize=10,label="track "+ str(track_num))
-                        ax.plot(np.asarray(master_time_track) - plot_start_day, master_tide_proxy_track, '.',color=colors[i,:], markersize=10,label="track "+ str(count_track))
+                        ax.plot(np.asarray(master_time_track) - plot_start_day, master_tide_proxy_track, '.',color=colors[i,:], markersize=10,label="Track "+ str(count_track))
     
                 ax.legend(prop={'size': 12}, loc='lower left')
     

@@ -198,8 +198,8 @@ class output(fourdvel):
 
                 for point in grid_set_master.keys():
                     if not np.isnan(grid_set_master[point][0,0]):
-                        quant_master = self.tide_vec_to_quantity(tide_vec = grid_set_master[point],quant_name = "secular_horizontal_velocity_EN")
-                        quant_slave = self.tide_vec_to_quantity(tide_vec = grid_set_slave[point], quant_name = 'secular_horizontal_velocity_EN')
+                        quant_master = self.tide_vec_to_quantity(input_tide_vec = grid_set_master[point], quant_name = "secular_horizontal_velocity_EN")
+                        quant_slave = self.tide_vec_to_quantity(input_tide_vec = grid_set_slave[point], quant_name = 'secular_horizontal_velocity_EN')
                         grid_set_quant[point] = np.linalg.norm(quant_master - quant_slave, 2)
 
                 # Write to xyz file.
@@ -225,6 +225,7 @@ class output(fourdvel):
 
         # credible interval needs to before grounding level for filtering purposes
         quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "height"]
+        #quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "grounding_duration", "height"]
 
         states = ['true', 'est']
 
@@ -502,8 +503,6 @@ class output(fourdvel):
                         'O1_up_displacement_phase',
                         'N2_up_displacement_amplitude',
                         'N2_up_displacement_phase',
-                        #'Q1_up_displacement_amplitude',
-                        #'Q1_up_displacement_phase',
  
                         # Msf
                         "Msf_horizontal_displacement_group",
@@ -517,7 +516,6 @@ class output(fourdvel):
                         "Msf_north_displacement_amplitude",
                         "Msf_north_displacement_phase",
 
-
                         # Mf
                         'Mf_horizontal_displacement_amplitude',
                         "Mf_up_displacement_amplitude",
@@ -528,7 +526,6 @@ class output(fourdvel):
 
                         # O1
                         'O1_horizontal_displacement_amplitude'
-
                         ]
 
 
@@ -558,11 +555,19 @@ class output(fourdvel):
 
                                                                             "Msf_horizontal_displacement_amplitude"]
 
+
+        # For nonlinear inversion, may not exist
+        #quant_list.insert(0, 'amplitude_scaling')
+        #quant_list = ['amplitude_scaling']
+
+        ### End with quant list ###
+
         states = {}
         states['true'] = self.grid_set_true_tide_vec
         states['est'] = self.grid_set_tide_vec
-        states['uq'] = self.grid_set_tide_vec_uq
 
+        # This is from model_posterior_to_uncertainty, which converts Cm_p to tide_vec_uq
+        states['uq'] = self.grid_set_tide_vec_uq
 
         # Look through the sets
         phase_center = {}
@@ -641,7 +646,20 @@ class output(fourdvel):
                         for point in output_keys:
                             # The vector is not nan
                             if not np.isnan(this_grid_set[point][0,0]):
-                                quant_group = self.tide_vec_to_quantity(tide_vec = this_grid_set[point], quant_name = quant_name, point = point, state=state)
+
+                                # when processing uq, need to accompany it with est
+                                if state in ['true', 'est']:
+                                    input_tide_vec = this_grid_set[point]
+                                elif state in ['uq']:
+                                    input_tide_vec = (states['est'][point], this_grid_set[point])
+                                else:
+                                    raise Exception()
+
+                                #if point = self.test_point:
+                                #    print(point)
+                                #    print(stop)
+
+                                quant_group = self.tide_vec_to_quantity(input_tide_vec = input_tide_vec, quant_name = quant_name, point = point, state=state)
     
                                 # Save it into grid_set_quant
                                 for sub_quant_name in sub_quant_names:
@@ -661,9 +679,17 @@ class output(fourdvel):
                         
                             # Only record points where inverse problem can be done, Cm_p exists.
                             if not np.isnan(this_grid_set[point][0,0]):
+
+                                # when processing uq, need to accompany it with est
+                                if state in ['true', 'est']:
+                                    input_tide_vec = this_grid_set[point]
+                                elif state in ['uq']:
+                                    input_tide_vec = (states['est'][point], this_grid_set[point])
+                                else:
+                                    raise Exception()
+
                                 # It is possible that some tides are not in the model. This is taken care of in the called method.
-    
-                                quant = self.tide_vec_to_quantity(tide_vec = this_grid_set[point],quant_name = quant_name, point=point, state=state)
+                                quant = self.tide_vec_to_quantity(input_tide_vec = input_tide_vec, quant_name = quant_name, point=point, state=state)
         
                                 # Here we record everything, if Cm_p exists, including nan futher filtered by tide_vec_to_quantity.
                                 grid_set_quant[quant_name][point] = quant
@@ -798,9 +824,11 @@ def main(iargs=None):
 
     # override the setting
     #out.output_true = False
+    #out.output_est = False
     #out.output_uq = False
     #out.output_resid = False
     #out.output_difference = False
+    #out.output_others = False
 
     # Start to output
     if out.output_true: output_states.append("true")
