@@ -28,6 +28,7 @@ class grouping(fourdvel):
         if self.proj == "Rutford":
             self.test_point = (-8100000,-7900000)
         elif self.proj == "Evans":
+            # somewhere in the central trunk
             self.test_point = (-7700000, -7680000)
         else:
             raise Exception()
@@ -42,13 +43,13 @@ class grouping(fourdvel):
             self.get_grid_set_v2()
 
         # Auxiliary files for finding ice shelf
-        # For Evans
-        self.doub_diff_file ='/net/kraken/nobak/mzzhong/S1-Evans/track_37/cuDenseOffsets/doub_diff.off'
+        # For Evans (old way)
+        #self.doub_diff_file ='/net/kraken/nobak/mzzhong/S1-Evans/track_37/cuDenseOffsets/doub_diff.off'
 
         # for Ruford
-        self.rutford_shelf_grid_points = self.Ant_Data_dir + "/GroundingLines/bedmap2_shelf_latlon.xyz"
-
-
+        self.rutford_shelf_grid_points = self.Ant_Data_dir + "/GroundingLines/RIS_bedmap2_shelf_latlon.xyz"
+        self.evans_shelf_grid_points = self.Ant_Data_dir + "/GroundingLines/EIS_bedmap2_shelf_latlon.xyz"
+        
         # End of __init__
 
     # Preparing logistics for fourdvel inversion
@@ -389,7 +390,6 @@ class grouping(fourdvel):
 
         return 0
 
-
     def create_grid_set_velo_2d(self):
 
         grid_set = self.grid_set
@@ -576,7 +576,7 @@ class grouping(fourdvel):
         f.close()
         return 0
 
-    def create_grid_set_velo_3d_evans(self):
+    def create_grid_set_velo_3d_evans_old(self):
 
         from dense_offset import dense_offset
         from scipy.signal import  medfilt
@@ -743,9 +743,16 @@ class grouping(fourdvel):
 
         return
 
-    def create_grid_set_velo_3d_rutford(self):
+    def create_grid_set_velo_3d(self):
 
         print('Add vertical component to grid set reference velocity model...')
+
+        if self.proj == "Rutford":
+            shelf_xyz = self.rutford_shelf_grid_points
+        elif self.proj == "Evans":
+            shelf_xyz = self.evans_shelf_grid_points
+        else:
+            raise ValueError()
 
         redo = 0
         key = self.test_point
@@ -753,9 +760,9 @@ class grouping(fourdvel):
         if not os.path.exists(self.grid_set_velo_3d_pkl_name) or redo==1:
 
             ###### Load in the ice shelf map with 100m x 100m resolution ####
-            shelf_xyz = self.rutford_shelf_grid_points
             f = open(shelf_xyz,"r")
             shelf_points = f.readlines()
+            f.close()
     
             ######## Provide the third component.
             grid_set_velo_2d = self.grid_set_velo_2d
@@ -797,7 +804,7 @@ class grouping(fourdvel):
                 pickle.dump(self.grid_set_velo_3d , f)
 
         else:
-            print(self.grid_set_velo_3d_pkl_name, "exists.")
+            print(self.grid_set_velo_3d_pkl_name, "exists")
             print("Loading...")
             with open(self.grid_set_velo_3d_pkl_name, 'rb') as f:
                 grid_set_velo_3d = pickle.load(f)
@@ -835,11 +842,7 @@ class grouping(fourdvel):
         self.create_grid_set_velo_2d()
 
         # 3D
-        if self.proj == "Evans":
-            self.create_grid_set_velo_3d_evans()
-
-        if self.proj == "Rutford":
-            self.create_grid_set_velo_3d_rutford()
+        self.create_grid_set_velo_3d()
 
     ##############################################
 
@@ -922,7 +925,6 @@ def main():
     group.create_grid_set_ref_velo_model()
 
     if group.proj == "Rutford":
-
         # Add additional signatures to the velo model
         print("add signatures to velo model...")
         group.add_signatures_grid_set_ref_velo_model()

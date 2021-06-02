@@ -295,13 +295,14 @@ class basics():
 
         return min_cov
 
-    def read_ris_tides_params(self, params_file=None):
+    def read_tides_params(self, params_file=None):
 
         # Read in tide params exported from TMD MATLAB code
-        print("Reading RIS tide model...")
+        print("Reading tide model...")
         
         if params_file is None:
-            params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/RIS_tides_params.txt"
+            raise Exception()
+            #params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/RIS_tides_params.txt"
         
         f = open(params_file)
         lines = f.readlines()
@@ -469,19 +470,66 @@ class basics():
 
         return data_dict
 
-    def read_point_data_from_xyz(self, point, file_name, project, winsize=(1,1)):
+    def read_xyz_into_datamat(self, file_name, f2i=None, add_mean_phase=True):
 
-        print(file_name)
+        if f2i is None:
+            f2i = self.float2int
 
-        px, py = point
+        # Read the data
+        xyz_df = pd.read_csv(self.file_name, delim_whitespace=True, header=None)
+
+        X = xyz_df.iloc[:,0] * f2i
+        Y = xyz_df.iloc[:,1] * f2i
+        data_values = xyz_df.iloc[:,2]
+
+        # Convert to integer
+        X = np.round(X).astype(np.int)
+        Y = np.round(Y).astype(np.int)
+
+        # Determine delta and range of X and Y
+        sort_X = np.sort(np.unique(X))
+        delta_X = min(sort_X[1:]-sort_X[:-1])
+        min_X = min(sort_X)
+        max_X = max(sort_X)
+
+        sort_Y = np.sort(np.unique(Y))
+        delta_Y = min(sort_Y[1:]-sort_Y[:-1])
+        min_Y = min(sort_Y)
+        max_Y = max(sort_Y)
+
+        # Get X and Y axis
+        X_axis = np.arange(min_X, max_X+1, delta_X)
+        Y_axis = np.arange(min_Y, max_Y+1, delta_Y)
+
+        NX = len(X_axis)
+        NY = len(Y_axis)
+
+        # Form the data matrix
+        data_mat = np.zeros(shape=(NY, NX)) + np.nan
+
+        # Put values into data_mat
+        X_index = (X - min_X) // delta_X
+        Y_index = (Y - min_Y) // delta_Y
+
+        for i in range(len(X_index)):
+            data_mat[Y_index[i], X_index[i]] = data_values[i]
+
+        # Add mean phase
+        if add_mean_phase:
+
+            mean_phase = self.read_mean_phase(file_name)
+
+            if mean_phase is not None:
+
+                data_mat = data_mat + mean_phase
+
+                data_values = data_values + mean_phase
+
+        return (X, Y, data_values, X_axis, Y_axis, data_mat)
+
+    def read_point_data_from_xyz(self, point, file_name, project, winsize=(1,1), add_mean_phase = True):
 
         local_f2i = 10**4
-
-        px = int(round(px * local_f2i))
-        py = int(round(py * local_f2i))
-
-        #print(file_name)
-        #print(stop)
 
         data_df = pd.read_csv(file_name, delim_whitespace=True, header=None)
         X = data_df.iloc[:,0] * local_f2i
@@ -490,19 +538,85 @@ class basics():
         X = np.round(X).astype(np.int)
         Y = np.round(Y).astype(np.int)
 
-        # Set the window for average
-        if project == 'Rutford':
-            x_delta = int(round(0.025 * local_f2i))
-            y_delta = int(round(0.005 * local_f2i))
-        else:
-            raise Exception()
+        # Determine delta and range of X and Y
+        sort_X = np.sort(np.unique(X))
+        delta_X = min(sort_X[1:]-sort_X[:-1])
 
-        valid_x = np.absolute(X - px) <= winsize[0]*x_delta
-        valid_y = np.absolute(Y - py) <= winsize[1]*y_delta
+        sort_Y = np.sort(np.unique(Y))
+        delta_Y = min(sort_Y[1:]-sort_Y[:-1])
+
+        ## Set the window for average
+        #if project == 'Rutford':
+        #    x_delta = int(round(0.025 * local_f2i))
+        #    y_delta = int(round(0.005 * local_f2i))
+        #elif project == 'Evans':
+        #    x_delta = int(round(0.04 * local_f2i))
+        #    y_delta = int(round(0.01 * local_f2i))
+        #else:
+        #    raise Exception()
+
+        # The point to read
+        px, py = point
+
+        px = int(round(px * local_f2i))
+        py = int(round(py * local_f2i))
+
+        valid_x = np.absolute(X - px) <= winsize[0]*delta_X
+        valid_y = np.absolute(Y - py) <= winsize[1]*delta_Y
 
         valid_xy = np.logical_and(valid_x, valid_y)
         #print(np.sum(valid_x), np.sum(valid_y), np.sum(valid_xy))
 
         data_value = np.mean(values[valid_xy])
 
+        if add_mean_phase:
+ 
+            mean_phase = self.read_mean_phase(file_name)
+
+            if mean_phase is not None:
+
+                data_value = data_value + mean_phase
+
         return data_value
+
+    def read_mean_phase(self, file_name):
+
+        # Look for the mean phase file
+        folder = file_name.rsplit('/', maxsplit=1)[0]
+        basename = file_name.rsplit('/', maxsplit=1)[1].split('.')[0]
+
+        quant_name = '_'.join(basename.split('_')[1:])
+
+        if quant_name.split('_')[0] in ['true','est'] and quant_name.split('_')[-1] == 'phase':
+            mean_phase_file_name = os.path.join(folder, 'mean_phase.txt')
+
+            f = open(mean_phase_file_name)
+
+            lines = f.readlines()
+
+            for line in lines:
+                line_quant_name, line_value = line.split()
+                if line_quant_name == quant_name:
+                    if line_value.lower == 'nan':
+                        mean_phase = None
+                    else:
+                        mean_phase = float(line_value)
+            f.close()
+
+        # mean phase is not available
+        else:
+            mean_phase = None
+
+        return mean_phase 
+
+#####################3
+run_basics = 0
+
+if run_basics:
+    bs = basics()
+    params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/EIS_tides_params.txt" 
+    tide_names, tides_params = bs.read_tides_params(params_file=params_file)
+    print(tides_params)
+    for tide_name in tide_names:
+        tide_name1 = tide_name.lower()
+        print(tide_name, round(tides_params[(tide_name1, "tide_amp")],5), round(tides_params[(tide_name1, "tide_phase_deg")],3))

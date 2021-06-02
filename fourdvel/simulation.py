@@ -238,7 +238,7 @@ class simulation(fourdvel):
 
         if model_num == 16:
             # Model 16: 
-            # Same as 14, but re-design params for horizontal costituents,
+            # Same as 14, but re-design params for horizontal constituents,
             # according to inference and Murray 2007, 
             # linearly scale params in Murray 2007 and make Msf amp = 35.00
             # Displacement.        
@@ -286,7 +286,7 @@ class simulation(fourdvel):
 
         if model_num == 18:
             # Same as model 16 for horizontal components
-            # Use the params from CATS2008 for vertical motion at ref point (-82, -78.8)
+            # Use the params from CATS2008 for vertical motion at ref point RIS (-82, -78.8)
             tidesRut_params['M2'] =    [0.6826,     176.33,     164.70,     120.69]
             tidesRut_params['S2'] =    [0.9567,     154.53,     108.70,     -10.82]  
             tidesRut_params['N2'] =    [0.0,        163,        27.70,       24.60]
@@ -315,6 +315,45 @@ class simulation(fourdvel):
             #Q1 1.1195 0.079 10.72
             #Mf 13.6608 0.02 5.32
             #Mm 27.5546 0.017 11.99
+
+        ################# RIS model #############################################
+
+        ################# EIS model #############################################
+        # model_num > 100
+        if model_num == 100:
+            # Same as model 18 for horizontal components
+            # Use the params from CATS2008 for vertical motion at ref point RIS (-76.32, -76.75)
+            # Divide the amplitude and phase of Msf by 2
+            tidesRut_params['M2'] =    [0.6826,     176.33,     118.369,     105.988]
+            tidesRut_params['S2'] =    [0.9567,     154.53,     76.538,     -23.469]  
+            tidesRut_params['N2'] =    [0.0,        163,        19.739,       9.971]
+            tidesRut_params['K2'] =    [0.817,      160.31,     19.825,      159.217]
+
+
+            tidesRut_params['K1'] =    [0.5008,     -147.35,    36.119,      18.359]
+            tidesRut_params['O1'] =    [0.6958,     -143.32,    36.581,      126.542]
+            tidesRut_params['P1'] =    [0.6325,     -176.12,    12.555,      8.048]
+            tidesRut_params['Q1'] =    [0.6325,     -176.12,    8.235,       23.499]
+
+            tidesRut_params['Mf'] =    [6.6943 / 2,     157.98,     2.596,       -32.713]
+            tidesRut_params['Msf'] =   [35.00 / 2,      260,        0.00,       0.00]
+
+            tidesRut_params['Mm'] =    [13.2831,    -19.52,     1.606,        11.603]
+            tidesRut_params['Ssa'] =   [70.4744,    -167.22,    0.00,        179]
+            tidesRut_params['Sa'] =    [50.5497,    -163.61,    0.00,        179]
+
+            #M2 1.18369 105.988
+            #S2 0.76538 -23.469
+            #N2 0.19739 9.971
+            #K2 0.19825 159.217
+            #K1 0.36119 18.359
+            #O1 0.36581 126.542
+            #P1 0.12555 8.048
+            #Q1 0.08235 23.499
+            #Mf 0.02596 -32.713
+            #Mm 0.01606 11.603
+
+        ################# EIS model #############################################
  
         if model_num == 2:
 

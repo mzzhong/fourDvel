@@ -256,8 +256,9 @@ class output(fourdvel):
    
                         # Remove the stagnent points 
                         #if self.grid_set_velo[point][2]<=0.4:
-                        if self.grid_set_velo[point][2]<=0.2:
+                        #if self.grid_set_velo[point][2]<=0.2:
                         #if self.grid_set_velo[point][2]<=0.1:
+                        if self.grid_set_velo[point][2]<=0.05:
                             continue
     
                         if this_grid_set[point][quant_name_orig]=='external':
@@ -629,6 +630,8 @@ class output(fourdvel):
     
                     # Initialization
                     grid_set_quant = {}
+                    # no phase correction
+                    grid_set_quant_npc = {}
     
                     # Check if this is a single or group quant_name
                     # group mode
@@ -639,6 +642,7 @@ class output(fourdvel):
                             
                             for sub_quant_name in sub_quant_names:
                                 grid_set_quant[sub_quant_name] = {}
+                                grid_set_quant_npc[sub_quant_name] = {}
     
                         else:
                             raise Exception("Undefined group name")
@@ -655,10 +659,6 @@ class output(fourdvel):
                                 else:
                                     raise Exception()
 
-                                #if point = self.test_point:
-                                #    print(point)
-                                #    print(stop)
-
                                 quant_group = self.tide_vec_to_quantity(input_tide_vec = input_tide_vec, quant_name = quant_name, point = point, state=state)
     
                                 # Save it into grid_set_quant
@@ -674,6 +674,7 @@ class output(fourdvel):
                     else:
                         sub_quant_names = [quant_name]
                         grid_set_quant[quant_name] = {}
+                        grid_set_quant_npc[quant_name] = {}
     
                         for point in output_keys:
                         
@@ -693,18 +694,18 @@ class output(fourdvel):
         
                                 # Here we record everything, if Cm_p exists, including nan futher filtered by tide_vec_to_quantity.
                                 grid_set_quant[quant_name][point] = quant
-    
-                    # Output the result
-                    #if state=="est" and quant_name == "secular_horizontal_speed":
-    
-                    #print(grid_set_quant.keys())
-                        #for point, v in grid_set_quant[quant_name].items():
-                        #    if not np.isnan(v):
-                        #        print(point,v)
-                    
+
+                    ######################################################
+                    # Some additonal work on removing bad values
+                    for sub_quant_name in sub_quant_names:
+                        for point in grid_set_quant[sub_quant_name].keys():
+                            # Need at least two track
+                            if len(self.grid_set[point])<=1:
+                                grid_set_quant[sub_quant_name][point] = np.nan
+ 
                     ########    End of extraction   #############
     
-                    ## Do phase correction for mean phase
+                    ##### Do phase correction for mean phase #################
                     do_correction = True
                     if self.no_phase_correction:
                         do_correction = False
@@ -715,34 +716,39 @@ class output(fourdvel):
                     for sub_quant_name in sub_quant_names:
     
                         if (state=='true' or state=='est') and 'phase' in sub_quant_name:
-
-                            # Remove wrong phase where there is only one track
+                            ### Some post processing on phase
+                            # Remove wrong phase where there is only one track (this is supposed to be done in the lines above)
                             for point in grid_set_quant[sub_quant_name].keys():
                                 # Need at least two track
                                 if len(self.grid_set[point])<=1:
                                     grid_set_quant[sub_quant_name][point] = np.nan
-                        
+
+                            # Make a copy of the quant before phase correction
+                            grid_set_quant_npc[(state, sub_quant_name)] = grid_set_quant[sub_quant_name].copy()
+
+                            # Get all the values                        
                             values = np.asarray(list(grid_set_quant[sub_quant_name].values()))
 
-                            # count the number of non-zero values
+                            # Count the number of non-zero values
                             count = np.count_nonzero(~np.isnan(values))
    
                             # If there are at least one valid value 
                             if count>0:
+                                # this is turned off ususally
                                 if do_correction_with_true ==True and sub_quant_name in phase_center and state == "est":
                                     print("In phase center: ", sub_quant_name)
                                     center = phase_center[sub_quant_name]
+                                # default version
                                 else:
                                     print("Calculated the mean phase")
                                     center = np.nansum(values) /count
 
                                 # Save the mean phase
-                                f_mp.write(sub_quant_name + ' ' + str(center)+'\n')
-    
+                                f_mp.write(state + '_' + sub_quant_name + ' ' + str(center)+'\n')
+
                                 # Do correction
                                 # Forced no correction for "in_deg" (ad hoc)
                                 if do_correction and not "in_deg" in sub_quant_name:
-    
                                     print("Do mean phase shift")
                                     print("The mean phase is: ", center)
                                     for point in grid_set_quant[sub_quant_name].keys():
@@ -754,7 +760,12 @@ class output(fourdvel):
                                 if state=="true":
                                     print("Give the mean phase of true model to phase center dictionary")
                                     phase_center[sub_quant_name] = center
-    
+
+                            # Mean phase is not defined
+                            else:
+                                # Save the mean phase
+                                f_mp.write(state + '_' + sub_quant_name + ' ' + 'NaN' + '\n')
+                               
                     ######## End of mean phase correction   #####
 
                 elif state == "bias":
@@ -763,9 +774,7 @@ class output(fourdvel):
     
                     # Initialization
                     grid_set_quant = {}
-    
-                    # Check if this is a single or group quant_name
-                    # group mode
+                    # If this is a group 
                     if quant_name.endswith("group"):
                         print("group name")
                         if quant_name == "Msf_horizontal_displacement_group":
@@ -775,11 +784,12 @@ class output(fourdvel):
                         else:
                             raise Exception("Undefined group name")
  
-                    # normal single mode
+                    # If this is a normal quant_name
                     else:
                         sub_quant_names = [quant_name]
                         grid_set_quant[quant_name] = {}
 
+                    # Find the difference betweeen true and est (without phase correction)
                     for sub_quant_name in sub_quant_names:
                         true_grid_set_quant = saved_grid_set_quant_results[("true", sub_quant_name)]
                         est_grid_set_quant = saved_grid_set_quant_results[("est", sub_quant_name)]
@@ -793,23 +803,24 @@ class output(fourdvel):
                                 else:
                                     raise Exception()
                 else:
-                    raise ValueError('unknown state')
+                    raise ValueError('Unknown state')
 
-                # Remove some points here
-                for sub_quant_name in sub_quant_names:
-                    for point in grid_set_quant[sub_quant_name].keys():
-                        # Need at least two track
-                        if len(self.grid_set[point])<=1:
-                            grid_set_quant[sub_quant_name][point] = np.nan
-    
+   
                 #### Write to xyz file #####
                 for sub_quant_name in sub_quant_names:
                     xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + sub_quant_name + '.xyz')
                     self.display.write_dict_to_xyz(grid_set_quant[sub_quant_name], xyz_name = xyz_name)
 
                     # Save the results
-                    saved_grid_set_quant_results[(state, sub_quant_name)] = grid_set_quant[sub_quant_name]
+                    # If this is phase, then phase correction may be done.
+                    # Record the phase values with no correction
+                    if (state=='true' or state=='est') and 'phase' in sub_quant_name:
+                        saved_grid_set_quant_results[(state, sub_quant_name)] = grid_set_quant_npc[(state, sub_quant_name)]
+                    # In other cases, just record the values
+                    else:
+                        saved_grid_set_quant_results[(state, sub_quant_name)] = grid_set_quant[sub_quant_name]
 
+        # close the mean phase file
         f_mp.close()
 
         return 0                
@@ -826,7 +837,7 @@ def main(iargs=None):
     #out.output_true = False
     #out.output_est = False
     #out.output_uq = False
-    #out.output_resid = False
+    out.output_resid = False
     #out.output_difference = False
     #out.output_others = False
 

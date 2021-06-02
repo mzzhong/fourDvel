@@ -124,8 +124,8 @@ class estimate(configure):
             # tides_3: enumerating grounding level
             elif task_name == "tides_3":
                 
-                #tides_3_mode = "find_optimal_gl"
-                tides_3_mode = "invert_optimal_gl"
+                tides_3_mode = "find_optimal_gl"
+                #tides_3_mode = "invert_optimal_gl"
 
                 print("tides_3_mode: ", tides_3_mode)
 
@@ -173,8 +173,8 @@ class estimate(configure):
                     raise ValueError("Unknown enum grounding run mode")
 
                 ###### Prepare the grounding level values to be enumerated #########
-                #gl_option = 'manual'
-                gl_option = 'auto'
+                gl_option = 'manual'
+                #gl_option = 'auto'
 
                 if gl_option == 'no_grounding':
 
@@ -185,7 +185,7 @@ class estimate(configure):
                 
                 elif gl_option == "manual":
 
-                    gl_list_option = 6
+                    gl_list_option = 7
 
                     if gl_list_option == 0:
                         enum_space = 0.1
@@ -221,6 +221,11 @@ class estimate(configure):
                         enum_space = 0.1
                         gl_low  =   -4.0
                         gl_high =   -3.0
+
+                    if gl_list_option == 7:
+                        gl_low = -10
+                        gl_high = -10
+                        enum_space = 1
  
                     enum_grounding_level = np.arange(gl_low, gl_high+1e-6, enum_space)
                     print(enum_grounding_level)
@@ -242,6 +247,7 @@ class estimate(configure):
                     print("Remaining gl values for manual eumeration if passing the ice shelf check: ", enum_grounding_level_int)
 
                     # Mark that the next stage will be done (for manual mode)
+                    # Need to be checked every time in manual mode
                     others_set['current_auto_enum_stage'] = 3
                
                 elif gl_option == 'auto':
@@ -263,27 +269,14 @@ class estimate(configure):
                     else:
                         raise ValueError("Unknown auto gl option")
 
-                    # Determine the current enumeration stage
-                    #if len(completed_enum_gl) == 0:
-                    #    current_auto_enum_stage = 0
-                    #else:
-                    #    completed_enum_gl_sorted = np.sort(np.asarray(list(completed_enum_gl), dtype=np.float64) / 10**6)
-                    #    min_interval = min(completed_enum_gl_sorted[1:] - completed_enum_gl_sorted[:-1])
-                    #    print('min_interval: ', min_interval)
-
-                    #    auto_enum_stage = 0
-                    #    for istage in range(1, len(auto_enum_stages)+1):
-                    #        if abs(min_interval - auto_enum_stages[istage][1])<1e-5:
-                    #            current_auto_enum_stage = istage
-
                     # Derive the gl values to be enumerated
                     if current_auto_enum_stage == 0:
                         enum_space = 0.1
-                        gl_low  =   -4.0
-                        gl_high =   4.0
+                        #gl_low  =   -4.0
+                        #gl_high =   4.0
 
-                        gl_low = -4.0
-                        gl_high = -1.0
+                        #gl_low = -4.0
+                        #gl_high = -1.0
 
                         gl_low = -4.0
                         gl_high = 0.0
@@ -350,6 +343,8 @@ class estimate(configure):
                     
                     # Mark that the next stage will be done (for auto mode)
                     others_set['current_auto_enum_stage'] = next_auto_enum_stage
+
+                ### End of auto mode for gl_option ###
 
                 elif gl_option == 'external':
                     # If the external grounding file is saved in ${id}_grid_set_others.pkl
@@ -492,6 +487,13 @@ class estimate(configure):
                     linear_design_mat_set = self.modify_G_set(point_set, linear_design_mat_set, offsetfields_set, up_disp_set, grounding_level = given_grounding_level, gl_name = gl_name)
                     print("Modified matrix (obs) set is Done")
 
+
+                # If invert for topographic residual, add another column for G
+                if self.est_topo_resid:
+                    linear_design_mat_set = self.modify_G_for_topo_resid_set(point_set, linear_design_mat_set, offsetfields_set, data_info_set, demfactor_set)
+
+                print(stop)
+
                 # Model prior.
                 invCm_set = self.model_prior_set(point_set)
                 print("Model prior set Done")
@@ -542,9 +544,9 @@ class estimate(configure):
     
                 ############ Some additional work ##############################
                 
-                print('Additional work for tides_3 saving the results')
                 # if it is tides_3 and this is a new enumerated grounding_level_int
                 if self.task_name == "tides_3" and tides_3_mode == "find_optimal_gl" and (isinstance(grounding_level_int, int) or isinstance(grounding_level_int, dict)):
+                    print('Additional work for tides_3 saving the results')
                     # Save the corresponding up_scale and residuals
                     self.export_to_others_set_wrt_gl(point_set, grounding_level_int, model_vec_set, model_likelihood_set, resid_of_tides_set, others_set)
 

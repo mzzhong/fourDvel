@@ -198,6 +198,8 @@ class fourdvel(basics):
 
         self.up_disp_mode = None
 
+        self.est_topo_resid = False
+
         fmt = '%Y%m%d'
 
         for param in params:
@@ -494,6 +496,14 @@ class fourdvel(basics):
                 self.external_grounding_level_file = value
                 print('external_grounding_level_file: ',value)
 
+            ## Topo resid
+            if name == 'est_topo_resid':
+                if value == 'True':
+                    self.est_topo_resid = True
+                else:
+                    self.est_topo_resid = False
+                print('est_topo_resid: ', value)
+
             ## Analysis ##
             if name == 'analysis_name':
                 self.analysis_name = value
@@ -715,8 +725,8 @@ class fourdvel(basics):
                             continue
 
                         # ad hoc, remove short data on track 12
-                        if track_num == 12 and theDate >= date(2018,1,22) and theDate <= date(2018,2,27):
-                            continue
+                        #if track_num == 12 and theDate >= date(2018,1,22) and theDate <= date(2018,2,27):
+                        #    continue
 
                         # ad hoc, remove all track 12 data
                         if track_num == 12:
@@ -1164,10 +1174,10 @@ class fourdvel(basics):
 
         else:
             # Same as the input time series for vertical motion
-            #up_disp_mode = "single"
+            up_disp_mode = "single"
     
             # Use parameterized vertical motion (10 constituents)
-            up_disp_mode = "single"
+            #up_disp_mode = "single_parametric"
     
             # Use self-derived vertical motion
             #up_disp_mode = "parametric_map"
@@ -1673,8 +1683,99 @@ class fourdvel(basics):
                 G[i*2+j,:] = row
 
         return G
-        # End of building.
+        # End of building G.
 
+    def modify_G_for_topo_resid_set(self, point_set, G_set, offsetfields_set, data_info_set, demfactor_set):
+
+        for point in point_set:
+
+            if point != self.test_point:
+                continue
+            
+            G = G_set[point]
+
+            offsetfields = offsetfields_set[point]
+
+            data_info = data_info_set[point]
+
+            demfactor_dict = demfactor_set[point]
+
+            demfactor_list = [demfactor_dict[data_info[i]] for i in range(len(data_info))]
+
+            B_perp_list = []
+            for i, offsetfield in enumerate(offsetfields):
+                sate, track_num = data_info[i]
+                date1, date2 = offsetfield[0:2]
+                pairname = date1.strftime('%Y%m%d') + '_' + date2.strftime('%Y%m%d')
+                
+                # Find the B_perp data
+                if sate == 'csk':
+                    track_name = 'track_' + str(track_num).zfill(3) + '_0'
+                    B_perp_pklfile = os.path.join(self.csk_workdir, track_name, 'merged/interp_baselines', pairname+'.pkl')
+                    with open(B_perp_pklfile, "rb") as f:
+                        B_perp_data = pickle.load(f)
+                    
+                    B_perp_list.append(B_perp_data[0])
+
+                elif sate == 's1':
+                    track_name = 'track_' + str(track_num)
+                    B_perp_pklfile = os.path.join(self.s1_workdir, track_name, 'merged/interp_baselines', pairname+'.pkl')
+                    with open(B_perp_pklfile, "rb") as f:
+                        B_perp_data = pickle.load(f)
+                    
+                    B_perp_list.append(B_perp_data[0])
+
+                else:
+                    raise ValueError()
+ 
+            print('offsetfields: ', len(offsetfields))
+            print('data_info: ', len(data_info))
+            print('demfactor: ', len(demfactor_list))
+            print('B_perp: ', len(B_perp_list))
+
+            # modify G for topo resid
+            G_set[point] = self.modify_G_for_topo_resid(point=point, G=G, offsetfields=offsetfields, demfactor_list=demfactor_list, B_perp_list=B_perp_list)
+
+        return G_set
+
+    def modify_G_for_topo_resid(self, point, G, offsetfields, demfactor_list, B_perp_list):
+
+        # Control the number of offsetfields
+        n_offsets = len(offsetfields)
+
+        # Important: accounting for the no offsetfield scenario
+        if n_offsets ==0:
+            G = np.zeros(shape=(1,1)) + np.nan
+            return G 
+
+        ## Modify the G matrix
+        # Find the shape of G
+        n_rows, n_cols = G.shape
+        print("n_rows, n_cols: ", n_rows, n_cols)
+
+        # Add a column to model topo resid
+        G = np.hstack((G, np.zeros(shape=(n_rows,1))))
+
+        # Iterate over offsetfields
+        #print("n_offsets: ",n_offsets)
+        for i in range(n_offsets):
+
+            # Two observation vectors for each offsetfield
+            # LOS and AZI
+            for j in range(2):
+                # Only for LOS
+                if j%2==0:
+                    phi = B_perp_list[i] * demfactor_list[i]
+                    G[i*2+j,n_cols] = phi
+
+        print(n_offsets)
+        print(i)
+        print(G)
+        print(G.shape)
+        print(stop)
+
+        return G
+        # End of modifying G.
 
     def modify_G_set(self, point_set, G_set, offsetfields_set, up_disp_set, grounding_level, gl_name):
 
@@ -1782,6 +1883,7 @@ class fourdvel(basics):
 
         # Add a column to model vertical displacement from external tide model
         G = np.hstack((G, np.zeros(shape=(n_rows,1))))
+
         # Iterate over offsetfields
         #print("n_offsets: ",n_offsets)
         for i in range(n_offsets):
@@ -2491,7 +2593,7 @@ class fourdvel(basics):
 
                 # For test point, save and show the result
                 if point == self.test_point:
-                    show_test_point = True
+                    show_test_point = False
                     if show_test_point:
                         print('optimal gl: ', others_set[point]["optimal_grounding_level"])
                         #print('interpolating on : ')
@@ -2950,13 +3052,15 @@ class fourdvel(basics):
     
                         thres_for_v = 0.1
                         thres_for_amp_alf = 0.075
-                        thres_for_amp_crf = 0.075
                         thres_for_amp_crf = 0.025
+
+                        # 2021.05.19
+                        thres_for_amp_alf = 0.05
     
                         amp_full = (amp_alf**2 + amp_crf**2)**0.5
     
                         # Remove some invalid phase values
-                        if v_model>thres_for_v and amp_alf>thres_for_amp_alf:
+                        if v_model > thres_for_v and amp_alf > thres_for_amp_alf:
                             if self.proj == "Rutford":
                             # Remove the northern data
                             #if self.proj == "Rutford" and lat<-77.8:
@@ -3354,9 +3458,11 @@ class fourdvel(basics):
                     thres = 0.1
                     # 2021.02.03
                     #thres = 0.01
+                    # 2021.05.17
+                    #thres = 0.05
                     
-                    if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
-                    #if ampU >=thres or state == 'uq':
+                    #if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
+                    if ampU >=thres or state == 'uq':
 
                         value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
@@ -3412,7 +3518,8 @@ class fourdvel(basics):
                     # 2021.04.06
                     thres = 0.03
 
-                    if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
+                    #if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
+                    if (ampU >= thres) or (state=='uq'):
 
                         value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
@@ -3466,7 +3573,8 @@ class fourdvel(basics):
                     ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     thres = 0.03
 
-                    if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
+                    #if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
+                    if (ampU > thres) or (state=='uq'):
 
                         value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:

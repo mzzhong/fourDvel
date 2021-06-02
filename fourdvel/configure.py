@@ -414,17 +414,20 @@ class configure(fourdvel):
                         key = (track[1], track[0])
                         demfactor_set[point][key] = track_demfactor_set.get(point, np.nan)
    
-                        # Save the information. (# track info)
-                        data_info_set[point].append([(track[0], track[1]), len(track_offsets_set[point])])
+                        # Save the information. (# track info) # track[1]: sate, track[0]: track_number
+                        data_info_set[point] = data_info_set[point] + [(track[1], track[0])] * len(track_offsets_set[point]) 
     
                 print('======= END OF EXTRACTION For {} ========'.format(sate_name))
+                print('Total number of data info at test point: ', len(data_info_set[test_point]))
                 print('Total number of offsetfields at test point: ', len(offsetfields_set[test_point]))
                 print('Total length of offsets at test point: ', len(offsets_set[test_point]))
                 print('Total length of offsets variance at test point: ', len(offsetsVar_set[test_point]))
                 print("Height at test point: ", height_set[test_point])
                 print("Demfactor at test point: ", demfactor_set[test_point])
 
-                # Generate synthetic data
+                ### End of extraction for data_mode 2 and data_mode 3 ###
+
+                # For data_mode 2, generate synthetic data
                 if this_data_mode == 2:
                     # Synthetic data.
                     fourD_sim = self.fourD_sim
@@ -472,7 +475,7 @@ class configure(fourdvel):
                     # velocity domain m/d
                     true_tide_vec_set = fourD_sim.true_tide_vec_set(point_set,secular_v_set,self.modeling_tides, tide_amp_set, tide_phase_set)
     
-                # Just use the obtained data
+                # For data_mode 3, just use the obtained data
                 elif this_data_mode == 3:
     
                     # Real data
@@ -518,7 +521,8 @@ class configure(fourdvel):
             height_set_dict[sate_name] = height_set
             demfactor_set_dict[sate_name] = demfactor_set
 
-        # Put together information from different satellites
+
+        ### Put together information from different satellites ###
         # data_info_set(deprecated): For each point a list of (track_num, sate_name, number of data points)
         # data_vec_set: For each point, a vector
         # noise_sigma_set: For each point, a two value tuple (range error and azimuth error)
@@ -580,7 +584,7 @@ class configure(fourdvel):
         print('Total length of offset measurement: ', len(final_data_vec_set[test_point]))
         print('==============================================')
 
-        # show the information of test
+        # Show the information of test
         #print(final_offsetfields_set[test_point])
         print("noise: ", final_noise_sigma_set[test_point])
         if test_point in true_tide_vec_set:
