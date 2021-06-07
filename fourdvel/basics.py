@@ -39,6 +39,7 @@ class basics():
         tide_periods['P1'] = 1.00274532
         tide_periods['O1'] = 1.07580578
         tide_periods['Q1'] = 1.11951458
+        tide_periods['S1'] = 1.00000000
 
         tide_periods['Mf'] = 13.66083078
         tide_periods['Msf'] = 14.76529444
@@ -46,9 +47,15 @@ class basics():
         tide_periods['Ssa'] = 182.62818021
         tide_periods['Sa'] = 365.25636042
 
-        tide_periods['M4'] = tide_periods['M2']/2 
+        # nonlinear harmonics
+        tide_periods['M4'] = tide_periods['M2']/2
+        tide_periods['Ms4'] = 0.25430580
+        #tide_periods['MS4'] = 1/(1/tide_periods['M2'] + 1/tide_periods['S2'])
         tide_periods['S4'] = tide_periods['S2']/2
-        tide_periods['MS4'] = 1/(1/tide_periods['M2'] + 1/tide_periods['S2'])
+
+        # added in TPXO9
+        tide_periods['2n2'] = 0.53772387
+        tide_periods['Mn4'] = 0.26121557
 
         self.tide_short_period_members = ["K2","S2","M2","N2","K1","P1","O1","Q1"]
         self.tide_long_period_members = ["Mf","Msf","Mm","SSa","Sa"]
@@ -323,7 +330,7 @@ class basics():
             pf = float(lines[i*6+4].split()[1])
             pu = float(lines[i*6+5].split()[1])
 
-            print(tide_name1, cos_amp, sin_amp, ph, pf, pu)
+            #print(tide_name1, cos_amp, sin_amp, ph, pf, pu)
 
             ris_tides_params[(tide_name1,"cos_x")] = cos_amp
             ris_tides_params[(tide_name1,"sin_x")] = sin_amp
@@ -331,7 +338,10 @@ class basics():
             ris_tides_params[(tide_name1,"pf")] = pf
             ris_tides_params[(tide_name1,"pu")] = pu
 
-            tide_names.append(tide_name1.capitalize())
+            # make the first letter upper case
+            tide_name2 = tide_name1.capitalize()
+            
+            tide_names.append(tide_name2)
 
         # Convert to standard params
         n_tides = len(tide_names)
@@ -609,14 +619,32 @@ class basics():
 
         return mean_phase 
 
-#####################3
-run_basics = 0
+######################
+def main():
+    run_basics = 1
+    
+    if run_basics:
+        bs = basics()
+        #params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/EIS_tides_params.txt" 
+        params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/EIS_CATS2008_tides_params.txt" 
+        #params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/EIS_TPXO_tides_params.txt" 
+        
+        tide_names, tides_params = bs.read_tides_params(params_file=params_file)
 
-if run_basics:
-    bs = basics()
-    params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/EIS_tides_params.txt" 
-    tide_names, tides_params = bs.read_tides_params(params_file=params_file)
-    print(tides_params)
-    for tide_name in tide_names:
-        tide_name1 = tide_name.lower()
-        print(tide_name, round(tides_params[(tide_name1, "tide_amp")],5), round(tides_params[(tide_name1, "tide_phase_deg")],3))
+        output_tide_names = ['M2','S2','N2','K2','K1','O1','P1','Q1','Mf','Mm'] 
+
+        print("Model name: ", params_file)
+        print("The 10 tides: amp, phase_deg, phase_min")
+        for tide_name in output_tide_names:
+            tide_name1 = tide_name.lower()
+            print(tide_name, round(tides_params[(tide_name1, "tide_amp")],5), round(tides_params[(tide_name1, "tide_phase_deg")],3), round(tides_params[(tide_name1, "tide_phase_min")],3))
+
+        output_additional_tides = 0
+        if output_additional_tides:
+            for tide_name in tide_names:
+                if not tide_name in output_tide_names:
+                    tide_name1 = tide_name.lower()
+                    print(tide_name, round(tides_params[(tide_name1, "tide_amp")],5), round(tides_params[(tide_name1, "tide_phase_deg")],3), round(tides_params[(tide_name1, "tide_phase_min")],3))
+    
+if __name__=='__main__':
+    main()

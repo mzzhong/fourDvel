@@ -492,8 +492,6 @@ class estimate(configure):
                 if self.est_topo_resid:
                     linear_design_mat_set = self.modify_G_for_topo_resid_set(point_set, linear_design_mat_set, offsetfields_set, data_info_set, demfactor_set)
 
-                print(stop)
-
                 # Model prior.
                 invCm_set = self.model_prior_set(point_set)
                 print("Model prior set Done")

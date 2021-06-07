@@ -302,7 +302,8 @@ class driver_fourdvel():
     
             # Chop into multiple threads. 
             #nthreads = 10
-            nthreads = 5
+            nthreads = 8
+            #nthreads = 5
             #nthreads = 1
             self.nthreads = nthreads
             total_number = n_tiles

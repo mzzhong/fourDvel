@@ -18,11 +18,12 @@ def createParser():
     
     parser.add_argument('-p','--param_file', dest='param_file', type=str, help='parameter file', required=True)
 
+    # needs to be consistent with what is used for running 
+    parser.add_argument('-t','--task_name', dest='task_name', type=str, help='task_name',required=True)
+ 
     parser.add_argument('-q','--quant_list_name', dest='quant_list_name', type=str, help='quant_list_name', default=None)
 
     parser.add_argument('--npc','--no_phase_correction', dest='no_phase_correction', action='store_true')
-    
-    #parser.add_argument('-t','--task_name', dest='task_name', type=str, help='task_name',default=None)
    
     return parser
 
@@ -286,7 +287,6 @@ class output(fourdvel):
                     # Record everything, including np.nan
                     # np.nan is filtered in write_dict_to_xyz
 
-
                     # up_scale
                     if quant_name in ["up_scale"]:
                         if state == "true":
@@ -439,13 +439,16 @@ class output(fourdvel):
 
         return 0
 
-    def output_estimations(self, output_states, quant_list_name):
+    def output_estimations(self, output_states):
 
         modeling_tides = self.modeling_tides
         n_modeling_tide = self.n_modeling_tides
 
         this_result_folder = self.estimation_dir
         test_id = self.test_id
+
+        quant_list_name = self.quant_list_name
+        task_name = self.task_name
 
         self.load_everything()
 
@@ -557,10 +560,15 @@ class output(fourdvel):
                                                                             "Msf_horizontal_displacement_amplitude"]
 
 
-        # For nonlinear inversion, may not exist
-        #quant_list.insert(0, 'amplitude_scaling')
-        #quant_list = ['amplitude_scaling']
+        # Additional parameters
+        if task_name == 'tides_3':
+            quant_list.append('up_amplitude_scaling')
 
+        if self.est_topo_resid == True:
+            quant_list.append('topo_resid')
+
+        print("quant_list: ", quant_list)
+        
         ### End with quant list ###
 
         states = {}
@@ -579,6 +587,7 @@ class output(fourdvel):
         # Create a file to save mean phase
         f_mp  = open(self.estimation_dir + '/' + 'mean_phase.txt','w')
 
+        print("output states: ", output_states)
         for state in output_states:
 
             print("\n")
@@ -594,7 +603,7 @@ class output(fourdvel):
                 ## Derive the point set
                 # normal states
                 if state in ["true", "est", "uq"]:
-                    
+
                     # down sample for velocity vector.
                     if quant_name == 'secular_horizontal_velocity':
                         output_keys = []
@@ -623,11 +632,12 @@ class output(fourdvel):
     
                     else:
                         output_keys = this_grid_set.keys()
-                        print(len(output_keys))
+                        print("size of output point set: ", len(output_keys))
 
                     # Note that: For "true", there is no output_keys in data_mode 3.
                     print('Output quantity name: ', quant_name)
-    
+
+   
                     # Initialization
                     grid_set_quant = {}
                     # no phase correction
@@ -675,7 +685,9 @@ class output(fourdvel):
                         sub_quant_names = [quant_name]
                         grid_set_quant[quant_name] = {}
                         grid_set_quant_npc[quant_name] = {}
-    
+
+                        # Loop through each point in the output point set
+                        # If state is true and data_mode is 3, there is simply no key    
                         for point in output_keys:
                         
                             # Only record points where inverse problem can be done, Cm_p exists.
@@ -714,7 +726,6 @@ class output(fourdvel):
                     do_correction_with_true = False
     
                     for sub_quant_name in sub_quant_names:
-    
                         if (state=='true' or state=='est') and 'phase' in sub_quant_name:
                             ### Some post processing on phase
                             # Remove wrong phase where there is only one track (this is supposed to be done in the lines above)
@@ -837,7 +848,7 @@ def main(iargs=None):
     #out.output_true = False
     #out.output_est = False
     #out.output_uq = False
-    out.output_resid = False
+    #out.output_resid = False
     #out.output_difference = False
     #out.output_others = False
 
@@ -850,12 +861,17 @@ def main(iargs=None):
     if out.output_true and out.output_est:
         output_states.append("bias")
 
-    if out.output_others: out.run_output_others()
+    # First output others
+    if out.output_others:
+        out.run_output_others()
 
-    quant_list_name = inps.quant_list_name
+    # Output normal linear estimations
+    out.quant_list_name = inps.quant_list_name
+    out.task_name = inps.task_name
 
-    out.output_estimations(output_states, quant_list_name)
- 
+    out.output_estimations(output_states)
+
+    # Output residual 
     if out.output_resid: out.run_output_residual()
 
     if out.output_difference:

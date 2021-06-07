@@ -1494,6 +1494,25 @@ class fourdvel(basics):
 
         return (point_lon, point_lat)
 
+    def get_pair_baselines(self):
+
+        pair_baselines_dict = {}
+
+        if self.est_topo_resid and self.use_csk:
+            pklfile = os.path.join(self.csk_workdir, 'all_pair_const_baseline.pkl')
+            
+            with open(pklfile,'rb') as f:
+                pair_baselines_dict['csk'] = pickle.load(f)
+
+        if self.est_topo_resid and self.use_s1:
+            pklfile = os.path.join(self.s1_workdir, 'all_pair_const_baseline.pkl')
+            with open(pklfile,'rb') as f:
+                pair_baselines_dict['s1'] = pickle.load(f)
+
+        self.pair_baselines_dict = pair_baselines_dict
+
+        return 0
+
     def preparation(self):
 
         # Get pre-defined grid points and the corresponding tracks and vectors.
@@ -1536,6 +1555,9 @@ class fourdvel(basics):
 
         # Load offset field stack data
         self.get_offset_field_stack()
+
+        # Load the pair baseline data
+        self.get_pair_baselines()
 
         return 0
 
@@ -1689,8 +1711,8 @@ class fourdvel(basics):
 
         for point in point_set:
 
-            if point != self.test_point:
-                continue
+            #if point != self.test_point:
+            #    continue
             
             G = G_set[point]
 
@@ -1703,35 +1725,39 @@ class fourdvel(basics):
             demfactor_list = [demfactor_dict[data_info[i]] for i in range(len(data_info))]
 
             B_perp_list = []
+            #B_perp_list_2 = []
             for i, offsetfield in enumerate(offsetfields):
                 sate, track_num = data_info[i]
                 date1, date2 = offsetfield[0:2]
                 pairname = date1.strftime('%Y%m%d') + '_' + date2.strftime('%Y%m%d')
+
+                B_perp_list.append(self.pair_baselines_dict[sate][sate, track_num, pairname])
                 
-                # Find the B_perp data
-                if sate == 'csk':
-                    track_name = 'track_' + str(track_num).zfill(3) + '_0'
-                    B_perp_pklfile = os.path.join(self.csk_workdir, track_name, 'merged/interp_baselines', pairname+'.pkl')
-                    with open(B_perp_pklfile, "rb") as f:
-                        B_perp_data = pickle.load(f)
-                    
-                    B_perp_list.append(B_perp_data[0])
+                ## Find the B_perp data
+                #if sate == 'csk':
+                #    track_name = 'track_' + str(track_num).zfill(3) + '_0'
+                #    B_perp_pklfile = os.path.join(self.csk_workdir, track_name, 'merged/interp_baselines', pairname+'.pkl')
+                #    with open(B_perp_pklfile, "rb") as f:
+                #        B_perp_data = pickle.load(f)
+                #    
+                #    B_perp_list_2.append(B_perp_data[0])
 
-                elif sate == 's1':
-                    track_name = 'track_' + str(track_num)
-                    B_perp_pklfile = os.path.join(self.s1_workdir, track_name, 'merged/interp_baselines', pairname+'.pkl')
-                    with open(B_perp_pklfile, "rb") as f:
-                        B_perp_data = pickle.load(f)
-                    
-                    B_perp_list.append(B_perp_data[0])
+                #elif sate == 's1':
+                #    track_name = 'track_' + str(track_num)
+                #    B_perp_pklfile = os.path.join(self.s1_workdir, track_name, 'merged/interp_baselines', pairname+'.pkl')
+                #    with open(B_perp_pklfile, "rb") as f:
+                #        B_perp_data = pickle.load(f)
+                #    
+                #    B_perp_list_2.append(B_perp_data[0])
 
-                else:
-                    raise ValueError()
+                #else:
+                #    raise ValueError()
  
-            print('offsetfields: ', len(offsetfields))
-            print('data_info: ', len(data_info))
-            print('demfactor: ', len(demfactor_list))
-            print('B_perp: ', len(B_perp_list))
+            #print('offsetfields: ', len(offsetfields))
+            #print('data_info: ', len(data_info))
+            #print('demfactor: ', len(demfactor_list))
+            #print('B_perp: ', len(B_perp_list))
+            #print(B_perp_list, B_perp_list_2)
 
             # modify G for topo resid
             G_set[point] = self.modify_G_for_topo_resid(point=point, G=G, offsetfields=offsetfields, demfactor_list=demfactor_list, B_perp_list=B_perp_list)
@@ -1751,7 +1777,7 @@ class fourdvel(basics):
         ## Modify the G matrix
         # Find the shape of G
         n_rows, n_cols = G.shape
-        print("n_rows, n_cols: ", n_rows, n_cols)
+        #print("n_rows, n_cols: ", n_rows, n_cols)
 
         # Add a column to model topo resid
         G = np.hstack((G, np.zeros(shape=(n_rows,1))))
@@ -1768,11 +1794,11 @@ class fourdvel(basics):
                     phi = B_perp_list[i] * demfactor_list[i]
                     G[i*2+j,n_cols] = phi
 
-        print(n_offsets)
-        print(i)
-        print(G)
-        print(G.shape)
-        print(stop)
+        #print(n_offsets)
+        #print(i)
+        #print(G)
+        #print(G.shape)
+        #print(stop)
 
         return G
         # End of modifying G.
@@ -1923,7 +1949,8 @@ class fourdvel(basics):
         #num_params = 3 + n_modeling_tides*6
         #param_vec = np.zeros(shape=(num_params,1))
         
-        # Copy the model_vec
+        # Copy the model_vec, same length
+        # Secular, tidal, nonlinear param and topo resid are copied
         param_vec = np.copy(model_vec)
 
         # If model_vec is invalid.
@@ -1931,7 +1958,7 @@ class fourdvel(basics):
             param_vec = param_vec + np.nan
             return param_vec
 
-        # Tides.
+        # Loop through the tides.
         for k in range(n_modeling_tides):
             
             tide_name = modeling_tides[k]
@@ -2069,21 +2096,26 @@ class fourdvel(basics):
         modeling_tides = self.modeling_tides
         n_modeling_tides = self.n_modeling_tides
 
-        num_params = 3 + n_modeling_tides*6
+        num_params = len(tide_vec)
+        num_tide_params = n_modeling_tides*6
+
         param_uq = np.zeros(shape=(num_params,1))
 
         # If Cm_p is invalid.
         if np.isnan(Cm_p[0,0]):
+            # Set param_uq to be np.nan
             param_uq = param_uq + np.nan
             return param_uq
 
         # Cm_p is valid, so is tide_vec
 
-        # Secular velocity.
+        # Set secular params
         variance = np.diag(Cm_p)
         param_uq[0:3,0] = variance[0:3]
+        # Set param_uq params 
+        param_uq[3 + num_tide_params:, 0] = variance[3 + num_tide_params:]
 
-        # Tide components.
+        # Tide components. Do the conversion.
         for k in range(n_modeling_tides):
             # E, N ,U
             for t in range(3):
@@ -2146,7 +2178,6 @@ class fourdvel(basics):
 
         return invCd
 
-
     def real_data_uncertainty_set(self, point_set, data_vec_set, noise_sigma_set):
         
         invCd_set = {}
@@ -2193,13 +2224,18 @@ class fourdvel(basics):
         # For tides_3, add one param for up_disp scale
         if self.task_name == "tides_3":
             num_params +=1
+
+        # If est topo resid (the last one)
+        if self.est_topo_resid:
+            num_params +=1
         
         # Set the model priors
         # Sigmas of model parameters.
         inf_permiss = 0
         inf_restrict = 100000
-        inf_restrict = 10**8
- 
+        #inf_restrict = 10**8
+
+        # Default is the value for permiss 
         inv_sigma = np.zeros(shape=(num_params, num_params))
 
         horizontal = self.horizontal_prior
@@ -2215,7 +2251,6 @@ class fourdvel(basics):
 
         if hasattr(self,'up_short_period'):
             up_short_period = self.up_short_period
-
         else:
             up_short_period = False
 
@@ -2270,11 +2305,8 @@ class fourdvel(basics):
             return Cm_p
 
         # OK, G is valid
-        #print('G: ', G.shape)
-        #print('invCd: ',invCd.shape)
-
-        if G.shape[0] != invCd.shape[0]:
-            raise Exception('G and invCd shapes are unmatched')
+        assert G.shape[0] == invCd.shape[0], print(G.shape, invCd.shape, 'G and invCd shapes do not match')
+        assert G.shape[1] == invCm.shape[0], print(G.shape, invCm.shape, 'G and invCm shapes do not match')
 
         invCm_p = np.matmul(np.matmul(np.transpose(G), invCd),G) + invCm
 
@@ -2342,7 +2374,7 @@ class fourdvel(basics):
         return 0
 
     def extract_up_scale(self, model_vec):
-        # The first index after tides
+        # up_scale is at the first index after secular and tidal params
         if not np.isnan(model_vec[0,0]):
             return model_vec[3 + len(self.modeling_tides) * 6, 0]
         else:
@@ -2671,11 +2703,7 @@ class fourdvel(basics):
 
         model_vec = model_p
 
-        #print(model_vec)
-        #print(model_vec.shape)
-
         return model_vec
-
 
     # Calculate residual sets.
     def get_resid_set(self, point_set, linear_design_mat_set, data_vec_set, model_vec_set):
@@ -2688,7 +2716,6 @@ class fourdvel(basics):
         # range mean, range rms, azimuth mean, azimuth rms
 
         for point in point_set:
-
             # secular.
             resid_of_secular = self.resid_of_secular(linear_design_mat_set[point],
                                                 data_vec_set[point], model_vec_set[point])
@@ -2802,7 +2829,7 @@ class fourdvel(basics):
             data_vec = input_tide_vec[:,0]
 
         # Output nan, if not exist.
-        extra_list = ['amplitude_scaling']
+        extra_list = ['up_amplitude_scaling', 'topo_resid']
         item_name = quant_name.split('_')[0]
         if (not item_name == 'secular') and (not item_name in modeling_tides) and (not quant_name in extra_list):
             quant = np.nan
@@ -3049,14 +3076,31 @@ class fourdvel(basics):
                         v_model = (ve_model**2 + vn_model**2)**(1/2)
     
                         lon, lat = self.int5d_to_float(point)
-    
-                        thres_for_v = 0.1
-                        thres_for_amp_alf = 0.075
-                        thres_for_amp_crf = 0.025
+   
+                        if self.proj == "Rutford": 
+                            thres_for_v = 0.1
+                            thres_for_amp_alf = 0.075
+                            thres_for_amp_crf = 0.025
 
-                        # 2021.05.19
-                        thres_for_amp_alf = 0.05
-    
+                        elif self.proj == "Evans":
+                            thres_for_v = 0.1
+                            #thres_for_v = 0.5
+                            #thres_for_v = 1.0
+
+                            #thres_for_amp_alf = 0.1
+                            #thres_for_amp_alf = 0.075
+                            thres_for_amp_alf = 0.050
+                            #thres_for_amp_alf = 0.025
+                            #thres_for_amp_alf = 0.010
+
+
+                            thres_for_amp_crf = 0.025
+                            
+                            # 2021.05.19
+                        else:
+                            raise ValueError()
+ 
+   
                         amp_full = (amp_alf**2 + amp_crf**2)**0.5
     
                         # Remove some invalid phase values
@@ -3193,8 +3237,6 @@ class fourdvel(basics):
                         sigma_phase_alf = np.sqrt(abs(sigma2_phase_alf))
                         sigma_amp_crf = np.sqrt(abs(sigma2_amp_crf))
                         sigma_phase_crf = np.sqrt(abs(sigma2_phase_crf))
-
-
 
                         # Convert phase to days
                         sigma_phase_alf_deg = self.rad2deg(sigma_phase_alf)
@@ -3606,13 +3648,36 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
-        elif quant_name == "amplitude_scaling":
+        # Additonal parameters
+        elif quant_name == "up_amplitude_scaling":
+            assert len(data_vec)>= 3 + self.n_modeling_tides*6 + 1, print("length of param_uq_vec has problem for up_amplitude scaling ", len(data_vec))
 
-            if state in ['true','est']:
+            # the first index after tidal params
+            ind = 3 + self.n_modeling_tides * 6
+
+            # TODO, Need to import true up amp scaling here
+            if state in ['true']:
                 quant = 0
+            elif state in ['est']:
+                quant = data_vec[ind]
             elif state in ['uq']:
-                assert len(data_vec) == 3 + self.n_modeling_tides * 6 + 1, print("length of data vec: ", len(data_vec))
+                quant = data_vec[ind]
+            else:
+                raise ValueError()
+
+        elif quant_name == "topo_resid":
+            assert len(data_vec)>= 3 + self.n_modeling_tides*6 + 1, print("length of param_uq_vec has problem for topo resid ", len(data_vec))
+
+            # For now, the last index is topo_resid
+            ind = -1
+
+            # TODO, Need to import true topo resid
+            if state in ['true']:
                 quant = 0
+            elif state in ['est']:
+                quant = data_vec[ind]
+            elif state in ['uq']:
+                quant = data_vec[ind]
             else:
                 raise ValueError()
 
