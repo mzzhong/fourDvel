@@ -719,17 +719,23 @@ class fourdvel(basics):
                     if len(datestr)==8:
                         theDate = date(int(datestr[0:4]), int(datestr[4:6]), int(datestr[6:8]))
 
+                        ##############################
                         # For Evans project
-                        # ad hoc, remove short data on track 11
-                        if track_num == 11 and theDate >= date(2017,12,20) and theDate <= date(2018,3,4):
+                        # ad hoc, remove shortened data
+                        # /net/kraken/bak/mzzhong/CSK-Evans/analyze_csk_data/analyze_existing_data.py
+
+                        # track 11
+                        if track_num == 11 and theDate >= date(2017,12,26) and theDate <= date(2018,3,4):
                             continue
 
-                        # ad hoc, remove short data on track 12
-                        #if track_num == 12 and theDate >= date(2018,1,22) and theDate <= date(2018,2,27):
-                        #    continue
+                        # track 12
+                        if track_num == 12:
+                            if theDate >= date(2018,1,22) and theDate <= date(2018,3,3):
+                                continue
+                            #continue
 
                         # ad hoc, remove all track 12 data
-                        if track_num == 12:
+                        #if track_num == 12:
                         # 01: 2019 and 2020 data
                         #if track_num == 12 and theDate <= date(2018,12,31):
                         # 02: 2018 data
@@ -738,10 +744,10 @@ class fourdvel(basics):
                         #if track_num == 12 and theDate >= date(2017,12,31):
                         # 04: 2018, 2019, 2020 data
                         #if track_num == 12 and theDate <= date(2017,12,31):
-                            continue
+                        #    continue
 
+                        ################################
                         # For Rutford project
-
                         if theDate >= csk_start and theDate < csk_end:
                             csk_data[track_num].append(theDate)
     
@@ -750,6 +756,9 @@ class fourdvel(basics):
 
                 print("track_num: ",track_num,end=",  ")
                 print("Number of dates: ",len(csk_data[track_num]))
+                print("Dates: ", csk_data[track_num])
+
+            #print(stop)
 
         elif csk_data_date_option == "log_based":
             self.get_CSK_trackDates_from_log()

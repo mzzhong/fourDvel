@@ -754,6 +754,10 @@ class output(fourdvel):
                                     print("Calculated the mean phase")
                                     center = np.nansum(values) /count
 
+                                # Fix the center for certain componenets
+                                if state == 'est' and self.proj == "Evans" and sub_quant_name == "Msf_along_flow_displacement_phase":
+                                    center = -3.647
+
                                 # Save the mean phase
                                 f_mp.write(state + '_' + sub_quant_name + ' ' + str(center)+'\n')
 
