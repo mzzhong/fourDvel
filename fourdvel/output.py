@@ -18,9 +18,14 @@ def createParser():
     
     parser.add_argument('-p','--param_file', dest='param_file', type=str, help='parameter file', required=True)
 
+    parser.add_argument('--output_mode', dest='output_mode', type=str, help='output_mode (estimation or analysis)', default='estimation')
+
     # needs to be consistent with what is used for running 
-    parser.add_argument('-t','--task_name', dest='task_name', type=str, help='task_name',required=True)
- 
+    parser.add_argument('-t','--task_name', dest='task_name', type=str, help='task_name', required=True)
+
+    # This is for further narrow down the output quantity
+    parser.add_argument('--output_name', dest='output_name', type=str, help='output_name', default=None)
+
     parser.add_argument('-q','--quant_list_name', dest='quant_list_name', type=str, help='quant_list_name', default=None)
 
     parser.add_argument('--npc','--no_phase_correction', dest='no_phase_correction', action='store_true')
@@ -45,6 +50,14 @@ class output(fourdvel):
         self.estimation_dir = os.path.join(self.estimations_dir,str(test_id))
 
         self.display = display(param_file)
+
+        self.output_mode = inps.output_mode
+
+        self.output_name = inps.output_name
+
+        self.quant_list_name = inps.quant_list_name
+
+        self.task_name = inps.task_name
 
         self.no_phase_correction = inps.no_phase_correction
 
@@ -386,56 +399,91 @@ class output(fourdvel):
 
         return 0
 
-    def output_analysis(self):
+    def run_output_analysis(self):
 
         this_result_folder = self.estimation_dir
         test_id = self.test_id
 
-        # Load the pickle file
-        pkl_name = '_'.join((str(test_id), 'grid_set_analysis', self.analysis_name)) + '.pkl'
+        # residual_vs_tide_height
+        if self.task_name == 'residual_vs_tide_height':
+            pkl_name = '_'.join([str(test_id), 'grid_set_analysis', self.task_name, self.analysis_name])  + '.pkl'
 
-        with open(this_result_folder + '/' + pkl_name,'rb') as f:
-            this_grid_set = pickle.load(f)
-
-        # Set the quantities for output
-        state='est'
-
-        quant_names = ['best_slr_results', 'best_slr_data_stats','lowest_tide']
-        
-        subquant_names = {}
-        subquant_names['best_slr_results'] = ['slope','intercept','r_value','p_value','min_proxy_tide','track_num']
-        subquant_names['best_slr_data_stats']=['data_mean','data_median','data_std','picked_data_mean','picked_data_median','picked_data_std']
-        subquant_names['lowest_tide']=['height','track_num']
-
-        for quant_name in quant_names:
-
-            for subquant_name in subquant_names[quant_name]:
-
-                print('Output quantity name: ', quant_name +'_' + subquant_name)
-
-                grid_set_quant = {} 
-                output_keys = this_grid_set.keys()
-        
-                for point in output_keys:
-                
-                    point_values = this_grid_set[point]
+            # Load the pickle file
+            with open(this_result_folder + '/' + pkl_name,'rb') as f:
+                this_grid_set = pickle.load(f)
+    
+            # Set the quantities for output
+            state='est'
+    
+            quant_names = ['best_slr_results', 'best_slr_data_stats','lowest_tide']
+            
+            subquant_names = {}
+            subquant_names['best_slr_results'] = ['slope','intercept','r_value','p_value','min_proxy_tide','track_num']
+            subquant_names['best_slr_data_stats']=['data_mean','data_median','data_std','picked_data_mean','picked_data_median','picked_data_std']
+            subquant_names['lowest_tide']=['height','track_num']
+    
+            for quant_name in quant_names:
+    
+                for subquant_name in subquant_names[quant_name]:
+    
+                    print('Output quantity name: ', quant_name +'_' + subquant_name)
+    
+                    grid_set_quant = {} 
+                    output_keys = this_grid_set.keys()
+            
+                    for point in output_keys:
                     
-                    # Valid result 
-                    if len(point_values)<20:
-                        #print(point_values)
-                        point_quant_values = point_values[quant_name]
-
-                        # This is not an empty dictionary
-                        if len(point_quant_values)>0:
-                            grid_set_quant[point] = point_quant_values[subquant_name]
+                        point_values = this_grid_set[point]
+                        
+                        # Valid result 
+                        if len(point_values)<20:
+                            #print(point_values)
+                            point_quant_values = point_values[quant_name]
+    
+                            # This is not an empty dictionary
+                            if len(point_quant_values)>0:
+                                grid_set_quant[point] = point_quant_values[subquant_name]
+                            else:
+                                grid_set_quant[point] = np.nan
                         else:
                             grid_set_quant[point] = np.nan
-                    else:
-                        grid_set_quant[point] = np.nan
-        
-                # Write to xyz file.
-                xyz_name = os.path.join(this_result_folder, '_'.join((str(test_id), state, self.analysis_name, quant_name, subquant_name)) + '.xyz')
+            
+                    # Write to xyz file.
+                    xyz_name = os.path.join(this_result_folder, '_'.join((str(test_id), state, self.analysis_name, quant_name, subquant_name)) + '.xyz')
+                    self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
+
+        # residual analysis 
+        elif self.task_name == 'residual_analysis':
+            pkl_name = '_'.join((str(test_id), 'grid_set_analysis', self.task_name))  + '.pkl'
+
+            with open(this_result_folder + '/' + pkl_name,'rb') as f:
+                residual_set_by_point = pickle.load(f)
+ 
+            print(residual_set_by_point)
+
+            # Rearrange the dictionary to generate residual_set_by_track
+            residual_set_by_obs = collections.defaultdict(dict)
+
+            for point in residual_set_by_point.keys():
+                for obs in residual_set_by_point[point]:
+                    print(point, obs, residual_set_by_point[point][obs])
+                    residual_set_by_obs[obs][point] = residual_set_by_point[point][obs]
+            
+            # Output the residuals
+            print(residual_set_by_obs)
+            for obs in residual_set_by_obs.keys():
+
+                (obs_sate, obs_track_num), obs_vec = obs
+                xyz_name = os.path.join(this_result_folder, '_'.join(['residual',obs_sate, str(obs_track_num), obs_vec]) + '.xyz')
+
+                grid_set_quant = residual_set_by_obs[obs]
+
+                print(xyz_name)
                 self.display.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
+
+        else:
+            raise ValueError()
+
 
         return 0
 
@@ -757,6 +805,7 @@ class output(fourdvel):
                                 # Fix the center for certain componenets
                                 if state == 'est' and self.proj == "Evans" and sub_quant_name == "Msf_along_flow_displacement_phase":
                                     center = -3.647
+                                    #print(stop)
 
                                 # Save the mean phase
                                 f_mp.write(state + '_' + sub_quant_name + ' ' + str(center)+'\n')
@@ -846,49 +895,67 @@ def main(iargs=None):
 
     out = output(inps)
 
-    output_states = []
+    if out.task_name in ['residual_analysis']:
+        out.output_mode = 'analysis'
 
-    # override the setting
-    #out.output_true = False
-    #out.output_est = False
-    #out.output_uq = False
-    #out.output_resid = False
-    #out.output_difference = False
-    #out.output_others = False
+    # output estimation
+    if out.output_mode == 'estimation':
 
-    # Start to output
-    if out.output_true: output_states.append("true")
-    if out.output_est:  output_states.append("est")
-    if out.output_uq:   output_states.append("uq")
+        # If output_name is provided, we need to override the default output names
+        if out.output_name is not None:
+            # override the settings from param file
+            out.output_true = False
+            out.output_est = False
+            out.output_uq = False
+            out.output_resid = False
+            out.output_difference = False
+            out.output_analysis = False
+            out.output_others = False
+    
+            # Set this output name to be True
+            setattr(out, 'output_' + out.output_name, True)
 
-    # bias
-    if out.output_true and out.output_est:
-        output_states.append("bias")
+        ### Prepare the outout ###
+        # Start to output
+        output_states = []
+    
+        if out.output_true: output_states.append("true")
+        if out.output_est:  output_states.append("est")
+        if out.output_uq:   output_states.append("uq")
+    
+        # bias
+        if out.output_true and out.output_est:
+            output_states.append("bias")
+    
+        # First output others
+        if out.output_others:
+            out.run_output_others()
+     
+        ### Do the output jobs ###
+        out.output_estimations(output_states)
+    
+        # Output residual 
+        if out.output_resid: 
+            out.run_output_residual()
+    
+        if out.output_difference:
+            if out.proj=="Evans":
+                # Evans
+                out.run_output_difference(compare_id=620, compare_prefix='true')
+            elif out.proj == "Rutford":
+                # Rutford
+                out.run_output_difference(compare_id=202007042, compare_prefix='true')
+            else:
+                raise Exception()
 
-    # First output others
-    if out.output_others:
-        out.run_output_others()
+    elif out.output_mode == 'analysis':
 
-    # Output normal linear estimations
-    out.quant_list_name = inps.quant_list_name
-    out.task_name = inps.task_name
+        out.run_output_analysis()
 
-    out.output_estimations(output_states)
+    else:
+        raise ValueError()
 
-    # Output residual 
-    if out.output_resid: out.run_output_residual()
-
-    if out.output_difference:
-        if out.proj=="Evans":
-            # Evans
-            out.run_output_difference(compare_id=620, compare_prefix='true')
-        elif out.proj == "Rutford":
-            # Rutford
-            out.run_output_difference(compare_id=202007042, compare_prefix='true')
-        else:
-            raise Exception()
-
-    if out.output_analysis: out.output_analysis()
+    # End of main
 
 if __name__=='__main__':
     main()

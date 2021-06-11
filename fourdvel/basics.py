@@ -302,6 +302,36 @@ class basics():
 
         return min_cov
 
+    def count_days(self, day):
+        if type(day) == datetime.datetime:
+            return (day - self.t_origin).days
+
+        elif type(day) == datetime.date:
+            return (day - self.t_origin.date()).days
+
+        else:
+            raise TypeError()
+
+    def summarize_data_info(self, data_info):
+        '''
+        data_info is a list of (sate, track_num) corresponding to each [rng_offset, azi_offset] pair
+        data_info_summary of a list of [(sate, track_num), data_num]
+        the (sate, track_num) is in order
+        '''
+
+        data_info_summary = []
+        for offset_info in data_info:
+            # add a new (sate, track_num)
+            if len(data_info_summary) == 0 or offset_info != data_info_summary[-1][0]:
+                data_info_summary.append([(offset_info),1])
+            else:
+                # add one offset
+                data_info_summary[-1][1] +=1
+
+        #print(data_info_summary)
+        #print(len(data_info))
+        return data_info_summary
+
     def read_tides_params(self, params_file=None):
 
         # Read in tide params exported from TMD MATLAB code

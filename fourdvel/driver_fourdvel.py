@@ -255,7 +255,7 @@ class driver_fourdvel():
                     ## Analysis tasks ###
                     elif task_name in self.analysis_tasks:
 
-                        all_sets = tasks.point_set_prediction_evaluation(point_set = point_set, tracks_set = tracks_set, task_name = task_name)
+                        all_sets = tasks.point_set_analysis(point_set = point_set, tracks_set = tracks_set, task_name = task_name)
 
                         all_grid_sets['grid_set_analysis'].update(all_sets['analysis_set'])
 
@@ -418,8 +418,9 @@ class driver_fourdvel():
 
         forceSaveTides = True
 
-        forceSaveAnalysis = False
+        forceSaveAnalysis = True
 
+        # Estimates
         if ((task_name in self.estimate_tasks and tasks.single_point_mode == False) or (task_name in self.estimate_tasks and forceSaveTides == True)) and (forceUnSaveTides==False):
 
             print("Write results to disk")
@@ -446,12 +447,20 @@ class driver_fourdvel():
 
             print("Done")
 
+        # Analysis
         elif (task_name in self.analysis_tasks and tasks.single_point_mode == False) or (task_name in self.analysis_tasks and forceSaveAnalysis == True):
 
             print("Write results to disk")
             print("The task is prediction evaluation")
 
-            pkl_name = '_'.join((str(test_id), 'grid_set_analysis', tasks.analysis_name))  + '.pkl'
+            if task_name == 'residual_vs_tide_height':
+                pkl_name = '_'.join([str(test_id), 'grid_set_analysis', task_name, tasks.analysis_name])  + '.pkl'
+
+            elif task_name == 'residual_analysis':
+                pkl_name = '_'.join((str(test_id), 'grid_set_analysis', task_name))  + '.pkl'
+            
+            else:
+                raise ValueError()
 
             with open(self.estimation_dir + '/' +  pkl_name ,'wb') as f:
                 pickle.dump(tasks.grid_set_analysis, f)

@@ -93,14 +93,17 @@ class fourdvel(basics):
         # This is more convienet for analysis
         self.track_num_to_track_ind = {}
         self.track_ind_to_track_num = {}
+        
         for i, track_num in enumerate(self.csk_tracks):
             self.track_num_to_track_ind[('csk', track_num)] = ('csk',i)
             self.track_ind_to_track_num[('csk',i)] = ('csk',track_num)
 
         for i, track_num in enumerate(self.s1_tracks):
-            self.track_num_to_track_ind[('s1',track_num)] = ('s1',i)
+            self.track_num_to_track_ind[('s1',track_num)] = ('s1', -i-1)
             self.track_ind_to_track_num[('s1',i)] = ('s1',track_num)
 
+        #print(self.track_num_to_track_ind)
+        #print(stop)
 
         # Related folders
         #self.design_mat_folder = './design_mat'
