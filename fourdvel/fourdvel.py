@@ -187,7 +187,6 @@ class fourdvel(basics):
         f.close()
 
         # Intialize some parameters
-        self.data_uncert_const = None
         self.test_point = None
         self.single_point_mode = False
         self.simulation_use_external_up = False
@@ -198,6 +197,9 @@ class fourdvel(basics):
 
         self.csk_data_log = None
         self.csk_data_product_ids = None
+
+        #self.data_uncert_const = None
+        self.data_uncert_grid_set_pklfile = None
 
         self.up_disp_mode = None
 
@@ -414,6 +416,11 @@ class fourdvel(basics):
             if name == 's1_excluded_tracks':
                 self.s1_excluded_tracks = [int(x) for x in value.split(',')]
                 print('s1_excluded_tracks: ',self.s1_excluded_tracks)
+
+            ## Error model ###
+            if name == 'data_uncert_grid_set_pklfile':
+                self.data_uncert_grid_set_pklfile = value
+                print('data_uncert_grid_set_pklfile', value)
 
             # Modeling
             if name == 'up_disp_mode':
@@ -1525,6 +1532,16 @@ class fourdvel(basics):
 
         return 0
 
+    def get_error_model(self):
+
+        if self.data_uncert_grid_set_pklfile is not None:
+            with open(self.data_uncert_grid_set_pklfile, 'rb') as f:
+                self.data_uncert_grid_set = pickle.load(f)
+        else:
+            self.data_uncert_grid_set = None
+
+        #print(self.data_uncert_grid_set)
+
     def preparation(self):
 
         # Get pre-defined grid points and the corresponding tracks and vectors.
@@ -1570,6 +1587,9 @@ class fourdvel(basics):
 
         # Load the pair baseline data
         self.get_pair_baselines()
+
+        # Load error model
+        self.get_error_model()
 
         return 0
 

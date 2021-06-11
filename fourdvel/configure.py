@@ -201,6 +201,7 @@ class configure(fourdvel):
         # Load the noise model (only const noise for now)
         if self.simulation_mode:
             self.load_simulation_noise_sigma_const()
+        
         self.load_noise_sigma_const()
 
         # Prepare the dictionary for different satellites
