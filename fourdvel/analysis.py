@@ -505,8 +505,10 @@ class analysis(configure):
         data_mode['csk'] = self.csk_data_mode
         data_mode['s1'] = self.s1_data_mode
 
-        # Find the data set
+        # Find the data set if it is None
+        # It is not None, if it comes from the estimation part
         all_data_set =  self.data_set_formation(point_set, tracks_set, data_mode)
+
         data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set, height_set, demfactor_set = all_data_set
 
         linear_design_mat_set = self.build_G_set(point_set, offsetfields_set=offsetfields_set)
@@ -521,9 +523,6 @@ class analysis(configure):
             #    continue
 
             # Find data and model for the test point
-            #print(data_info_set.keys())
-            #print(len(data_info_set))
-            #print(len(data_vec_set))
             data_info = data_info_set[point]
             data_vec = data_vec_set[point]
             offsetfields = offsetfields_set[point]
@@ -594,193 +593,6 @@ class analysis(configure):
             return scipy.stats.linregress(x, y)
         else:
             return None
-
-    def point_residual_analysis(self, point, data_info, offsetfields, data_vec, data_vec_pred, data_vec_residual):
-
-        print("Work on point: ", point)
-
-        # Partition the residual according to track, center date and time interval
-        # Give coords to each residual
-
-        # To save the coordinates for this point
-        coords_list = []
-
-        data_num_list = []
-        track_name_list = []
-        data_num_total = 0
-
-        tide_proxy_list = []
-
-        # Find the tidal height data
-        tide_taxis = self.tide_taxis
-        tide_taxis_delta = self.tide_t_delta
-        tide_data = self.tide_data
-
-        # The residual of each track at this point
-        track_residual = {}
-        
-        # Look through by track
-        data_info_summary = self.summarize_data_info(data_info)
-        for i, track in enumerate(data_info_summary):
-            # check if it is single point mode
-            #if self.single_point_mode and point!=self.test_point:
-            #    continue
-
-            track_name, data_num = track
-            sate_name = track_name[0]
-            track_num = track_name[1]
-
-            print("track_name, data_num: ", track_name, data_num)
-
-            # There is no available measurement in this track
-            #if data_num == 0:
-            #    continue
-
-            data_num_list.append(data_num)
-            track_name_list.append(track_name)
-            
-            # Obtain the data of this track
-            data_vec_track = data_vec[ data_num_total*2 : (data_num_total + data_num)*2 ]
-            data_vec_track_range = data_vec_track[0::2, 0]
-            data_vec_track_azimuth = data_vec_track[1::2, 0]
-
-            # Obtain the data_pred of this track
-            data_vec_pred_track = data_vec_pred[ data_num_total * 2 : (data_num_total + data_num)*2 ]
-            # range & azimuth
-            data_vec_pred_track_range = data_vec_pred_track[0::2, 0]
-            data_vec_pred_track_azimuth = data_vec_pred_track[1::2, 0]
-
-            # Obtain the offsetfields of this track            
-            offsetfields_track = offsetfields[ data_num_total: data_num_total + data_num ]
-
-            # Obtain the residual of this track
-            data_vec_residual_track = data_vec_residual[ data_num_total*2 : (data_num_total + data_num)*2 ]
-            # range & azimuth
-            range_residual_track = data_vec_residual_track[::2,0]
-            azimuth_residual_track = data_vec_residual_track[1::2,0]
-
-            # Save the residual
-            track_residual[((sate_name, track_num), 'range')] = np.nanstd(range_residual_track)
-            track_residual[((sate_name, track_num), 'azimuth')] = np.nanstd(azimuth_residual_track)
-
-            # Move to next track
-            data_num_total += data_num
-
-            ############ Analyze the each residual point #########
-            # Find the index of the track
-            _, track_ind = self.track_num_to_track_ind[(sate_name, track_num)]
-
-            # Record the relevant information of each offset field
-            for j, offsetfield in enumerate(offsetfields_track):
-                t1_day = self.count_days(offsetfield[0])
-                t2_day = self.count_days(offsetfield[1])
-                t_center = (t1_day + t2_day)/2
-                t_center_date = self.t_origin + datetime.timedelta(days=t_center)
-                t_center_datestr = t_center_date.strftime('%Y%m%d')
-                delta_t = t2_day - t1_day
-
-                coords_list.append( ((sate_name, track_num, track_ind), (t_center, t_center_date, t_center_datestr), delta_t) )
-
-                # Record tide
-                # Fractional time
-                t1 = t1_day + offsetfield[4]
-                t2 = t2_day + offsetfield[4]
-
-                # The tidal height
-                z1 = tide_data[int(np.round((t1 - tide_taxis[0])/tide_taxis_delta))]
-                z2 = tide_data[int(np.round((t2 - tide_taxis[0])/tide_taxis_delta))]
-
-                # Record the sampled tide by master and slave
-                tide_proxy_list.append((z1, z2, track_num, offsetfield[0], offsetfield[1]))
-
-        # Check if the coords are correct: 2 x length of coords == length of residual
-        assert(len(coords_list)*2 == len(data_vec_residual)), \
-        print("coords_list length {} and data_vec_residual length {} don't match".format(len(coords_list), len(data_vec_residual)))
-
-        # Plot and make analysis
-        plot_analysis = False
-
-        if plot_analysis == True and self.single_point_mode == False:
-            raise Exception("Cannot plot analysis when single point mode is turned on")
-
-        if plot_analysis:
-            if self.proj == 'Rutford':
-                analysis_start_day = datetime.datetime(2013,6,1)
-                analysis_stop_day = datetime.datetime(2014,10,1)
-
-            elif self.proj == 'Evans':
-                analysis_start_day = datetime.datetime(2017,1,1)
-                analysis_stop_day = datetime.datetime(2021,6,1)
-            else:
-                raise ValueError()
-
-            range_residual = data_vec_residual[::2,0]
-            azimuth_residual = data_vec_residual[1::2,0]
-   
-            # Set up the figure 
-            fig = plt.figure(1, figsize=(14,11))
-            ax1 = fig.add_subplot(2,1,1)
-            ax2 = fig.add_subplot(2,1,2)
-    
-            for i in range(len(coords_list)):
-                track_tuple, t_tuple, delta_t = coords_list[i]
-                sate_name, track_num, track_ind = track_tuple
-                t_center, t_center_date, t_center_datestr = t_tuple
-    
-                # Get tide height for master and slave
-                z1, z2 = tide_proxy_list[i][0:2]
-
-                tide_signature = str(z1) + ',' + str(z2)
-                
-                # ax1
-                #print(track_ind)
-                ax1.plot(track_ind, range_residual[i],'r.')
-                ax1.plot(track_ind, azimuth_residual[i],'b.')
-
-                if abs(azimuth_residual[i])>0.35:
-                    ax1.text(track_ind, azimuth_residual[i], str(t_center_datestr)+' '+str(delta_t) + ' '+tide_signature)
-
-                if abs(range_residual[i])>0.35:
-                    ax1.text(track_ind, range_residual[i], str(t_center_datestr)+' '+str(delta_t) + ' '+tide_signature)
-    
-                #_, track_num = self.track_ind_to_track_num[(sate_name, track_ind)]
-                ax1.text(track_ind, 0, str(track_num))
-    
-                # ax2
-                #print(t_center_date)
-                #t_center_date = self.t_origin + datetime.timedelta(days=t_center)
-                #print(t_center_date, self.t_origin)
-
-                x_off = self.count_days(t_center_date) - self.count_days(analysis_start_day)
-                ax2.plot(x_off, range_residual[i],'r.')
-                ax2.plot(x_off, azimuth_residual[i],'b.')
-                #ax2.text(t_center,0, t_center_datestr)
-                # ax3
-                #ax3.plot(delta_t, range_residual[i],'r.')
-                #ax3.plot(delta_t, azimuth_residual[i],'b.')
-
-            # Configure ax1 axis
-            ax1.set_xlabel('Tracks')
-            ax1.set_ylabel('Residual (m)')
-            ax1.set_title('Residuals by track')
- 
-            # Configure ax2 axis
-            ax2.set_xlabel('Time')
-            ax2.set_ylabel('Residual (m)')
-            ax2.set_title('Red: range; Blue: azimuth')
-
-            xticks = np.arange(0, self.count_days(analysis_stop_day) - self.count_days(analysis_start_day), 150)
-            ax2.set_xticks(xticks)
-
-            xticklabels = [(analysis_start_day + datetime.timedelta(days=int(xtick))).strftime('%Y-%m-%d') for xtick in xticks ]
-            ax2.set_xticklabels(xticklabels)
- 
-            fig.savefig("residual.png")
-            plt.show()
-
-        analysis_results = track_residual
-
-        return analysis_results
 
     def point_residual_vs_tidal_height(self, point, data_info, offsetfields, data_vec, data_vec_pred, data_vec_residual):
 

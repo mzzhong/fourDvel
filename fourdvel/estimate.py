@@ -65,6 +65,7 @@ class estimate(configure):
         tide_vec_uq_set = {}
         resid_of_secular_set = {}
         resid_of_tides_set = {}
+        residual_analysis_set = {}
 
         others_set = {}
         for point in point_set:
@@ -173,8 +174,8 @@ class estimate(configure):
                     raise ValueError("Unknown enum grounding run mode")
 
                 ###### Prepare the grounding level values to be enumerated #########
-                gl_option = 'manual'
-                #gl_option = 'auto'
+                #gl_option = 'manual'
+                gl_option = 'auto'
 
                 if gl_option == 'no_grounding':
 
@@ -522,6 +523,12 @@ class estimate(configure):
                 resid_of_tides_point = resid_of_tides_set[self.test_point]
                 print("Residual at this point: ", resid_of_tides_point)
 
+                # Calculate the residual per trakc per obs
+                residual_analysis_set = self.point_set_residual_analysis(point_set, data_info_set, offsetfields_set, data_vec_set, linear_design_mat_set, model_vec_set)
+                print('Residual analysis Done')
+                resid_analysis_point_result = residual_analysis_set[self.test_point]
+                print("Residual analysis at this point: ", resid_analysis_point_result)
+
                 # Calculale the model likelihood.
                 model_likelihood_set = self.get_model_likelihood_set(point_set, linear_design_mat_set, data_vec_set, model_vec_set, invCd_set)
                 print('Model likelihood calculation Done')
@@ -790,6 +797,8 @@ class estimate(configure):
         all_sets['resid_of_secular_set'] = resid_of_secular_set
         all_sets['resid_of_tides_set'] = resid_of_tides_set
         all_sets['others_set'] = others_set
+
+        all_sets['residual_analysis_set'] = residual_analysis_set
 
         return all_sets
 

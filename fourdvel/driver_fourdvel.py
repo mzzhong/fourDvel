@@ -247,6 +247,8 @@ class driver_fourdvel():
                             all_grid_sets['grid_set_resid_of_secular'].update(all_sets['resid_of_secular_set'])
                             all_grid_sets['grid_set_resid_of_tides'].update(all_sets['resid_of_tides_set'])
                             all_grid_sets['grid_set_others'].update(all_sets['others_set'])
+
+                            all_grid_sets['grid_set_residual_analysis'].update(all_sets['residual_analysis_set'])
     
                         if recorded == False:
                             print("Having problem recording this tile: ", tile)
@@ -340,6 +342,7 @@ class driver_fourdvel():
             all_grid_sets['grid_set_resid_of_secular'] = manager.dict()
             all_grid_sets['grid_set_resid_of_tides'] = manager.dict()
             all_grid_sets['grid_set_others'] = manager.dict()
+            all_grid_sets['grid_set_residual_analysis'] = manager.dict()
 
             ## analysis_tasks
             all_grid_sets['grid_set_analysis'] = manager.dict()
@@ -373,6 +376,7 @@ class driver_fourdvel():
             tasks.grid_set_resid_of_secular = dict(all_grid_sets['grid_set_resid_of_secular'])
             tasks.grid_set_resid_of_tides = dict(all_grid_sets['grid_set_resid_of_tides'])
             tasks.grid_set_others = dict(all_grid_sets['grid_set_others'])
+            tasks.grid_set_residual_analysis = dict(all_grid_sets['grid_set_residual_analysis'])
 
             # task_name = prediction_evaluation
             tasks.grid_set_analysis = dict(all_grid_sets['grid_set_analysis'])
@@ -391,6 +395,7 @@ class driver_fourdvel():
             tasks.grid_set_resid_of_secular = {}
             tasks.grid_set_resid_of_tides = {}
             tasks.grid_set_others = {}
+            tasks.grid_set_residual_analysis = {}
  
             # Loop through the results
             for ip, point_pkl in enumerate(point_results):
@@ -410,6 +415,7 @@ class driver_fourdvel():
                     tasks.grid_set_resid_of_secular.update(all_sets['resid_of_secular_set'])
                     tasks.grid_set_resid_of_tides.update(all_sets['resid_of_tides_set'])
                     tasks.grid_set_others.update(all_sets['others_set'])
+                    tasks.grid_set_residual_analysis.update(all_sets['residual_analysis_set'])
                     
                     #tasks.grid_set_analysis.update(all_sets['analysis_set'])
 
@@ -444,6 +450,9 @@ class driver_fourdvel():
     
             with open(self.estimation_dir + '/' + prefix+ 'grid_set_others.pkl','wb') as f:
                 pickle.dump(tasks.grid_set_others, f)
+
+            with open(self.estimation_dir + '/' + prefix+ 'grid_set_residual_analysis.pkl','wb') as f:
+                pickle.dump(tasks.grid_set_residual_analysis, f)
 
             print("Done")
 

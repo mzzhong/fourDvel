@@ -198,7 +198,8 @@ class fourdvel(basics):
         self.csk_data_log = None
         self.csk_data_product_ids = None
 
-        #self.data_uncert_const = None
+        # error model
+        self.data_error_mode = None
         self.data_uncert_grid_set_pklfile = None
 
         self.up_disp_mode = None
@@ -294,10 +295,6 @@ class fourdvel(basics):
                 self.resolution = int(value)
                 print('resolution: ',value)
 
-            if name == 'grid_set_data_uncert_name':
-                self.grid_set_data_uncert_name = value
-                print('grid_set_data_uncert_name: ',value)
-
             if name == "bbox":
                 borders = [ s.strip() for s in value.split(",") ]
                 self.bbox = [ None if border=="None" else self.float_to_int5d(float(border)) for border in borders]
@@ -324,14 +321,6 @@ class fourdvel(basics):
             if name == 'csk_data_date_option':
                 self.csk_data_date_option = value
                 print('csk_data_date_option: ', value)
-
-            if name == 'csk_simulation_data_uncert_const':
-                self.csk_simulation_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
-                print('csk_simulation_data_uncert_const: ',self.csk_simulation_data_uncert_const)
-
-            if name == 'csk_data_uncert_const':
-                self.csk_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
-                print('csk_data_uncert_const: ',self.csk_data_uncert_const)
 
             if name == 'csk_id':
                 self.csk_id = int(value)
@@ -386,14 +375,6 @@ class fourdvel(basics):
                 self.s1_data_date_option = value
                 print('s1_data_date_option: ', value)
 
-            if name == 's1_simulation_data_uncert_const':
-                self.s1_simulation_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
-                print('s1_simulation_data_uncert_const: ',self.s1_simulation_data_uncert_const)
-
-            if name == 's1_data_uncert_const':
-                self.s1_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
-                print('s1_data_uncert_const: ',self.s1_data_uncert_const)
-
             if name == 's1_id':
                 self.s1_id = int(value)
                 print('s1_id: ',value)
@@ -418,11 +399,38 @@ class fourdvel(basics):
                 print('s1_excluded_tracks: ',self.s1_excluded_tracks)
 
             ## Error model ###
+            # Simulation error model
+            if name == 'csk_simulation_data_uncert_const':
+                self.csk_simulation_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
+                print('csk_simulation_data_uncert_const: ',self.csk_simulation_data_uncert_const)
+
+            if name == 's1_simulation_data_uncert_const':
+                self.s1_simulation_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
+                print('s1_simulation_data_uncert_const: ',self.s1_simulation_data_uncert_const)
+
+            # Data error model
+            # error model mode
+            if name == 'data_error_mode':
+                self.data_error_mode = value
+                print('data_error_mode', value)
+
+            # const csk
+            if name == 'csk_data_uncert_const':
+                self.csk_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
+                print('csk_data_uncert_const: ',self.csk_data_uncert_const)
+
+            # const s1
+            if name == 's1_data_uncert_const':
+                self.s1_data_uncert_const = (float(value.split(',')[0]), float(value.split(',')[1]))
+                print('s1_data_uncert_const: ',self.s1_data_uncert_const)
+
+            # external
             if name == 'data_uncert_grid_set_pklfile':
                 self.data_uncert_grid_set_pklfile = value
                 print('data_uncert_grid_set_pklfile', value)
+            ##
 
-            # Modeling
+            ## Modeling ##
             if name == 'up_disp_mode':
                 self.up_disp_mode = value
                 print('up_disp_mode', value)
@@ -568,6 +576,12 @@ class fourdvel(basics):
                 else:
                     self.output_analysis = False
                 print('output_analysis: ',value)
+
+
+        # Sanity check of parameters
+        #assert self.data_error_mode is not None
+        if self.data_error_mode is None:
+            self.data_error_mode = 'const'
 
         print("Done with reading parameters")
         return 0
@@ -925,18 +939,6 @@ class fourdvel(basics):
             raise Exception()
 
         return 0 
-
-    def get_data_uncert(self):
-
-        self.grid_set_data_uncert = None
-        if hasattr(self,'grid_set_data_uncert_name'):
-            grid_set_data_uncert_set_pkl = self.grid_set_data_uncert_name + '.pkl'
-    
-            if os.path.exists(grid_set_data_uncert_set_pkl):
-                print('Loading data uncert set ...')
-                with open(grid_set_data_uncert_set_pkl,'rb') as f:
-                    self.grid_set_data_uncert = pickle.load(f)
-
 
     def get_used_datasets(self):
 
@@ -1547,7 +1549,6 @@ class fourdvel(basics):
         # Get pre-defined grid points and the corresponding tracks and vectors.
         self.get_grid_set_v2()
         self.get_tile_set()
-        self.get_data_uncert()
 
         # Get reference velocity model for synthetic test
         self.get_grid_set_velo()
@@ -2189,26 +2190,26 @@ class fourdvel(basics):
         
         return param_uq
 
-    def simple_data_uncertainty_set(self, point_set, data_vec_set, noise_sigma_set):
-        
-        invCd_set = {}
-        for point in point_set:
-            invCd_set[point] = self.simple_data_uncertainty(data_vec_set[point], 
-                                                            noise_sigma_set[point])
-        return invCd_set
+    #def simple_data_uncertainty_set(self, point_set, data_vec_set, noise_sigma_set):
+    #    
+    #    invCd_set = {}
+    #    for point in point_set:
+    #        invCd_set[point] = self.simple_data_uncertainty(data_vec_set[point], 
+    #                                                        noise_sigma_set[point])
+    #    return invCd_set
 
-    def simple_data_uncertainty(self,data_vec, sigma):
+    #def simple_data_uncertainty(self,data_vec, sigma):
 
-        n_data = data_vec.shape[0]
+    #    n_data = data_vec.shape[0]
 
-        Cd = np.zeros(shape = (n_data,n_data))
-        invCd = np.zeros(shape = (n_data,n_data))
+    #    Cd = np.zeros(shape = (n_data,n_data))
+    #    invCd = np.zeros(shape = (n_data,n_data))
 
-        for i in range(n_data):
-            Cd[i,i] = sigma**2
-            invCd[i,i] = 1/(sigma**2)
+    #    for i in range(n_data):
+    #        Cd[i,i] = sigma**2
+    #        invCd[i,i] = 1/(sigma**2)
 
-        return invCd
+    #    return invCd
 
     def real_data_uncertainty_set(self, point_set, data_vec_set, noise_sigma_set):
         
@@ -2821,6 +2822,238 @@ class fourdvel(basics):
         resid_of_tides = d - pred
 
         return resid_of_tides
+
+    def point_set_residual_analysis(self, point_set, data_info_set, offsetfields_set, data_vec_set, linear_design_mat_set, model_vec_set):
+
+        test_point = self.test_point
+        grid_set = self.grid_set
+
+        # Perform estimation on each point
+        residual_analysis_set = {}
+
+        for point in point_set:
+
+            # check if it is single point mode
+            #if self.single_point_mode and point!=test_point:
+            #    continue
+
+            # Find data and model for the test point
+            data_info = data_info_set[point]
+            data_vec = data_vec_set[point]
+            offsetfields = offsetfields_set[point]
+            design_mat = linear_design_mat_set[point]
+
+            # Find the estimation
+            model_vec = model_vec_set[point]
+
+            # Valid estimation exists
+            if not np.isnan(model_vec[0,0]):
+
+                # prediction 
+                data_vec_pred = np.matmul(design_mat, model_vec)
+
+                # residual
+                data_vec_residual = data_vec - data_vec_pred
+                
+                # Find range residual
+                data_vec_residual_range = data_vec_residual[0::2]
+
+                # Find azimuth residual
+                data_vec_residual_azimuth = data_vec_residual[1::2]
+
+                residual_analysis_point_result = self.point_residual_analysis(point, data_info, offsetfields, data_vec, data_vec_pred, data_vec_residual)
+
+                # Save this point
+                residual_analysis_set[point] = residual_analysis_point_result
+
+        return residual_analysis_set
+
+    def point_residual_analysis(self, point, data_info, offsetfields, data_vec, data_vec_pred, data_vec_residual):
+
+        #print("Work on point: ", point)
+
+        # Partition the residual according to track, center date and time interval
+        # Give coords to each residual
+
+        # To save the coordinates for this point
+        coords_list = []
+
+        data_num_list = []
+        track_name_list = []
+        data_num_total = 0
+
+        tide_proxy_list = []
+
+        # Find the tidal height data
+        tide_taxis = self.tide_taxis
+        tide_taxis_delta = self.tide_t_delta
+        tide_data = self.tide_data
+
+        # The residual of each track at this point
+        track_residual = {}
+        
+        # Look through by track
+        data_info_summary = self.summarize_data_info(data_info)
+        for i, track in enumerate(data_info_summary):
+            # check if it is single point mode
+            #if self.single_point_mode and point!=self.test_point:
+            #    continue
+
+            track_name, data_num = track
+            sate_name = track_name[0]
+            track_num = track_name[1]
+
+            #print("track_name, data_num: ", track_name, data_num)
+
+            # There is no available measurement in this track
+            #if data_num == 0:
+            #    continue
+
+            data_num_list.append(data_num)
+            track_name_list.append(track_name)
+            
+            # Obtain the data of this track
+            data_vec_track = data_vec[ data_num_total*2 : (data_num_total + data_num)*2 ]
+            data_vec_track_range = data_vec_track[0::2, 0]
+            data_vec_track_azimuth = data_vec_track[1::2, 0]
+
+            # Obtain the data_pred of this track
+            data_vec_pred_track = data_vec_pred[ data_num_total * 2 : (data_num_total + data_num)*2 ]
+            # range & azimuth
+            data_vec_pred_track_range = data_vec_pred_track[0::2, 0]
+            data_vec_pred_track_azimuth = data_vec_pred_track[1::2, 0]
+
+            # Obtain the offsetfields of this track            
+            offsetfields_track = offsetfields[ data_num_total: data_num_total + data_num ]
+
+            # Obtain the residual of this track
+            data_vec_residual_track = data_vec_residual[ data_num_total*2 : (data_num_total + data_num)*2 ]
+            # range & azimuth
+            range_residual_track = data_vec_residual_track[::2,0]
+            azimuth_residual_track = data_vec_residual_track[1::2,0]
+
+            # Save the residual
+            track_residual[((sate_name, track_num), 'range')] = np.nanstd(range_residual_track)
+            track_residual[((sate_name, track_num), 'azimuth')] = np.nanstd(azimuth_residual_track)
+
+            # Move to next track
+            data_num_total += data_num
+
+            ############ Analyze the each residual point #########
+            # Find the index of the track
+            _, track_ind = self.track_num_to_track_ind[(sate_name, track_num)]
+
+            # Record the relevant information of each offset field
+            for j, offsetfield in enumerate(offsetfields_track):
+                t1_day = self.count_days(offsetfield[0])
+                t2_day = self.count_days(offsetfield[1])
+                t_center = (t1_day + t2_day)/2
+                t_center_date = self.t_origin + datetime.timedelta(days=t_center)
+                t_center_datestr = t_center_date.strftime('%Y%m%d')
+                delta_t = t2_day - t1_day
+
+                coords_list.append( ((sate_name, track_num, track_ind), (t_center, t_center_date, t_center_datestr), delta_t) )
+
+                # Record tide
+                # Fractional time
+                t1 = t1_day + offsetfield[4]
+                t2 = t2_day + offsetfield[4]
+
+                # The tidal height
+                z1 = tide_data[int(np.round((t1 - tide_taxis[0])/tide_taxis_delta))]
+                z2 = tide_data[int(np.round((t2 - tide_taxis[0])/tide_taxis_delta))]
+
+                # Record the sampled tide by master and slave
+                tide_proxy_list.append((z1, z2, track_num, offsetfield[0], offsetfield[1]))
+
+        # Check if the coords are correct: 2 x length of coords == length of residual
+        assert(len(coords_list)*2 == len(data_vec_residual)), \
+        print("coords_list length {} and data_vec_residual length {} don't match".format(len(coords_list), len(data_vec_residual)))
+
+        # Plot and make analysis
+        plot_analysis = False
+
+        if plot_analysis == True and self.single_point_mode == False:
+            raise Exception("Cannot plot analysis when single point mode is turned on")
+
+        if plot_analysis:
+            if self.proj == 'Rutford':
+                analysis_start_day = datetime.datetime(2013,6,1)
+                analysis_stop_day = datetime.datetime(2014,10,1)
+
+            elif self.proj == 'Evans':
+                analysis_start_day = datetime.datetime(2017,1,1)
+                analysis_stop_day = datetime.datetime(2021,6,1)
+            else:
+                raise ValueError()
+
+            range_residual = data_vec_residual[::2,0]
+            azimuth_residual = data_vec_residual[1::2,0]
+   
+            # Set up the figure 
+            fig = plt.figure(1, figsize=(14,11))
+            ax1 = fig.add_subplot(2,1,1)
+            ax2 = fig.add_subplot(2,1,2)
+    
+            for i in range(len(coords_list)):
+                track_tuple, t_tuple, delta_t = coords_list[i]
+                sate_name, track_num, track_ind = track_tuple
+                t_center, t_center_date, t_center_datestr = t_tuple
+    
+                # Get tide height for master and slave
+                z1, z2 = tide_proxy_list[i][0:2]
+
+                tide_signature = str(z1) + ',' + str(z2)
+                
+                # ax1
+                #print(track_ind)
+                ax1.plot(track_ind, range_residual[i],'r.')
+                ax1.plot(track_ind, azimuth_residual[i],'b.')
+
+                if abs(azimuth_residual[i])>0.35:
+                    ax1.text(track_ind, azimuth_residual[i], str(t_center_datestr)+' '+str(delta_t) + ' '+tide_signature)
+
+                if abs(range_residual[i])>0.35:
+                    ax1.text(track_ind, range_residual[i], str(t_center_datestr)+' '+str(delta_t) + ' '+tide_signature)
+    
+                #_, track_num = self.track_ind_to_track_num[(sate_name, track_ind)]
+                ax1.text(track_ind, 0, str(track_num))
+    
+                # ax2
+                #print(t_center_date)
+                #t_center_date = self.t_origin + datetime.timedelta(days=t_center)
+                #print(t_center_date, self.t_origin)
+
+                x_off = self.count_days(t_center_date) - self.count_days(analysis_start_day)
+                ax2.plot(x_off, range_residual[i],'r.')
+                ax2.plot(x_off, azimuth_residual[i],'b.')
+                #ax2.text(t_center,0, t_center_datestr)
+                # ax3
+                #ax3.plot(delta_t, range_residual[i],'r.')
+                #ax3.plot(delta_t, azimuth_residual[i],'b.')
+
+            # Configure ax1 axis
+            ax1.set_xlabel('Tracks')
+            ax1.set_ylabel('Residual (m)')
+            ax1.set_title('Residuals by track')
+ 
+            # Configure ax2 axis
+            ax2.set_xlabel('Time')
+            ax2.set_ylabel('Residual (m)')
+            ax2.set_title('Red: range; Blue: azimuth')
+
+            xticks = np.arange(0, self.count_days(analysis_stop_day) - self.count_days(analysis_start_day), 150)
+            ax2.set_xticks(xticks)
+
+            xticklabels = [(analysis_start_day + datetime.timedelta(days=int(xtick))).strftime('%Y-%m-%d') for xtick in xticks ]
+            ax2.set_xticklabels(xticklabels)
+ 
+            fig.savefig("residual.png")
+            plt.show()
+
+        residual_analysis_point_result = track_residual
+
+        return residual_analysis_point_result
 
     def get_model_likelihood_set(self, point_set, linear_design_mat_set, data_vec_set, model_vec_set, invCd_set):
 

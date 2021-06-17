@@ -98,7 +98,7 @@ class configure(fourdvel):
         #print('track_number: ',track_num)
         #print('used dates: ', used_dates)
  
-        output_sets = offset.extract_offset_set_series(point_set = point_set, test_point = self.test_point, dates = used_dates, offsetFieldStack = self.offsetFieldStack_all[(sate, track_num)], sate=sate, track_num=track_num)
+        output_sets = offset.extract_offset_set_series(point_set = point_set, test_point = self.test_point, dates = used_dates, offsetFieldStack = self.offsetFieldStack_all[(sate, track_num)], proj = self.proj, sate=sate, track_num=track_num)
 
         track_pairs_set = output_sets["pairs_set"]
         track_offsets_set = output_sets["offsets_set"]
@@ -164,14 +164,48 @@ class configure(fourdvel):
         self.noise_sigma_const_dict['csk']= self.csk_data_uncert_const
         self.noise_sigma_const_dict['s1']= self.s1_data_uncert_const
 
-    def load_noise_sigma_external(self, point):
-        ## TODO ##
-        if self.grid_set_data_uncert is not None:
-            data_uncert = self.grid_set_data_uncert[point]
-            noise_sigma = (data_uncert[1], data_uncert[3])
-        else:
-            raise Exception('No measurement error model')
+    def get_data_error_model(self, point_set, data_info_set, offsetfields_set):
+        noise_sigma_set = {}
+        if self.data_error_mode == 'const':
+            for point in point_set:
+                data_info = data_info_set[point]
 
+                noise_sigma_point = []
+                for i in range(len(data_info)):
+                    sate_name = data_info[i][0]
+                    noise_sigma_point.append(self.noise_sigma_const_dict[sate_name])
+                
+                noise_sigma_set[point] = noise_sigma_point
+
+        elif self.data_error_mode == 'ampcor': 
+            for point in point_set:
+                noise_sigma_set[point] = [ (np.sqrt(value[0])/5, np.sqrt(value[1])/5 ) for value in offsetsVar_set[point] ]
+
+        elif self.data_error_mode == 'external':
+            for point in point_set:
+                data_info = data_info_set[point]
+                data_uncert_point = self.data_uncert_grid_set[point]
+
+                noise_sigma_point = []
+                for i in range(len(data_info)):
+                    noise_sigma_pair = [data_uncert_point[(data_info[i], 'range')], data_uncert_point[(data_info[i], 'azimuth')]]
+
+                    # The value can be zero is when there is only one measurement 
+                    # sigma=2m, downweight this data
+                    if noise_sigma_pair[0]==0:
+                        noise_sigma_pair[0] = 2                     
+                    if noise_sigma_pair[1]==0:
+                        noise_sigma_pair[1] = 2
+
+                    noise_sigma_point.append(noise_sigma_pair)
+
+                noise_sigma_set[point] = noise_sigma_point
+                   
+        else:
+            raise ValueError('data error mode {} is not implemented'.format(self.data_error_mode))
+
+        return noise_sigma_set
+ 
     def data_set_formation(self, point_set, tracks_set, data_mode=None):
         ### DATA Modes ###
         # 1. Synthetic data: Based on catalog
@@ -198,10 +232,10 @@ class configure(fourdvel):
         sate_names = sorted(list(set(sate_names)))
         print("unique satelite: ", sate_names)
 
-        # Load the noise model (only const noise for now)
+        # Load the const noise model
         if self.simulation_mode:
             self.load_simulation_noise_sigma_const()
-        
+
         self.load_noise_sigma_const()
 
         # Prepare the dictionary for different satellites
@@ -264,13 +298,14 @@ class configure(fourdvel):
                 (secular_v_set, tide_amp_set, tide_phase_set) = fourD_sim.syn_velocity_set(
                                                                 point_set = point_set, 
                                                                 velo_model_set = velo_model_set)
-                # Noise model.
+                # Simulation error model.
                 simulation_noise_sigma_set = {}
-                noise_sigma_set = {}
                 for point in point_set:
                     simulation_noise_sigma_set[point] = self.simulation_noise_sigma_const_dict[sate_name]
-                    noise_sigma_set[point] = [self.noise_sigma_const_dict[sate_name]]*len(offsetfields_set[point])
-    
+
+                # Data error model
+                noise_sigma_set = self.get_data_error_model(point_set, data_info_set, offsetfields_set)
+   
                 # Find the stack of design matrix for Simulation (Rutford) tides
                 stack_design_mat_set = self.get_stack_design_mat_set(point_set, self.rutford_design_mat_set, offsetfields_set)
     
@@ -445,10 +480,11 @@ class configure(fourdvel):
     
                     # Noise model.
                     simulation_noise_sigma_set = {}
-                    noise_sigma_set = {}
                     for point in point_set:
                         simulation_noise_sigma_set[point] = self.simulation_noise_sigma_const_dict[sate_name]
-                        noise_sigma_set[point] = [self.noise_sigma_const_dict[sate_name]]*len(offsetfields_set[point])
+
+                    # Data error model
+                    noise_sigma_set = self.get_data_error_model(point_set, data_info_set, offsetfields_set)
     
                     # Stack the design matrix for Rutford tides
                     stack_design_mat_set = self.get_stack_design_mat_set(point_set, self.rutford_design_mat_set, offsetfields_set)
@@ -482,23 +518,9 @@ class configure(fourdvel):
                     # Real data
                     data_vec_set = self.offsets_set_to_data_vec_set(point_set, offsets_set)
     
-                    # Noise model.
-                    real_data_noise_model_option = 0
-                    # Set by user
-                    if real_data_noise_model_option == 0:
-                        noise_sigma_set = {}
-                        for point in point_set:
-                            noise_sigma_set[point] = [self.noise_sigma_const_dict[sate_name]]*len(offsetfields_set[point])
-                    # Read from data
-                    elif real_data_noise_model_option == 1:
-                        noise_sigma_set = {}
-                        for point in point_set:
-                            noise_sigma_set[point] = [ (np.sqrt(value[0])/5, np.sqrt(value[1])/5 ) for value in offsetsVar_set[point] ]
-                    else:
-                        raise Exception("Not implemented")
-
-                    #print(noise_sigma_set[test_point])
-
+                    # Data error model
+                    noise_sigma_set = self.get_data_error_model(point_set, data_info_set, offsetfields_set)
+ 
                     ## Get reference velocity
                     #n_params = 3 + len(self.modeling_tides) * 6
                     #for point in point_set:
