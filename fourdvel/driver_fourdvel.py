@@ -422,9 +422,11 @@ class driver_fourdvel():
         ## Save the final results in dictionary manager
         forceUnSaveTides = False
 
-        forceSaveTides = True
+        forceSaveTides = False
 
         forceSaveAnalysis = True
+
+        #print(stop)
 
         # Estimates
         if ((task_name in self.estimate_tasks and tasks.single_point_mode == False) or (task_name in self.estimate_tasks and forceSaveTides == True)) and (forceUnSaveTides==False):

@@ -106,12 +106,12 @@ class estimate(configure):
             assert inversion_method in ["Bayesian_MCMC", "Nonlinear_Optimization"]
 
         if task_name in ["tides_1", "tides_3"] and inversion_method == 'Bayesian_Linear':
-            # Data prior.
-            invCd_set = self.real_data_uncertainty_set(point_set, data_vec_set, \
-                                                            noise_sigma_set)
-            ### MODEL ###
+            
+            # Get data error prior.
+            invCd_set = self.real_data_uncertainty_set(point_set, data_vec_set, noise_sigma_set)
+            print("Data error prior) set is Done")
 
-            # Design matrix.
+            # Get design matrix.
             linear_design_mat_set_orig = self.build_G_set(point_set, offsetfields_set=offsetfields_set)
     
             #print("Design matrix set (G)\n:", linear_design_mat_set[self.test_point])
@@ -124,9 +124,14 @@ class estimate(configure):
 
             # tides_3: enumerating grounding level
             elif task_name == "tides_3":
-                
+
+                # Set the mode for running
+
                 tides_3_mode = "find_optimal_gl"
                 #tides_3_mode = "invert_optimal_gl"
+
+                #gl_option = 'manual'
+                gl_option = 'auto'
 
                 print("tides_3_mode: ", tides_3_mode)
 
@@ -174,9 +179,6 @@ class estimate(configure):
                     raise ValueError("Unknown enum grounding run mode")
 
                 ###### Prepare the grounding level values to be enumerated #########
-                #gl_option = 'manual'
-                gl_option = 'auto'
-
                 if gl_option == 'no_grounding':
 
                     enum_grounding_level = [-10]
@@ -399,7 +401,6 @@ class estimate(configure):
             else:
                 raise ValueError("Unknown task name")
 
-
             ### Get up displacement set ###
             up_disp_set = self.get_up_disp_set(point_set, offsetfields_set)
 
@@ -429,6 +430,7 @@ class estimate(configure):
                         # option = 1, use the one filtered and saved as xyz file
                         elif optimal_gl_data_mode == 1:
                             grounding_level_prescale_xyz_file = os.path.join(self.estimations_dir, str(self.test_id), str(self.test_id) + '_est_others_optimal_grounding_level_prescale.xyz')
+                            #print(grounding_level_prescale_xyz_file)
                             data_dict = self.read_xyz_into_dict(grounding_level_prescale_xyz_file)
 
                             # Set the given grounding level
@@ -487,7 +489,6 @@ class estimate(configure):
                     # Modifying G matrix to add direct modeling of vertical displacement
                     linear_design_mat_set = self.modify_G_set(point_set, linear_design_mat_set, offsetfields_set, up_disp_set, grounding_level = given_grounding_level, gl_name = gl_name)
                     print("Modified matrix (obs) set is Done")
-
 
                 # If invert for topographic residual, add another column for G
                 if self.est_topo_resid:
@@ -558,7 +559,7 @@ class estimate(configure):
             ## End of enumeration ##
 
             # Select the optimal grounding level
-            # If mode is tides_3 and the enumeration is actually done
+            # If mode is tides_3 and the enumeration is actually done, so the others set is done
             forceUpdateOthers = False
             if self.task_name == "tides_3" and (tides_3_mode == "find_optimal_gl" or forceUpdateOthers):
                 
@@ -608,6 +609,8 @@ class estimate(configure):
                     ax.set_xlabel("grounding level",fontsize=15)
                     fig.savefig("prob.png")
                     plt.close(1)
+
+                    #print(stop)
 
                 if not np.isnan(optimal_grounding_level_int):
                     up_scale = others_set[self.test_point]['grounding_level_up_scale'][optimal_grounding_level_int]

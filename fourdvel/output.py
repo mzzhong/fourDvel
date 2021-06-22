@@ -272,7 +272,8 @@ class output(fourdvel):
                         #if self.grid_set_velo[point][2]<=0.4:
                         #if self.grid_set_velo[point][2]<=0.2:
                         #if self.grid_set_velo[point][2]<=0.1:
-                        if self.grid_set_velo[point][2]<=0.05:
+                        #if self.grid_set_velo[point][2]<=0.05:
+                        if self.grid_set_velo[point][2]==0:
                             continue
     
                         if this_grid_set[point][quant_name_orig]=='external':
@@ -280,22 +281,30 @@ class output(fourdvel):
   
                         if state == 'est':
                             optimal_grounding_level = this_grid_set[point][quant_name_orig]/(10**6) 
+                            
                             # Remove very low grounding level, note the value is integer
-                            if optimal_grounding_level <= -2.8:
+                            if self.proj == 'Rutford' and optimal_grounding_level <= -2.8:
                                 continue
 
+                            if self.proj == 'Evans' and optimal_grounding_level <= -3.0:
+                                continue
+
+                            gl_ci_thres = 100
                             #gl_ci_thres = 0.5
-                            gl_ci_thres = 1.0
+                            #gl_ci_thres = 1.0
                             #gl_ci_thres = 1.5
-                            #gl_ci_thres = 100
+                            
                             # Remove based obtained credible level
                             gl_ci = grid_set_gl_ci.get(point, np.nan)
                             if np.isnan(gl_ci) or gl_ci>=gl_ci_thres:
                                 continue
 
                         # Remove points with fewer than 2 tracks
+                        print(self.grid_set[point])
+                        print(stop)
+ 
                         if len(self.grid_set[point])<=1:
-                            continue
+                           continue
     
                     # Record everything, including np.nan
                     # np.nan is filtered in write_dict_to_xyz

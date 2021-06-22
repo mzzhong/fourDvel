@@ -189,6 +189,13 @@ class configure(fourdvel):
                 noise_sigma_point = []
                 for i in range(len(data_info)):
                     noise_sigma_pair = [data_uncert_point[(data_info[i], 'range')], data_uncert_point[(data_info[i], 'azimuth')]]
+                    #print(data_info[i])
+                    sate, track_num = data_info[i]
+                    if sate == 'csk' and track_num == 12:
+                        noise_sigma_pair = [noise_sigma_pair[0]*2, noise_sigma_pair[1]*2]
+                        #noise_sigma_pair = [noise_sigma_pair[0]*3, noise_sigma_pair[1]*3]
+                        #noise_sigma_pair = [noise_sigma_pair[0]*5, noise_sigma_pair[1]*5]
+                        #noise_sigma_pair = [100, 100]
 
                     # The value can be zero is when there is only one measurement 
                     # sigma=2m, downweight this data

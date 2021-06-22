@@ -1873,7 +1873,7 @@ class fourdvel(basics):
                     given_grounding_level = -10
             
             elif gl_name == "optimal":
-                # Try to get the value from others_set
+                # Try to get the value from the obtained grounding level
                 if point in grounding_level:
                     given_grounding_level_int = grounding_level[point]['optimal_grounding_level']
                     given_grounding_level = given_grounding_level_int / (10**6)
@@ -1887,9 +1887,12 @@ class fourdvel(basics):
                     # 2021.04.12: Manually set the value to be -10
                     #given_grounding_level = -10
                     print("In optimal mode: optimal grounding level at this point is: ", point, given_grounding_level)
+                    #print("AAA")
 
+                # Not available, set it to -10
                 else:
                     given_grounding_level = -10
+                    #print("BBB")
 
                 # If invalid, set it to be -10
                 if np.isnan(given_grounding_level):
@@ -2215,8 +2218,10 @@ class fourdvel(basics):
         
         invCd_set = {}
         for point in point_set:
-            invCd_set[point] = self.real_data_uncertainty(data_vec_set[point], 
-                                                            noise_sigma_set[point])
+            invCd_set[point] = self.real_data_uncertainty(data_vec_set[point], noise_sigma_set[point])
+            #print(np.diagonal(invCd_set[point]).tolist())
+            #print(stop)
+
         return invCd_set
 
     def real_data_uncertainty(self,data_vec, sigma):
@@ -2497,7 +2502,13 @@ class fourdvel(basics):
         l = len(x)
 
         if alpha is None:
-            alpha = 0.95
+            if self.proj == 'Rutford':
+                alpha = 0.95
+            elif self.proj == 'Evans':
+                alpha = 0.68
+                alpha = 0.3
+            else:
+                raise ValueError()
 
         # Set nan to zero
         y[np.isnan(y)] = 0
@@ -3315,9 +3326,21 @@ class fourdvel(basics):
 
                     ## End of coordinates transform ##
 
-                    # For "true" and "est", things are completed
-                    # Record the values with some processing
+                    # Need to clip some amplitude phases if necessary
+                    # Need to clip unrealistic phase values for true and est
                     if state in ['true','est']:
+                        # Check if the value is valid not
+                        ve_model = self.grid_set_velo[point][0]
+                        vn_model = self.grid_set_velo[point][1]
+
+                        # positive value means ice shelf
+                        vu_model = self.grid_set_velo[point][2]
+
+                        v_model = (ve_model**2 + vn_model**2)**(1/2)
+    
+                        lon, lat = self.int5d_to_float(point)
+ 
+                        ############## Phase ####################
                         # Convert unit of phase (use days for Msf)
                         phase_alf = self.rad2deg(phase_alf)
                         phase_alf = self.wrapped_deg(phase_alf)
@@ -3334,14 +3357,8 @@ class fourdvel(basics):
                         phase_crf_in_deg = phase_crf
     
                         phase_crf = self.deg2day(phase_crf, tide_name)
-    
-                        # Check if the value is valid not
-                        ve_model = self.grid_set_velo[point][0]
-                        vn_model = self.grid_set_velo[point][1]
-                        v_model = (ve_model**2 + vn_model**2)**(1/2)
-    
-                        lon, lat = self.int5d_to_float(point)
-   
+
+                        # Set criterions for clipping    
                         if self.proj == "Rutford": 
                             thres_for_v = 0.1
                             thres_for_amp_alf = 0.075
@@ -3352,13 +3369,14 @@ class fourdvel(basics):
                             #thres_for_v = 0.5
                             #thres_for_v = 1.0
 
+                            # Along-flow
                             #thres_for_amp_alf = 0.1
-                            #thres_for_amp_alf = 0.075
-                            thres_for_amp_alf = 0.050
+                            thres_for_amp_alf = 0.075
+                            #thres_for_amp_alf = 0.050
                             #thres_for_amp_alf = 0.025
                             #thres_for_amp_alf = 0.010
 
-
+                            # Cross-flow
                             thres_for_amp_crf = 0.025
                             
                             # 2021.05.19
@@ -3375,8 +3393,10 @@ class fourdvel(basics):
                             #if self.proj == "Rutford" and lat<-77.8:
                                 pass
     
+                            # clip the northern tributaries
                             #elif self.proj == "Evans" and lat<-75.85:
-                            elif self.proj == "Evans":
+                            # clip the western tributaries
+                            elif self.proj == "Evans" and (not (lon<-77.5 and vu_model==0)):
                                 pass
                             else:
                                 phase_alf = np.nan
@@ -3393,7 +3413,8 @@ class fourdvel(basics):
     
                             #elif self.proj == "Evans" and ampU>0.5:
                             #elif self.proj == "Evans" and lat<-75.85:
-                            elif self.proj == "Evans":
+                            # only keep the valus on ice shelf
+                            elif self.proj == "Evans" and vu_model>0:
                                 pass
     
                             else:
@@ -3403,6 +3424,13 @@ class fourdvel(basics):
                             phase_crf = np.nan
                             phase_crf_in_deg = np.nan
 
+                        ############## Amplitude ################
+                        if self.proj == 'Evans':
+                            if v_model>0.05:
+                                pass
+                            else:
+                                amp_alf = np.nan
+                                amp_crf = np.nan
 
                         # Save the output
                         quant = {}
@@ -3416,7 +3444,6 @@ class fourdvel(basics):
                         quant["Msf_cross_flow_displacement_phase_in_deg"] = phase_crf_in_deg
     
                         quant["Msf_horizontal_displacement_amplitude"] = amp_full 
-
 
                     # For uncertainty
                     elif state in ['uq']:
