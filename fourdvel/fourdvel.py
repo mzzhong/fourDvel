@@ -3377,7 +3377,8 @@ class fourdvel(basics):
                             #thres_for_amp_alf = 0.010
 
                             # Cross-flow
-                            thres_for_amp_crf = 0.025
+                            #thres_for_amp_crf = 0.025
+                            thres_for_amp_crf = 0.010
                             
                             # 2021.05.19
                         else:

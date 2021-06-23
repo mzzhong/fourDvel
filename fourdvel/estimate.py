@@ -127,8 +127,8 @@ class estimate(configure):
 
                 # Set the mode for running
 
-                tides_3_mode = "find_optimal_gl"
-                #tides_3_mode = "invert_optimal_gl"
+                #tides_3_mode = "find_optimal_gl"
+                tides_3_mode = "invert_optimal_gl"
 
                 #gl_option = 'manual'
                 gl_option = 'auto'
@@ -404,6 +404,12 @@ class estimate(configure):
             ### Get up displacement set ###
             up_disp_set = self.get_up_disp_set(point_set, offsetfields_set)
 
+            ### Put the lowest tide into others_set
+            for point in point_set:
+                tide_height_master, tide_height_slave = up_disp_set[self.test_point]
+                lowest_tide_height = min(min(tide_height_master),min(tide_height_slave))
+                others_set[point]['lowest_tide_height'] = lowest_tide_height
+
             ### Main: Loop through the grounding level ###
             for ienum, enum_grounding_level in enumerate(enum_grounding_level_int):
 
@@ -423,7 +429,7 @@ class estimate(configure):
 
                     elif enum_grounding_level == "optimal":
                         # Load the prescaled optimal grounding level
-                        optimal_gl_data_mode = 1
+                        optimal_gl_data_mode = 0
                         # option = 0, use the one in others_set
                         if optimal_gl_data_mode == 0:
                             given_grounding_level = others_set
@@ -582,13 +588,15 @@ class estimate(configure):
 
                 # plot gl marginal dist at test point
                 plot_gl_dist = False
+
                 if plot_gl_dist:
                     gls = []
                     gl_probs = [] 
                     for grounding_level_int, gl_prob in sorted(others_set[self.test_point]["grounding_level_prob"].items()):
                         gls.append(grounding_level_int / 10**6)
                         gl_probs.append(gl_prob)
-                    
+
+                   
                     #print("sum of probs: ", np.nansum(gl_probs))
                     #print("probs: ", gls, gl_probs)
 
@@ -603,6 +611,9 @@ class estimate(configure):
                     ax.plot([gl_ci[0], gl_ci[0]], [0,max(gl_probs)], "r")
                     ax.plot([gl_ci[1], gl_ci[1]], [0,max(gl_probs)], "r")
 
+                    lowest_tide_height = others_set[point]['lowest_tide_height']
+                    ax.plot([lowest_tide_height, lowest_tide_height], [0, max(gl_probs)], "b-")
+
                     ax.set_xlim([-4, 0])
                     
                     ax.set_ylabel("probability density",fontsize=15)
@@ -610,7 +621,7 @@ class estimate(configure):
                     fig.savefig("prob.png")
                     plt.close(1)
 
-                    #print(stop)
+                    print(stop)
 
                 if not np.isnan(optimal_grounding_level_int):
                     up_scale = others_set[self.test_point]['grounding_level_up_scale'][optimal_grounding_level_int]

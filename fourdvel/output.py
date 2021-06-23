@@ -299,12 +299,23 @@ class output(fourdvel):
                             if np.isnan(gl_ci) or gl_ci>=gl_ci_thres:
                                 continue
 
-                        # Remove points with fewer than 2 tracks
-                        print(self.grid_set[point])
-                        print(stop)
- 
-                        if len(self.grid_set[point])<=1:
-                           continue
+                            # Remove points if the lowest_tide_height is too close to the obtained value
+                            lowest_tide_height = this_grid_set[point]['lowest_tide_height']
+                            print('state: ', state)
+                            print('lowest_tide_height: ', lowest_tide_height)
+                            print('obtained ogl: ', optimal_grounding_level)
+                            #if optimal_grounding_level - lowest_tide_height <= 0.1:
+                            #    continue
+
+                            # Remove points without descending track
+                            #print(self.grid_set[point])
+                            count = 0
+                            for track in self.grid_set[point]:
+                                print(track)
+                                if track[3] == 'csk' and track[0]>=11:
+                                    count += 1
+                            if count==0:
+                                continue
     
                     # Record everything, including np.nan
                     # np.nan is filtered in write_dict_to_xyz
