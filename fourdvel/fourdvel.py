@@ -202,9 +202,15 @@ class fourdvel(basics):
         self.data_error_mode = None
         self.data_uncert_grid_set_pklfile = None
 
+        # up disp
         self.up_disp_mode = None
 
+        # resid topo
         self.est_topo_resid = False
+
+        # params for creating grid set
+        self.min_num_of_csk_tracks = 1
+        self.min_num_of_s1_tracks = 100
 
         fmt = '%Y%m%d'
 
@@ -393,10 +399,19 @@ class fourdvel(basics):
                 self.s1_end = datetime.datetime.strptime(value, fmt).date()
                 print('s1_end: ',value)
 
-
             if name == 's1_excluded_tracks':
                 self.s1_excluded_tracks = [int(x) for x in value.split(',')]
                 print('s1_excluded_tracks: ',self.s1_excluded_tracks)
+
+
+            # Params for creating grid set
+            if name == 'min_num_of_csk_tracks':
+                self.min_num_of_csk_tracks = int(value)
+                print('min_num_of_csk_tracks: ',value)
+
+            if name == 'min_num_of_s1_tracks':
+                self.min_num_of_s1_tracks = int(value)
+                print('min_num_of_s1_tracks: ',value)
 
             ## Error model ###
             # Simulation error model
@@ -997,7 +1012,16 @@ class fourdvel(basics):
         grid_set_resolution = str(self.resolution)
 
         # Finalize the name
-        self.grid_set_name= "_".join((grid_set_prefix, grid_set_datasets, grid_set_sources, grid_set_resolution))
+        if self.proj == 'Rutford':
+            self.grid_set_name= "_".join((grid_set_prefix, grid_set_datasets, grid_set_sources, grid_set_resolution))
+        
+        elif self.proj == 'Evans':
+            #grid_set_cov_version = 'cov_v0'
+            #grid_set_cov_version = 'cov_v1'
+            #grid_set_cov_version = 'cov_v2'
+            grid_set_cov_version = 'cov_v3'
+
+            self.grid_set_name= "_".join((grid_set_prefix, grid_set_datasets, grid_set_sources, grid_set_resolution, grid_set_cov_version))
 
         return (self.pickle_dir + '/' + self.grid_set_name + '.pkl')
 
@@ -2877,6 +2901,11 @@ class fourdvel(basics):
                 # Save this point
                 residual_analysis_set[point] = residual_analysis_point_result
 
+            else:
+
+                residual_analysis_set[point] = None
+
+
         return residual_analysis_set
 
     def point_residual_analysis(self, point, data_info, offsetfields, data_vec, data_vec_pred, data_vec_residual):
@@ -3731,10 +3760,12 @@ class fourdvel(basics):
                     # 2021.01.29
                     thres = 0.06
 
+
+                    model_up = self.grid_set_velo[point][2]>0
+
                     # value in velocity model > 0
                     #if (ampU > thres) or (state=='uq') :
-
-                    if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq') :
+                    if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up>0)):
 
                         value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
@@ -3795,9 +3826,13 @@ class fourdvel(basics):
                     #thres = 0.01
                     # 2021.05.17
                     #thres = 0.05
+
+                    model_up = self.grid_set_velo[point][2]
                     
-                    #if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
-                    if ampU >=thres or state == 'uq':
+                    #if ampU >=thres or state == 'uq':
+
+                    # clip values outside ice-shelf for Evans
+                    if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up>0)):
 
                         value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
@@ -3853,8 +3888,9 @@ class fourdvel(basics):
                     # 2021.04.06
                     thres = 0.03
 
-                    #if (self.grid_set_velo[point][2]>0 and ampU >= thres) or (state=='uq'):
-                    if (ampU >= thres) or (state=='uq'):
+                    model_up = self.grid_set_velo[point][2]
+                    #if (ampU >= thres) or (state=='uq'):
+                    if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up>0)):
 
                         value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:

@@ -533,6 +533,8 @@ class estimate(configure):
                 # Calculate the residual per trakc per obs
                 residual_analysis_set = self.point_set_residual_analysis(point_set, data_info_set, offsetfields_set, data_vec_set, linear_design_mat_set, model_vec_set)
                 print('Residual analysis Done')
+                #print(residual_analysis_set)
+                #print(residual_analysis_set.keys())
                 resid_analysis_point_result = residual_analysis_set[self.test_point]
                 print("Residual analysis at this point: ", resid_analysis_point_result)
 
@@ -657,8 +659,11 @@ class estimate(configure):
 
                     row_names = ['Estimated','Uncertainty']
                     column_names = ['Secular'] + self.modeling_tides
-    
-                self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
+   
+                if not np.isnan(tide_vec_set[self.test_point]): 
+                    self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
+                else:
+                    print("No valid estimation")
 
             #######################################################
 

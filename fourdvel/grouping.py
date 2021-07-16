@@ -76,10 +76,11 @@ class grouping(fourdvel):
         sources = self.grid_set_sources
         print('sources: ', sources)
 
-        # Find the used datasets
+        # Find the used datasets (csk, s1)
         print("used datasets: ", self.used_datasets)
         for sate in self.used_datasets:
 
+            # Go over all the tracks
             for track_num in tracklist[sate]:
 
                 print(sate,track_num)
@@ -200,21 +201,79 @@ class grouping(fourdvel):
                     # Push into the grid_set.
                     # This is a new key
                     if (grid_lon[ii,jj],grid_lat[ii,jj]) not in grid_set.keys():
-                        # if use_csk is turned on, only csk has the right to
-                        # set a new key
-                        if self.use_csk == True and sate=='csk':
-                            grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])] = [info]
-                        elif self.use_csk == False and sate == 's1':
-                            grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])] = [info]
-                        else:
-                            pass
+                        # CSK has the priority to be always included, so check CSK first
+                        # if use_csk is turned on                         
+                        if self.use_csk == True:
+                            # if the sate is csk, it has the right to set a new key
+                            if sate=='csk':
+                                grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])] = [info]
+
+                            # s1 is also allowed allowed to set a new key
+                            if sate=='s1':
+                                grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])] = [info]
+                      
+                        # if use_csk is False, only s1 can set the key.
+                        elif self.use_csk == False:
+                            if sate == 's1':
+                                grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])] = [info]
+
                     else:
                         grid_set[(grid_lon[ii,jj],grid_lat[ii,jj])].append(info)
+
+        # Filter the grid set to remove the grid_points unqualified for number tracks
+        point_to_delete = []
+        for point in grid_set:
+            lon, lat = point
+
+            csk_tracks = [indi_info[0] for indi_info in grid_set[point] if indi_info[3]=='csk']
+            
+            # count track 7
+            #s1_tracks = [indi_info[0] for indi_info in grid_set[point] if indi_info[3]=='s1']
+
+            # do not count track 7
+            s1_tracks = [indi_info[0] for indi_info in grid_set[point] if indi_info[3]=='s1' and indi_info[0]!=7]
+            
+            if self.use_csk == True:
+                # check places there csk does not cover, but s1 is not sufficient
+                # less than the min number of tracks
+                if len(csk_tracks)==0 and len(s1_tracks) < self.min_num_of_s1_tracks:
+                    point_to_delete.append(point)
+                    continue
+
+                # only have the three acsending tracks: 65, 50, 64, remove it
+                if len(csk_tracks)==0 and set(s1_tracks)==set([65,50,64]):
+                    point_to_delete.append(point)
+                    continue
+
+            # Remove points outside AOI (western and eastern portion)
+            #if lon/self.float2int < -84 or lon/self.float2int > -70:
+            if lon/self.float2int < -84 or lon/self.float2int > -69:
+            #if lon/self.float2int < -84 or lon/self.float2int > -68:
+            #if lon/self.float2int < -84 or lon/self.float2int > -65:
+                point_to_delete.append(point)
+                continue
+
+            # Remove points outside AOI (southwestern portion, where only s1 exists)
+            if lon/self.float2int < -78 and len(csk_tracks)==0:
+                point_to_delete.append(point)
+                continue
+
+            # Remove points outside AOI (southern portion)
+            if lat/self.float2int < -77.6:
+                point_to_delete.append(point)
+                continue
+
+        # End of adding bad points
+
+        # Remove these points
+        for point in point_to_delete:
+            del grid_set[point]
 
         # End of creating points
 
         #print(grid_set.keys())
         print("Total number of grid points: ", len(grid_set))
+
 
         # Filter the grid set for Evans project
         if self.proj == "Evans":
@@ -236,6 +295,13 @@ class grouping(fourdvel):
         with open(self.grid_set_pkl_name,'wb') as f:
             pickle.dump(grid_set,f)
 
+        print("Writing the points to xyz file")
+        grid_set_quant = {}
+        for point in grid_set.keys():
+            grid_set_quant[point] = 1
+        
+        xyz_name = self.grid_set_pkl_name + '.xyz'
+        self.write_dict_to_xyz(grid_set_quant, xyz_name = xyz_name)
 
         print("Done")
 
@@ -246,6 +312,7 @@ class grouping(fourdvel):
         except:
             pass
 
+        #print(stop)
 
         return 0
 

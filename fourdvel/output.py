@@ -211,7 +211,7 @@ class output(fourdvel):
                 grid_set_master = self.grid_set_master_model_tide_vec
 
                 for point in grid_set_master.keys():
-                    if not np.isnan(grid_set_master[point][0,0]):
+                    if not np.isnan(grid_set_master[point][0,0]) and point in grid_set_slave:
                         quant_master = self.tide_vec_to_quantity(input_tide_vec = grid_set_master[point], quant_name = "secular_horizontal_velocity_EN")
                         quant_slave = self.tide_vec_to_quantity(input_tide_vec = grid_set_slave[point], quant_name = 'secular_horizontal_velocity_EN')
                         grid_set_quant[point] = np.linalg.norm(quant_master - quant_slave, 2)
@@ -258,6 +258,8 @@ class output(fourdvel):
                     # The point should be tuple. However, there are exceptions for the key, e.g. current_auto_enum_stage
                     if not isinstance(point, tuple):
                         continue
+
+                    model_up = self.grid_set_velo[point][2] 
     
                     # Ad hoc treatment of grounding level
                     if quant_name.startswith("optimal_grounding_level"):
@@ -273,7 +275,7 @@ class output(fourdvel):
                         #if self.grid_set_velo[point][2]<=0.2:
                         #if self.grid_set_velo[point][2]<=0.1:
                         #if self.grid_set_velo[point][2]<=0.05:
-                        if self.grid_set_velo[point][2]==0:
+                        if model_up == 0:
                             continue
     
                         if this_grid_set[point][quant_name_orig]=='external':
@@ -289,9 +291,9 @@ class output(fourdvel):
                             if self.proj == 'Evans' and optimal_grounding_level <= -3.0:
                                 continue
 
-                            gl_ci_thres = 100
+                            #gl_ci_thres = 100
                             #gl_ci_thres = 0.5
-                            #gl_ci_thres = 1.0
+                            gl_ci_thres = 1.0
                             #gl_ci_thres = 1.5
                             
                             # Remove based obtained credible level
@@ -324,7 +326,9 @@ class output(fourdvel):
                     if quant_name in ["up_scale"]:
                         if state == "true":
                             grid_set_quant[point] = this_grid_set[point].get("true_" + quant_name, np.nan)
+                        
                         elif state == 'est':
+                            
                             grid_set_quant[point] = this_grid_set[point].get(quant_name, np.nan)
 
                     # optimal grounding level
@@ -363,6 +367,11 @@ class output(fourdvel):
                         elif state == 'est':
                             ci = this_grid_set[point].get("grounding_level_credible_interval", (np.nan, np.nan))
                             grid_set_quant[point] = ci[1] - ci[0]
+
+                            # clip every thing outside ice-shelf
+                            if model_up == 0:
+                                grid_set_quant[point] = np.nan
+
                         else:
                             raise ValueError()
 
@@ -961,7 +970,9 @@ def main(iargs=None):
         if out.output_difference:
             if out.proj=="Evans":
                 # Evans
-                out.run_output_difference(compare_id=620, compare_prefix='true')
+                #out.run_output_difference(compare_id=620, compare_prefix='true')
+                out.run_output_difference(compare_id=20211514, compare_prefix='true')
+
             elif out.proj == "Rutford":
                 # Rutford
                 out.run_output_difference(compare_id=202007042, compare_prefix='true')
