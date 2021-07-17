@@ -3418,19 +3418,34 @@ class fourdvel(basics):
     
                         # Remove some invalid phase values
                         if v_model > thres_for_v and amp_alf > thres_for_amp_alf:
+
+                            # Rutford
                             if self.proj == "Rutford":
                             # Remove the northern data
                             #if self.proj == "Rutford" and lat<-77.8:
                                 pass
     
-                            # clip the northern tributaries
-                            #elif self.proj == "Evans" and lat<-75.85:
-                            # clip the western tributaries
-                            elif self.proj == "Evans" and (not (lon<-77.5 and vu_model==0)):
-                                pass
+                            # Evans
+                            elif self.proj == "Evans":
+                                # clip the northern tributaries, only keeo southern portion
+                                #if self.proj == "Evans" and lat<-75.85:
+                                #    pass
+
+                                # for real data, clip the weastern tributaries and only keep the eastern ones
+                                if self.s1_data_mode==3 and self.csk_data_mode==3:
+                                    if (not (lon<-77.5 and vu_model==0)):
+                                        pass
+                                    else:
+                                        phase_alf = np.nan
+                                        phase_alf_in_deg = np.nan
+
+                                # for synthetic test
+                                else:
+                                    pass
+
                             else:
-                                phase_alf = np.nan
-                                phase_alf_in_deg = np.nan
+                                raise ValueError()
+
                         else:
                             phase_alf = np.nan
                             phase_alf_in_deg = np.nan
@@ -3995,14 +4010,16 @@ class fourdvel(basics):
                 raise ValueError()
 
         elif quant_name == "topo_resid":
-            assert len(data_vec)>= 3 + self.n_modeling_tides*6 + 1, print("length of param_uq_vec has problem for topo resid ", len(data_vec))
+            
+            if state in ['est', 'uq']:
+                assert len(data_vec)>= 3 + self.n_modeling_tides*6 + 1, print("length of param_uq_vec has problem for topo resid ", len(data_vec))
 
             # For now, the last index is topo_resid
             ind = -1
 
             # TODO, Need to import true topo resid
             if state in ['true']:
-                quant = 0
+                quant = 0.0
             elif state in ['est']:
                 quant = data_vec[ind]
             elif state in ['uq']:

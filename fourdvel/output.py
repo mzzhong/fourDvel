@@ -894,7 +894,7 @@ class output(fourdvel):
                                 elif isinstance(true_grid_set_quant[point], tuple):
                                     grid_set_quant[sub_quant_name][point] = tuple([est_grid_set_quant[point][j]-true_grid_set_quant[point][j] for j in range(len(true_grid_set_quant[point]))])
                                 else:
-                                    raise Exception()
+                                    raise Exception("Unknown type of data")
                 else:
                     raise ValueError('Unknown state')
 

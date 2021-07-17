@@ -656,7 +656,9 @@ def main():
     if run_basics:
         bs = basics()
         #params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/EIS_tides_params.txt" 
-        params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/EIS_CATS2008_tides_params.txt" 
+        #params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/EIS_CATS2008_tides_params.txt" 
+        #params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/EIS4_CATS2008_tides_params.txt" 
+        params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/EIS5_CATS2008_tides_params.txt" 
         #params_file = "/net/kamb/ssd-tmp1/mzzhong/tides_model/TMD_Matlab_Toolbox_v2.5/TMD/results/EIS_TPXO_tides_params.txt" 
         
         tide_names, tides_params = bs.read_tides_params(params_file=params_file)
