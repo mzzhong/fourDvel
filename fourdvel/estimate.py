@@ -272,17 +272,23 @@ class estimate(configure):
                     else:
                         raise ValueError("Unknown auto gl option")
 
+                    # Set the search range parameters for auto
+                    # full range
+                    #gl_low  =   -4.0
+                    #gl_high =   4.0
+
+                    # half range
+                    gl_low = -4.0
+                    gl_high = 0.0
+
                     # Derive the gl values to be enumerated
                     if current_auto_enum_stage == 0:
-                        enum_space = 0.1
-                        #gl_low  =   -4.0
-                        #gl_high =   4.0
 
-                        #gl_low = -4.0
-                        #gl_high = -1.0
+                        # move to stage 1
+                        next_auto_enum_stage = current_auto_enum_stage + 1
 
-                        gl_low = -4.0
-                        gl_high = 0.0
+                        # get enum spacing for stage 1 (0.1 spacing)
+                        enum_space = auto_enum_stages[next_auto_enum_stage][1] 
 
                         enum_grounding_level = np.arange(gl_low, gl_high+1e-6, enum_space)
 
@@ -294,12 +300,14 @@ class estimate(configure):
                         for point in point_set:
                             enum_grounding_level_auto_mode_set[point] = [int(round(gl_low * 10**6)), int(round(enum_space * 10**6))]
 
-                        next_auto_enum_stage = current_auto_enum_stage + 1
 
+                    # Not stage 0 but has reached the final stage
                     elif current_auto_enum_stage < len(auto_enum_stages):
 
+                        # dictionary to what to enumerate for a point
                         enum_grounding_level_auto_mode_set = {}
 
+                        # move to the next stage
                         next_auto_enum_stage = current_auto_enum_stage + 1
 
                         for point in point_set:
@@ -316,7 +324,9 @@ class estimate(configure):
                                 # set the gl_low to be -4, other values also work
                                 gl_low = -4.0
 
+                            # find the spacing of this stage
                             enum_space = auto_enum_stages[next_auto_enum_stage][1]
+                            # set the enum range and spacing for this point
                             enum_grounding_level_auto_mode_set[point] = [int(round(gl_low * 10**6)), int(round(enum_space * 10**6))]
                             
                             #print(others_set[point]['grounding_level_model_likelihood'])
@@ -429,7 +439,7 @@ class estimate(configure):
 
                     elif enum_grounding_level == "optimal":
                         # Load the prescaled optimal grounding level
-                        optimal_gl_data_mode = 0
+                        optimal_gl_data_mode = 1
                         # option = 0, use the one in others_set
                         if optimal_gl_data_mode == 0:
                             given_grounding_level = others_set
@@ -449,6 +459,7 @@ class estimate(configure):
 
                         gl_name = "optimal"
 
+                    # still in search mode
                     else:
                         if gl_option == 'manual':
                             grounding_level_int = enum_grounding_level
@@ -473,9 +484,13 @@ class estimate(configure):
                                 # Need to distinguish if on ice shelf
                                 if point_set_on_ice_shelf:
                                     grounding_level_int_point = gl_low_int + enum_grounding_level * gl_enum_spacing_int
+                                    
                                     # clip the value to be winthin the requred range
-                                    gl_a_min = -4
-                                    gl_a_max = +4
+                                    #gl_a_min = -4.0
+                                    #gl_a_max = +4.0
+                                    gl_a_min = gl_low
+                                    gl_a_max = gl_high
+                                    
                                     grounding_level_int_point = np.clip(grounding_level_int_point, a_min = gl_a_min * 10**6, a_max = gl_a_max * 10**6)
                                 else:
                                     # -10 * 10**6

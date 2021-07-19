@@ -1019,9 +1019,19 @@ class fourdvel(basics):
             #grid_set_cov_version = 'cov_v0'
             #grid_set_cov_version = 'cov_v1'
             #grid_set_cov_version = 'cov_v2'
+
+            # cov_v3:
+            # min_num_of_csk_tracks = 1
+            # min_num_of_s1_tracks = 3
+            # do not count track 7
+            # remove points with 50, 64, 65 which are all ascending tracks
+            # need to collaborate and configure all these in grouping.py
             grid_set_cov_version = 'cov_v3'
 
             self.grid_set_name= "_".join((grid_set_prefix, grid_set_datasets, grid_set_sources, grid_set_resolution, grid_set_cov_version))
+
+            #print(self.grid_set_name)
+            #print(stop)
 
         return (self.pickle_dir + '/' + self.grid_set_name + '.pkl')
 
@@ -2529,8 +2539,9 @@ class fourdvel(basics):
             if self.proj == 'Rutford':
                 alpha = 0.95
             elif self.proj == 'Evans':
-                alpha = 0.68
-                alpha = 0.3
+                #alpha = 0.68
+                alpha = 0.5
+                #alpha = 0.3
             else:
                 raise ValueError()
 
@@ -3842,7 +3853,11 @@ class fourdvel(basics):
                     # 2021.05.17
                     #thres = 0.05
 
-                    model_up = self.grid_set_velo[point][2]
+                    if self.shelf_points_dict is None:
+                        model_up = self.grid_set_velo[point][2]
+                    else:
+                        # If not exists, then the value is 0
+                        model_up = self.shelf_points_dict.get(point, 0)
                     
                     #if ampU >=thres or state == 'uq':
 

@@ -61,6 +61,23 @@ class output(fourdvel):
 
         self.no_phase_correction = inps.no_phase_correction
 
+        self.load_shelf_points()
+
+    def load_shelf_points(self):
+        
+        if self.proj == "Rutford":
+            shelf_points_test_id = 0
+
+        elif self.proj == 'Evans':
+            shelf_points_test_id = 20211931 
+
+        shelf_point_file = '/net/kamb/ssd-tmp1/mzzhong/insarRoutines/quick_studies/' + str(shelf_points_test_id) + '_shelf_points.xyz'
+        if os.path.exists(shelf_point_file):
+            self.shelf_points_dict = self.read_xyz_into_dict(shelf_point_file)
+            print("Number of shelf points: ", len(self.shelf_points_dict))
+        else:
+            self.shelf_points_dict = None
+
     def run_output_residual(self):
 
         this_result_folder = self.estimation_dir
@@ -259,8 +276,12 @@ class output(fourdvel):
                     if not isinstance(point, tuple):
                         continue
 
-                    model_up = self.grid_set_velo[point][2] 
-    
+                    if self.shelf_points_dict is None:
+                        model_up = self.grid_set_velo[point][2]
+                    else:
+                        # If not exists, then the value is 0
+                        model_up = self.shelf_points_dict.get(point, 0)
+
                     # Ad hoc treatment of grounding level
                     if quant_name.startswith("optimal_grounding_level"):
 
@@ -292,8 +313,8 @@ class output(fourdvel):
                                 continue
 
                             #gl_ci_thres = 100
-                            #gl_ci_thres = 0.5
-                            gl_ci_thres = 1.0
+                            gl_ci_thres = 0.5
+                            #gl_ci_thres = 1.0
                             #gl_ci_thres = 1.5
                             
                             # Remove based obtained credible level
@@ -309,14 +330,18 @@ class output(fourdvel):
                             #if optimal_grounding_level - lowest_tide_height <= 0.1:
                             #    continue
 
-                            # Remove points without descending track
+                            # Remove points with csk coverage but only have ascending tracks
                             #print(self.grid_set[point])
-                            count = 0
+                            csk_exists = False
+                            csk_desc_exists = False
                             for track in self.grid_set[point]:
-                                print(track)
+                                if track[3] == 'csk':
+                                    csk_exists = True
+
                                 if track[3] == 'csk' and track[0]>=11:
-                                    count += 1
-                            if count==0:
+                                    csk_desc_exists = True
+
+                            if csk_exists == True and csk_desc_exists == False:
                                 continue
     
                     # Record everything, including np.nan
@@ -959,6 +984,8 @@ def main(iargs=None):
         # First output others
         if out.output_others:
             out.run_output_others()
+
+        return 0
      
         ### Do the output jobs ###
         out.output_estimations(output_states)
