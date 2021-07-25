@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import copy
 import argparse
 
 import pickle
@@ -254,9 +255,20 @@ class output(fourdvel):
                     + str(test_id) + '_' + 'grid_set_others.pkl','rb') as f:
             this_grid_set = pickle.load(f)
 
-        # credible interval needs to before grounding level for filtering purposes
-        quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "height"]
-        #quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "grounding_duration", "height"]
+        if self.task_name == 'tides_3':
+            # credible interval needs to before grounding level for filtering purposes
+            quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "height", "num_of_offset_pairs"]
+            #quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "grounding_duration", "height"]
+
+            quant_list_for_bias = ['optimal_grounding_level', 'up_scale']
+
+        elif self.task_name == 'tides_1':
+            quant_list = ['height', 'max_num_of_offset_pairs', 'num_of_offset_pairs', 'ratio_of_valid_offset_pairs']
+
+            quant_list_for_bias = []
+
+        else:
+            raise ValueError()
 
         states = ['true', 'est']
 
@@ -353,7 +365,6 @@ class output(fourdvel):
                             grid_set_quant[point] = this_grid_set[point].get("true_" + quant_name, np.nan)
                         
                         elif state == 'est':
-                            
                             grid_set_quant[point] = this_grid_set[point].get(quant_name, np.nan)
 
                     # optimal grounding level
@@ -408,11 +419,49 @@ class output(fourdvel):
 
                         else:
                             raise ValueError()
+
+                    elif quant_name in ["max_num_of_offset_pairs"]:
+                        if state == "true":
+                            grid_set_quant[point] = np.nan
+                        elif state == 'est':
+                            grid_set_quant[point] = this_grid_set[point].get(quant_name, np.nan)
+                        else:
+                            raise ValueError()
+
+                    elif quant_name in ["num_of_offset_pairs"]:
+                        if state == "true":
+                            grid_set_quant[point] = np.nan
+                        elif state == 'est':
+                            grid_set_quant[point] = this_grid_set[point].get(quant_name, np.nan)
+                        else:
+                            raise ValueError()
+
+                    elif quant_name in ["ratio_of_valid_offset_pairs"]:
+                        if state == "true":
+                            grid_set_quant[point] = np.nan
+                        
+                        elif state == 'est':
+                            if grid_set_max_num_of_offset_pairs.get(point, np.nan)>0:
+                                grid_set_quant[point] = grid_set_num_of_offset_pairs.get(point, np.nan) / grid_set_max_num_of_offset_pairs.get(point, np.nan)
+                            else:
+                                grid_set_quant[point] = np.nan
+                        else:
+                            raise ValueError()
                     else:
                         raise Exception()
 
+                # Save some results for processing other quantities
                 if state == 'est' and quant_name in ["grounding_level_credible_interval"]:
                     grid_set_gl_ci = grid_set_quant
+
+                # Save some results for processing other quantities
+                if state == 'est' and quant_name in ["max_num_of_offset_pairs"]:
+                    grid_set_max_num_of_offset_pairs = grid_set_quant
+                    #print(grid_set_max_num_of_offset_pairs)
+
+                if state == 'est' and quant_name in ["num_of_offset_pairs"]:
+                    grid_set_num_of_offset_pairs = grid_set_quant
+                    #print(grid_set_num_of_offset_pairs)
 
                 # Write to xyz file.
                 xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + 'others' + '_' + quant_name + '.xyz')
@@ -425,7 +474,8 @@ class output(fourdvel):
 
         # bias
         state = 'bias'
-        for quant_name in  ['optimal_grounding_level', 'up_scale']:
+        for quant_name in quant_list_for_bias:
+
             print('Output quantity name: ', quant_name)
             grid_set_quant = {}
     
@@ -648,13 +698,15 @@ class output(fourdvel):
                             'O1_up_displacement_phase',
      
                             # Msf
-                            "Msf_horizontal_displacement_group"                            
+                            "Msf_horizontal_displacement_group"
                             ]
 
         sub_quant_names_for_groups = {}
         sub_quant_names_for_groups["Msf_horizontal_displacement_group"] = [ "Msf_along_flow_displacement_amplitude",
                                                                             "Msf_along_flow_displacement_phase",
                                                                             "Msf_along_flow_displacement_phase_in_deg",
+
+                                                                            "Msf_alf_speed_div_secular_speed",
                                                                             
                                                                             "Msf_cross_flow_displacement_amplitude", 
                                                                             "Msf_cross_flow_displacement_phase",
@@ -781,7 +833,6 @@ class output(fourdvel):
                                         print(grid_set_quant.keys())
                                         print(stop)
     
-    
                     # Normal single mode
                     else:
                         sub_quant_names = [quant_name]
@@ -811,11 +862,14 @@ class output(fourdvel):
 
                     ######################################################
                     # Some additonal work on removing bad values
+
+                    # 1. Only keep data with at least two tracks
                     for sub_quant_name in sub_quant_names:
                         for point in grid_set_quant[sub_quant_name].keys():
                             # Need at least two track
                             if len(self.grid_set[point])<=1:
                                 grid_set_quant[sub_quant_name][point] = np.nan
+
  
                     ########    End of extraction   #############
     
@@ -857,10 +911,12 @@ class output(fourdvel):
                                     center = np.nansum(values) /count
 
                                 # Fix the center for certain componenets
-                                if state == 'est' and self.proj == "Evans" and sub_quant_name == "Msf_along_flow_displacement_phase":
+                                if self.proj == "Evans" and state == 'est'  and sub_quant_name == "Msf_along_flow_displacement_phase":
                                     center = -3.647
-                                    #print(stop)
 
+                                if self.proj == "Evans" and state == 'est'  and sub_quant_name == "Msf_cross_flow_displacement_phase":
+                                    center = -3.0
+ 
                                 # Save the mean phase
                                 f_mp.write(state + '_' + sub_quant_name + ' ' + str(center)+'\n')
 
@@ -927,13 +983,18 @@ class output(fourdvel):
                 #### Write to xyz file #####
                 for sub_quant_name in sub_quant_names:
                     xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + sub_quant_name + '.xyz')
-                    self.display.write_dict_to_xyz(grid_set_quant[sub_quant_name], xyz_name = xyz_name)
+
+                    processed_grid_set_quant = self.process_grid_set_quant(state, sub_quant_name, grid_set_quant[sub_quant_name])
+
+                    # Write the processed grid_set_quant to xyz 
+                    self.display.write_dict_to_xyz(processed_grid_set_quant, xyz_name = xyz_name)
 
                     # Save the results
                     # If this is phase, then phase correction may be done.
                     # Record the phase values with no correction
                     if (state=='true' or state=='est') and 'phase' in sub_quant_name:
                         saved_grid_set_quant_results[(state, sub_quant_name)] = grid_set_quant_npc[(state, sub_quant_name)]
+                    
                     # In other cases, just record the values
                     else:
                         saved_grid_set_quant_results[(state, sub_quant_name)] = grid_set_quant[sub_quant_name]
@@ -941,7 +1002,104 @@ class output(fourdvel):
         # close the mean phase file
         f_mp.close()
 
-        return 0                
+        return 0
+
+    def process_grid_set_quant(self, state, quant_name, grid_set_quant_orig):
+
+        # along-flow phase
+        if self.proj == 'Evans' and state == 'est' and quant_name == "Msf_along_flow_displacement_phase":
+            print('Processing Evans est Msf_along_flow_displacement_phase')
+
+            grid_set_quant_med = copy.deepcopy(grid_set_quant_orig)
+            points_to_keep = set()
+
+            print("total number of points in original grid_set_quant: ", len(grid_set_quant_orig))
+
+            # First, set values outside the range to be np.nan
+            minval = -3
+            maxval = 3
+            for point in grid_set_quant_orig.keys():
+                if grid_set_quant_orig[point] < minval or grid_set_quant_orig[point] > maxval:
+                    grid_set_quant_med[point] = np.nan
+
+            # Second, remove positive values outside the ice-shelf, west of -77.5
+            for point in grid_set_quant_orig.keys():
+                lon_int, lat_int = point
+
+                model_up = self.grid_set_velo[point][2]
+            
+                if not self.shelf_points_dict is None:
+                    model_up = self.shelf_points_dict.get(point, 0)
+
+                if self.int5d_to_float(lon_int) < -77.5 and model_up == 0 and grid_set_quant_orig[point]>0:
+                    grid_set_quant_med[point] = np.nan
+
+            # Third, do BFS to find the chunk
+            start_lon = -75.6
+            start_lat = -77
+            
+            points_to_keep = set()
+            bfs_q = []
+            bfs_q.append((self.round_int_5dec(start_lon), self.round_int_5dec(start_lat)))
+            
+            lon_step_int = self.lon_step_int
+            lat_step_int = self.lat_step_int
+
+            count = 0
+            while len(bfs_q)>0:
+                count+=1
+                #print(count)
+            
+                # Get the head point
+                curr_point = bfs_q.pop(0)
+            
+                curr_lon, curr_lat = curr_point
+            
+                # Four directions
+                for shift in ((-1,0),(1,0),(0,-1),(0,1)):
+                    ne_lon, ne_lat = curr_lon + lon_step_int * shift[0], curr_lat + lat_step_int * shift[1]
+                    ne_point = (ne_lon, ne_lat)
+
+                    if not ne_point in points_to_keep and not np.isnan(grid_set_quant_med.get(ne_point, np.nan)):
+                        points_to_keep.add(ne_point)
+                        bfs_q.append(ne_point)
+
+            processed_grid_set_quant = {}
+            for point in points_to_keep:
+                processed_grid_set_quant[point] = grid_set_quant_med[point]
+           
+            print("Done with BFS")
+            print("total number of points to keep: ", len(processed_grid_set_quant))
+            self.saved_points_for_evans_est_Msf_along_flow_disp_phase = points_to_keep
+
+        # cross-flow phase
+        elif self.proj == 'Evans' and state == 'est' and quant_name == "Msf_cross_flow_displacement_phase":
+
+
+            #print(hasattr(self, 'saved_points_for_evans_est_Msf_along_flow_disp_phase'))
+            #print(state)
+            #print(quant_name)
+            if hasattr(self, 'saved_points_for_evans_est_Msf_along_flow_disp_phase'):
+                processed_grid_set_quant = {}
+                for point in self.saved_points_for_evans_est_Msf_along_flow_disp_phase:
+                    processed_grid_set_quant[point] = grid_set_quant_orig.get(point, np.nan)
+            else:
+                processed_grid_set_quant = grid_set_quant_orig
+
+        # msf alf speed / secular speed
+        elif self.proj == 'Evans' and state == 'est' and quant_name == "Msf_alf_speed_div_secular_speed":
+            if hasattr(self, 'saved_points_for_evans_est_Msf_along_flow_disp_phase'):
+                processed_grid_set_quant = {}
+                for point in self.saved_points_for_evans_est_Msf_along_flow_disp_phase:
+                    processed_grid_set_quant[point] = grid_set_quant_orig.get(point, np.nan)
+            else:
+                processed_grid_set_quant = grid_set_quant_orig
+
+        # no processing
+        else:
+            processed_grid_set_quant = grid_set_quant_orig
+
+        return processed_grid_set_quant
 
 def main(iargs=None):
 
@@ -985,10 +1143,10 @@ def main(iargs=None):
         if out.output_others:
             out.run_output_others()
 
-        return 0
-     
         ### Do the output jobs ###
         out.output_estimations(output_states)
+
+        return 0
     
         # Output residual 
         if out.output_resid: 

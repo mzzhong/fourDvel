@@ -3124,6 +3124,17 @@ class fourdvel(basics):
        
         return model_likelihood_set
 
+    def get_model_up(self, point):
+        # positive value means ice shelf
+        model_up = self.grid_set_velo[point][2]
+        
+        # For Evans, the model up is not from self-derived grounding line,
+        # so we use the external shelf_points to override it
+        if not self.shelf_points_dict is None:
+            model_up = self.shelf_points_dict.get(point, 0)
+
+        return model_up
+
     def tide_vec_to_quantity(self, input_tide_vec, quant_name, point=None, state=None, extra_info=None):
 
         # modeling tides.
@@ -3321,11 +3332,12 @@ class fourdvel(basics):
                     # Find ve and vn, the secular velocity
                     ve = est_vec[0]
                     vn = est_vec[1]
+                    secular_speed = (ve**2 + vn**2)**0.5
 
                     # Along flow angle
                     # between -pi and pi
                     # theta1 is the rotation angle of coordinates; add minus before
-                    theta1 = -np.arctan2(vn,ve)
+                    theta1 = -np.arctan2(vn, ve)
 
                     # ALF Rotation (based on the notes above)
                     amp_cos_alf = a*np.cos(theta1) - c*np.sin(theta1)
@@ -3373,11 +3385,11 @@ class fourdvel(basics):
                         ve_model = self.grid_set_velo[point][0]
                         vn_model = self.grid_set_velo[point][1]
 
-                        # positive value means ice shelf
-                        vu_model = self.grid_set_velo[point][2]
-
                         v_model = (ve_model**2 + vn_model**2)**(1/2)
-    
+
+                        # model up
+                        model_up = self.get_model_up(point)
+
                         lon, lat = self.int5d_to_float(point)
  
                         ############## Phase ####################
@@ -3405,29 +3417,34 @@ class fourdvel(basics):
                             thres_for_amp_crf = 0.025
 
                         elif self.proj == "Evans":
-                            thres_for_v = 0.1
+                            thres_for_v = 0
+                            #thres_for_v = 0.05
+                            #thres_for_v = 0.1
                             #thres_for_v = 0.5
                             #thres_for_v = 1.0
 
                             # Along-flow
                             #thres_for_amp_alf = 0.1
-                            thres_for_amp_alf = 0.075
+                            #thres_for_amp_alf = 0.075
                             #thres_for_amp_alf = 0.050
-                            #thres_for_amp_alf = 0.025
+                            thres_for_amp_alf = 0.025
                             #thres_for_amp_alf = 0.010
 
                             # Cross-flow
                             #thres_for_amp_crf = 0.025
-                            thres_for_amp_crf = 0.010
+                            #thres_for_amp_crf = 0.010
+                            thres_for_amp_crf = 0.0
                             
                             # 2021.05.19
                         else:
                             raise ValueError()
  
-   
+                        # full amp 
                         amp_full = (amp_alf**2 + amp_crf**2)**0.5
     
-                        # Remove some invalid phase values
+                        ## Remove the invalid phase values
+
+                        # filter the alf phases
                         if v_model > thres_for_v and amp_alf > thres_for_amp_alf:
 
                             # Rutford
@@ -3438,19 +3455,20 @@ class fourdvel(basics):
     
                             # Evans
                             elif self.proj == "Evans":
-                                # clip the northern tributaries, only keeo southern portion
+                                # clip the northern tributaries, only keep the southern portion
                                 #if self.proj == "Evans" and lat<-75.85:
                                 #    pass
 
-                                # for real data, clip the weastern tributaries and only keep the eastern ones
                                 if self.s1_data_mode==3 and self.csk_data_mode==3:
-                                    if (not (lon<-77.5 and vu_model==0)):
-                                        pass
-                                    else:
+                                    # For real data
+                                    # 1. clip the western tributaries and only keep the eastern ones
+                                    #clip_things_west_of_lon = -77.5
+                                    clip_things_west_of_lon = -90.0 # no clipping at all by setting this -90
+                                    if lon < clip_things_west_of_lon and model_up == 0:
                                         phase_alf = np.nan
                                         phase_alf_in_deg = np.nan
 
-                                # for synthetic test
+                                # for synthetic test, all values are kept
                                 else:
                                     pass
 
@@ -3462,39 +3480,42 @@ class fourdvel(basics):
                             phase_alf_in_deg = np.nan
     
     
-                        # filter the phase crf
+                        # filter the crf phases
                         if v_model > thres_for_v and amp_crf > thres_for_amp_crf:
                             if self.proj == "Rutford" and lat<-77.8:
                                 pass
     
-                            #elif self.proj == "Evans" and ampU>0.5:
-                            #elif self.proj == "Evans" and lat<-75.85:
-                            # only keep the valus on ice shelf
-                            elif self.proj == "Evans" and vu_model>0:
-                                pass
+                            elif self.proj == "Evans":
+                                # only keep the valus on ice shelf
+                                if model_up > 0:
+                                    pass
+
+                                # also keep values outside ice shelf
+                                elif model_up == 0:
+                                    #phase_crf = np.nan
+                                    #phase_crf_in_deg = np.nan
+                                    pass
     
                             else:
                                 phase_crf = np.nan
                                 phase_crf_in_deg = np.nan
+                        
                         else:
                             phase_crf = np.nan
                             phase_crf_in_deg = np.nan
-
-                        ############## Amplitude ################
-                        if self.proj == 'Evans':
-                            if v_model>0.05:
-                                pass
-                            else:
-                                amp_alf = np.nan
-                                amp_crf = np.nan
 
                         # Save the output
                         quant = {}
                         quant["Msf_along_flow_displacement_amplitude"] = amp_alf
                         quant["Msf_along_flow_displacement_phase"] = phase_alf
                         quant["Msf_along_flow_displacement_phase_in_deg"] = phase_alf_in_deg
-    
-    
+
+                        # Msf along flow speed / secular speed
+                        if not np.isnan(phase_alf):
+                            quant["Msf_alf_speed_div_secular_speed"] = amp_alf * self.tide_omegas['Msf'] / secular_speed 
+                        else:
+                            quant["Msf_alf_speed_div_secular_speed"] = np.nan
+
                         quant["Msf_cross_flow_displacement_amplitude"] = amp_crf
                         quant["Msf_cross_flow_displacement_phase"] = phase_crf
                         quant["Msf_cross_flow_displacement_phase_in_deg"] = phase_crf_in_deg
@@ -3598,6 +3619,8 @@ class fourdvel(basics):
                         quant["Msf_along_flow_displacement_amplitude"] = sigma_amp_alf
                         quant["Msf_along_flow_displacement_phase"] = sigma_phase_alf_days
                         quant["Msf_along_flow_displacement_phase_in_deg"] = 0
+
+                        quant["Msf_alf_speed_div_secular_speed"] = np.nan
     
     
                         quant["Msf_cross_flow_displacement_amplitude"] = sigma_amp_crf
@@ -3786,8 +3809,7 @@ class fourdvel(basics):
                     # 2021.01.29
                     thres = 0.06
 
-
-                    model_up = self.grid_set_velo[point][2]>0
+                    model_up = self.get_model_up(point)
 
                     # value in velocity model > 0
                     #if (ampU > thres) or (state=='uq') :
@@ -3853,16 +3875,17 @@ class fourdvel(basics):
                     # 2021.05.17
                     #thres = 0.05
 
-                    if self.shelf_points_dict is None:
-                        model_up = self.grid_set_velo[point][2]
-                    else:
-                        # If not exists, then the value is 0
+                    model_up = self.get_model_up(point)
+
+                    # For Evans, the model up is not from self-derived grounding line,
+                    # so we use the external shelf_points to override it
+                    if not self.shelf_points_dict is None:
                         model_up = self.shelf_points_dict.get(point, 0)
                     
                     #if ampU >=thres or state == 'uq':
 
                     # clip values outside ice-shelf for Evans
-                    if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up>0)):
+                    if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up > 0)):
 
                         value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
@@ -3918,7 +3941,8 @@ class fourdvel(basics):
                     # 2021.04.06
                     thres = 0.03
 
-                    model_up = self.grid_set_velo[point][2]
+                    model_up = self.get_model_up(point)
+
                     #if (ampU >= thres) or (state=='uq'):
                     if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up>0)):
 

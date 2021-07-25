@@ -425,7 +425,7 @@ class basics():
 
             value = show_dict[key]
 
-            # More then one value (velocity vector).
+            # More than one value (velocity vector).
             if isinstance(value,tuple):
                 if not np.isnan(value[0]):
                     record = str(lon)+' '+str(lat)
@@ -434,10 +434,11 @@ class basics():
                     record = record + '\n'
                     f.write(record)
             else:
-
                 # Only output valid values.
                 value = min(value,cap)
                 if not np.isnan(value):
+
+                    # write it
                     f.write(str(lon)+' '+str(lat)+' '+str(value)+'\n')
 
         f.close()

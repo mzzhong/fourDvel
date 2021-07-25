@@ -88,15 +88,24 @@ class estimate(configure):
             with open(tmp_dataset_pkl_name,"rb") as f:
                 all_data_set = pickle.load(f)
 
-        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set, height_set, demfactor_set) = all_data_set
+        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set, height_set, demfactor_set, max_num_of_offsets_set) = all_data_set
 
         print("Data set formation Done")
 
         # Put height into others_set
-        print("Save the average the extracted height")
+        print("Save and average the extracted height")
         for point in point_set:
             others_set[point]['height'] = np.nanmean(height_set[point]) if len(height_set)>0 else np.nan
         print("Mean height at test point: ", others_set[self.test_point]['height'])
+
+        # Put the number of data points for this point into others set
+        for point in point_set:
+            others_set[point]['num_of_offset_pairs'] = len(offsetfields_set[point])
+            others_set[point]['max_num_of_offset_pairs'] = max_num_of_offsets_set[point]
+
+        #print(max_num_of_offsets_set)
+
+        print("Number of offset pairs at test point: ", len(offsetfields_set[point]))
 
         # Check task and inversion method
         if task_name in ["tides_1","tides_3"]:
@@ -416,8 +425,15 @@ class estimate(configure):
 
             ### Put the lowest tide into others_set
             for point in point_set:
-                tide_height_master, tide_height_slave = up_disp_set[self.test_point]
-                lowest_tide_height = min(min(tide_height_master),min(tide_height_slave))
+                #tide_height_master, tide_height_slave = up_disp_set[self.test_point]
+                tide_height_master, tide_height_slave = up_disp_set[point]
+
+                # If is possible that there is no data, offsetfields_set[point] is []
+                if len(tide_height_master) > 0:
+                    lowest_tide_height = min(min(tide_height_master),min(tide_height_slave))
+                else:
+                    lowest_tide_height = None
+                
                 others_set[point]['lowest_tide_height'] = lowest_tide_height
 
             ### Main: Loop through the grounding level ###
@@ -675,7 +691,7 @@ class estimate(configure):
                     row_names = ['Estimated','Uncertainty']
                     column_names = ['Secular'] + self.modeling_tides
    
-                if not np.isnan(tide_vec_set[self.test_point]): 
+                if not np.isnan(tide_vec_set[self.test_point][0,0]): 
                     self.display.display_vecs(stacked_vecs, row_names, column_names, test_id)
                 else:
                     print("No valid estimation")

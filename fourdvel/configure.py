@@ -104,8 +104,7 @@ class configure(fourdvel):
         track_offsets_set = output_sets["offsets_set"]
         track_height_set = output_sets["height_set"]
         track_demfactor_set = output_sets["demfactor_set"]
-
-        #offset.extract_offset_set_series(point_set = point_set, dates = used_dates)
+        track_max_num_of_offsets_set = output_sets["max_num_of_offsets_set"]
 
         #print('obtained pairs: ', track_pairs)
         #print('obtained offsets: ', track_offsets)
@@ -136,7 +135,7 @@ class configure(fourdvel):
             #if point == (-83.74, -76.02):
             #    print('track_offsetfields at this point: ', track_offsetfields_set[point])
 
-        return track_offsetfields_set, track_offsets_set, track_height_set, track_demfactor_set
+        return (track_offsetfields_set, track_offsets_set, track_height_set, track_demfactor_set, track_max_num_of_offsets_set)
 
     def offsets_set_to_data_vec_set(self, point_set, offsets_set):
         data_vec_set = {}
@@ -259,6 +258,7 @@ class configure(fourdvel):
         true_tide_vec_set_dict = {}
         height_set_dict = {}
         demfactor_set_dict = {}
+        max_num_of_offsets_set_dict = {}
 
         # Look through different satellites: csk, s1
         for sate_name in sate_names:
@@ -275,7 +275,13 @@ class configure(fourdvel):
                 offsetfields_set = collections.defaultdict(list)
                 offsets_set = collections.defaultdict(list)
                 height_set = collections.defaultdict(list)
-                demfactor_set = collections.defaultdict(list)
+
+                demfactor_set = {}
+                max_num_of_offsets_set = {}
+
+                for point in point_set:
+                    demfactor_set[point] = {}
+                    max_num_of_offsets_set[point] = 0
 
                 test_point_sate_tracks = [track for track in tracks_set[self.test_point] if track[3] == sate_name]
                 #print("Date mode 1, Test point tracks: ", self.test_point, test_point_sate_tracks)
@@ -363,8 +369,12 @@ class configure(fourdvel):
                 height_set = collections.defaultdict(list)
                 
                 demfactor_set = {}
+                max_num_of_offsets_set = {}
+
                 for point in point_set:
                     demfactor_set[point] = {}
+                    max_num_of_offsets_set[point] = 0
+
 
                 # Default value, because data_mode(3) doesn't have true_tide_vec_set
                 true_tide_vec_set = {}
@@ -407,7 +417,9 @@ class configure(fourdvel):
                             if this_track[0] == track[0]:
                                 vecs_set[point] = (this_track[1], this_track[2])
    
-                    track_offsetfields_set, track_offsets_set, track_height_set, track_demfactor_set = self.find_track_data_set(point_set, vecs_set, track)
+                    all_track_sets = self.find_track_data_set(point_set, vecs_set, track)
+
+                    track_offsetfields_set, track_offsets_set, track_height_set, track_demfactor_set, track_max_num_of_offsets_set = all_track_sets
                     
                     print("track number: ", track[0], "sate name: ", track[1])
 
@@ -416,7 +428,7 @@ class configure(fourdvel):
                     #print('For this track, obtained offsets and var at test point: ', 
                     #            track_offsets_set[test_point])
                     print('For this track, length of offsetfields and offsets at test point: ', 
-                            len(track_offsetfields_set[test_point]),len(track_offsets_set[test_point]))
+                            len(track_offsetfields_set[test_point]), len(track_offsets_set[test_point]))
 
                     if test_point in track_height_set:
                         print("For this track, height at the test point is: ", track_height_set[test_point])
@@ -427,6 +439,11 @@ class configure(fourdvel):
                         print("For this track, dem factor at the test point is: ", track_demfactor_set[test_point])
                     else:
                         print("For this track, it doesn't cover test point, no dem factor information")
+
+                    if test_point in track_max_num_of_offsets_set:
+                        print("For this track, max num of offsets at the test point is: ", track_max_num_of_offsets_set[test_point])
+                    else:
+                        print("For this track, it doesn't cover the test point, no max num of offsets information")
 
                     # Point by point adding the data from the new track
 
@@ -462,6 +479,9 @@ class configure(fourdvel):
                         # track[1]: sate name
                         key = (track[1], track[0])
                         demfactor_set[point][key] = track_demfactor_set.get(point, np.nan)
+
+                        # Max num of offsets
+                        max_num_of_offsets_set[point] = max_num_of_offsets_set[point] + track_max_num_of_offsets_set[point]
    
                         # Save the information. (# track info) # track[1]: sate, track[0]: track_number
                         data_info_set[point] = data_info_set[point] + [(track[1], track[0])] * len(track_offsets_set[point]) 
@@ -473,6 +493,7 @@ class configure(fourdvel):
                 print('Total length of offsets variance at test point: ', len(offsetsVar_set[test_point]))
                 print("Height at test point: ", height_set[test_point])
                 print("Demfactor at test point: ", demfactor_set[test_point])
+                print("Max number of offsets at test point: ", max_num_of_offsets_set[test_point])
 
                 ### End of extraction for data_mode 2 and data_mode 3 ###
 
@@ -556,6 +577,7 @@ class configure(fourdvel):
             true_tide_vec_set_dict[sate_name] = true_tide_vec_set
             height_set_dict[sate_name] = height_set
             demfactor_set_dict[sate_name] = demfactor_set
+            max_num_of_offsets_set_dict[sate_name] = max_num_of_offsets_set
 
 
         ### Put together information from different satellites ###
@@ -565,17 +587,17 @@ class configure(fourdvel):
         # offsetfields_set: For each point, a list of offsetfield info [date1, date2, vec1, vec2, t_frac]
         # true_tide_vev_set is the same for all satellites
 
-        # data_info_set is deprecated
         final_data_info_set = collections.defaultdict(list)
-
-        # The three key result sets
         final_data_vec_set = {}
         final_noise_sigma_set = collections.defaultdict(list)
         final_offsetfields_set = collections.defaultdict(list)
         final_height_set = collections.defaultdict(list)
         final_demfactor_set = {}
+        final_max_num_of_offsets_set = {}
+        
         for point in point_set:
             final_demfactor_set[point] = {}
+            final_max_num_of_offsets_set[point] = 0
 
         # Find the true_tide_vec_set from any non-empty satellite result
         final_true_tide_vec_set = {}
@@ -612,12 +634,17 @@ class configure(fourdvel):
                 # demfactor is by set update
                 final_demfactor_set[point].update(demfactor_set_dict[sate_name][point])
 
+                # max num of offsets_set
+                final_max_num_of_offsets_set[point] = final_max_num_of_offsets_set[point] + max_num_of_offsets_set_dict[sate_name][point]
+
+
         print('======= SUMMARY OF DATA SET FORMATION ========')
         print("Summary (include all satellites: )")
         print('Total number of data info at test point: ', len(final_data_info_set[test_point]))
         print('Total number of offsetfields at test point: ', len(final_offsetfields_set[test_point]))
         print('Total length of noise_sigma pair at test point: ', len(final_noise_sigma_set[test_point]))
         print('Total length of offset measurement: ', len(final_data_vec_set[test_point]))
+        print("Max number of offsets: ", final_max_num_of_offsets_set[test_point])
         print('==============================================')
 
         # Show the information of test
@@ -628,4 +655,6 @@ class configure(fourdvel):
         print("height: ", final_height_set[test_point])
         print("demfactor: ", final_demfactor_set[test_point])
 
-        return (final_data_info_set, final_data_vec_set, final_noise_sigma_set, final_offsetfields_set, final_true_tide_vec_set, final_height_set, final_demfactor_set)
+        all_final_sets = (final_data_info_set, final_data_vec_set, final_noise_sigma_set, final_offsetfields_set, final_true_tide_vec_set, final_height_set, final_demfactor_set, final_max_num_of_offsets_set)
+
+        return all_final_sets
