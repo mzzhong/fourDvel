@@ -84,7 +84,6 @@ class output(fourdvel):
         this_result_folder = self.estimation_dir
         test_id = self.test_id
 
-
         #with open(this_result_folder + '/' 
         #            + str(test_id) + '_' + 'grid_set_resid_of_secular.pkl','rb') as f:
         #    self.grid_set_resid_of_secular = pickle.load(f)
@@ -707,7 +706,8 @@ class output(fourdvel):
                                                                             "Msf_along_flow_displacement_phase_in_deg",
 
                                                                             "Msf_alf_speed_div_secular_speed",
-                                                                            
+                                                                            "Msf_crf_speed_div_secular_speed",
+
                                                                             "Msf_cross_flow_displacement_amplitude", 
                                                                             "Msf_cross_flow_displacement_phase",
 
@@ -1087,7 +1087,7 @@ class output(fourdvel):
                 processed_grid_set_quant = grid_set_quant_orig
 
         # msf alf speed / secular speed
-        elif self.proj == 'Evans' and state == 'est' and quant_name == "Msf_alf_speed_div_secular_speed":
+        elif self.proj == 'Evans' and state == 'est' and quant_name in ["Msf_alf_speed_div_secular_speed", "Msf_crf_speed_div_secular_speed"]:
             if hasattr(self, 'saved_points_for_evans_est_Msf_along_flow_disp_phase'):
                 processed_grid_set_quant = {}
                 for point in self.saved_points_for_evans_est_Msf_along_flow_disp_phase:
@@ -1129,25 +1129,23 @@ def main(iargs=None):
 
         ### Prepare the outout ###
         # Start to output
+        # First output others
+        #if out.output_others:
+        #    out.run_output_others()
+
+        # Then output estimations
         output_states = []
-    
         if out.output_true: output_states.append("true")
         if out.output_est:  output_states.append("est")
         if out.output_uq:   output_states.append("uq")
     
         # bias
-        if out.output_true and out.output_est:
+        if 'true' in output_states and 'est' in output_states:
             output_states.append("bias")
     
-        # First output others
-        if out.output_others:
-            out.run_output_others()
-
         ### Do the output jobs ###
         out.output_estimations(output_states)
 
-        return 0
-    
         # Output residual 
         if out.output_resid: 
             out.run_output_residual()

@@ -1578,6 +1578,23 @@ class fourdvel(basics):
 
         #print(self.data_uncert_grid_set)
 
+    def get_ephemeral_grounding_points(self):
+
+        self.ephemeral_grounding_points_dict = None 
+       
+        if self.proj == "Rutford":
+            #eg_test_id = 20200521
+            eg_test_id = None
+    
+        elif self.proj == 'Evans':
+            eg_test_id = 20211811
+
+        if eg_test_id is not None:
+            eg_point_file = "{est_dir}/{eg_test_id}/{eg_test_id}_est_others_optimal_grounding_level.xyz".format(est_dir=self.estimations_dir, eg_test_id=eg_test_id)
+            if os.path.exists(eg_point_file):
+                self.ephemeral_grounding_points_dict = self.read_xyz_into_dict(eg_point_file)
+                print("Number of ephemeral grounding points: ", len(self.ephemeral_grounding_points_dict))
+
     def preparation(self):
 
         # Get pre-defined grid points and the corresponding tracks and vectors.
@@ -1625,6 +1642,9 @@ class fourdvel(basics):
 
         # Load error model
         self.get_error_model()
+
+        # Load ephemeral grounding points
+        self.get_ephemeral_grounding_points()
 
         return 0
 
@@ -2177,11 +2197,11 @@ class fourdvel(basics):
             param_uq = param_uq + np.nan
             return param_uq
 
-        # Cm_p is valid, so is tide_vec
-
+        # Now Cm_p is valid, so is tide_vec
         # Set secular params
         variance = np.diag(Cm_p)
         param_uq[0:3,0] = variance[0:3]
+        
         # Set param_uq params 
         param_uq[3 + num_tide_params:, 0] = variance[3 + num_tide_params:]
 
@@ -2223,7 +2243,8 @@ class fourdvel(basics):
                 param_uq[3+k*6+t+3,0] = phase_error
 
         # From variance to standard deviation (Important!).
-        param_uq = np.sqrt(param_uq)
+        #param_uq = np.sqrt(param_uq)
+        #param_uq = np.sqrt(np.absolute(param_uq))
         
         return param_uq
 
@@ -3240,7 +3261,12 @@ class fourdvel(basics):
                     ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     thres = 0.1
 
-                    if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
+                    model_up = self.get_model_up(point)
+
+                    #if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
+                    # clip values outside ice-shelf for Rutford and Evans
+                    if (ampU >=thres or state == 'uq') and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)):
+
 
                         value = data_vec[3+k*6+5]
 
@@ -3417,20 +3443,22 @@ class fourdvel(basics):
                             thres_for_amp_crf = 0.025
 
                         elif self.proj == "Evans":
-                            thres_for_v = 0
+                            # Secular velo
+                            thres_for_v = 0.1
                             #thres_for_v = 0.05
                             #thres_for_v = 0.1
                             #thres_for_v = 0.5
                             #thres_for_v = 1.0
 
-                            # Along-flow
+                            # Along-flow msf disp
                             #thres_for_amp_alf = 0.1
                             #thres_for_amp_alf = 0.075
                             #thres_for_amp_alf = 0.050
-                            thres_for_amp_alf = 0.025
+                            #thres_for_amp_alf = 0.025
                             #thres_for_amp_alf = 0.010
+                            thres_for_amp_alf = 0.00
 
-                            # Cross-flow
+                            # Cross-flow msf disp
                             #thres_for_amp_crf = 0.025
                             #thres_for_amp_crf = 0.010
                             thres_for_amp_crf = 0.0
@@ -3442,7 +3470,8 @@ class fourdvel(basics):
                         # full amp 
                         amp_full = (amp_alf**2 + amp_crf**2)**0.5
     
-                        ## Remove the invalid phase values
+                        ## Processes to remove the invalid phase values
+                        ## which are also bad Msf estimations
 
                         # filter the alf phases
                         if v_model > thres_for_v and amp_alf > thres_for_amp_alf:
@@ -3504,23 +3533,46 @@ class fourdvel(basics):
                             phase_crf = np.nan
                             phase_crf_in_deg = np.nan
 
+
                         # Save the output
                         quant = {}
+
+                        if not np.isnan(phase_alf):
+
+                            # Calculate Msf modulation over secular speed (%)
+                            alf_div_secular = amp_alf * self.tide_omegas['Msf'] / secular_speed * 100 
+                            crf_div_secular = amp_crf * self.tide_omegas['Msf'] / secular_speed * 100
+
+                            quant["Msf_alf_speed_div_secular_speed"] = alf_div_secular
+                            quant["Msf_crf_speed_div_secular_speed"] = crf_div_secular
+
+                            # Filter the phase based on the threshold for Msf modulation
+                            #thres_for_alf_div_secular = 10
+                            #thres_for_alf_div_secular = 5
+                            thres_for_alf_div_secular = 3
+                            #thres_for_alf_div_secular = 0
+                            
+                            if alf_div_secular < thres_for_alf_div_secular:
+                                phase_alf = np.nan
+                                phase_alf_in_deg = np.nan
+    
+                                phase_crf = np.nan
+                                phase_crf_in_deg = np.nan
+ 
+                        else:
+                            quant["Msf_alf_speed_div_secular_speed"] = np.nan
+                            quant["Msf_crf_speed_div_secular_speed"] = np.nan
+
+                           
                         quant["Msf_along_flow_displacement_amplitude"] = amp_alf
                         quant["Msf_along_flow_displacement_phase"] = phase_alf
                         quant["Msf_along_flow_displacement_phase_in_deg"] = phase_alf_in_deg
-
-                        # Msf along flow speed / secular speed
-                        if not np.isnan(phase_alf):
-                            quant["Msf_alf_speed_div_secular_speed"] = amp_alf * self.tide_omegas['Msf'] / secular_speed 
-                        else:
-                            quant["Msf_alf_speed_div_secular_speed"] = np.nan
 
                         quant["Msf_cross_flow_displacement_amplitude"] = amp_crf
                         quant["Msf_cross_flow_displacement_phase"] = phase_crf
                         quant["Msf_cross_flow_displacement_phase_in_deg"] = phase_crf_in_deg
     
-                        quant["Msf_horizontal_displacement_amplitude"] = amp_full 
+                        quant["Msf_horizontal_displacement_amplitude"] = amp_full
 
                     # For uncertainty
                     elif state in ['uq']:
@@ -3538,22 +3590,34 @@ class fourdvel(basics):
                         # Calculate the uncertainty, we need to first recover the sigma of 
 
                         # Find the sigma of E&N amplitude and phase
-                        sigma_ampE = data_vec[3+k*6]
-                        sigma_phaseE = data_vec[3+k*6+3]
-    
-                        sigma_ampN = data_vec[3+k*6+1]
-                        sigma_phaseN = data_vec[3+k*6+4]
+                        ## The uq is sigma with sqrt taken
+                        #sigma_ampE = data_vec[3+k*6]
+                        #sigma_phaseE = data_vec[3+k*6+3]
+                        #sigma_ampN = data_vec[3+k*6+1]
+                        #sigma_phaseN = data_vec[3+k*6+4]
+
+                        #sigma_ampE_2 = sigma_ampE**2
+                        #sigma_phaseE_2 = sigma_phase_E**2
+                        #sigma_ampN_2 = sigma_ampN**2
+                        #sigma_phaseN_2 = sigma_phaseN**2
+
+
+                        # The uq is sigma_2
+                        sigma_ampE_2 = data_vec[3+k*6]
+                        sigma_phaseE_2 = data_vec[3+k*6+3]
+                        sigma_ampN_2 = data_vec[3+k*6+1]
+                        sigma_phaseN_2 = data_vec[3+k*6+4]
 
                         #a = ampE * np.sin(phaseE) # amp of cos term
                         #b = ampE * np.cos(phaseE) # amp of sin term
                         #c = ampN * np.sin(phaseN) # amp of cos term
                         #d = ampN * np.cos(phaseN) # amp of sin term
 
-                        sigma2_a = (np.sin(phaseE)**2) * (sigma_ampE**2) + ((ampE * np.cos(phaseE))**2) * (sigma_phaseE**2)
-                        sigma2_b = (np.cos(phaseE)**2) * (sigma_ampE**2) + ((ampE * np.sin(phaseE))**2) * (sigma_phaseE**2)
+                        sigma2_a = (np.sin(phaseE)**2) * (sigma_ampE_2) + ((ampE * np.cos(phaseE))**2) * (sigma_phaseE_2)
+                        sigma2_b = (np.cos(phaseE)**2) * (sigma_ampE_2) + ((ampE * np.sin(phaseE))**2) * (sigma_phaseE_2)
 
-                        sigma2_c = (np.sin(phaseN)**2) * (sigma_ampN**2) + ((ampN * np.cos(phaseN))**2) * (sigma_phaseN**2)
-                        sigma2_d = (np.cos(phaseN)**2) * (sigma_ampN**2) + ((ampN * np.sin(phaseN))**2) * (sigma_phaseN**2)
+                        sigma2_c = (np.sin(phaseN)**2) * (sigma_ampN_2) + ((ampN * np.cos(phaseN))**2) * (sigma_phaseN_2)
+                        sigma2_d = (np.cos(phaseN)**2) * (sigma_ampN_2) + ((ampN * np.sin(phaseN))**2) * (sigma_phaseN_2)
 
                         # For along-flow, calculate the sigma2 of cos term and sin term
                         # Notes:
@@ -3597,15 +3661,17 @@ class fourdvel(basics):
                         #print(stop)
 
                         # Take the square root
-                        #sigma_amp_alf = np.sqrt(sigma2_amp_alf)
-                        #sigma_phase_alf = np.sqrt(sigma2_phase_alf)
-                        #sigma_amp_crf = np.sqrt(sigma2_amp_crf)
-                        #sigma_phase_crf = np.sqrt(sigma2_phase_crf)
+                        sigma_amp_alf = np.sqrt(sigma2_amp_alf)
+                        sigma_phase_alf = np.sqrt(sigma2_phase_alf)
+                        sigma_amp_crf = np.sqrt(sigma2_amp_crf)
+                        sigma_phase_crf = np.sqrt(sigma2_phase_crf)
 
-                        sigma_amp_alf = np.sqrt(abs(sigma2_amp_alf))
-                        sigma_phase_alf = np.sqrt(abs(sigma2_phase_alf))
-                        sigma_amp_crf = np.sqrt(abs(sigma2_amp_crf))
-                        sigma_phase_crf = np.sqrt(abs(sigma2_phase_crf))
+                        #sigma_amp_alf = np.sqrt(abs(sigma2_amp_alf))
+                        #sigma_phase_alf = np.sqrt(abs(sigma2_phase_alf))
+                        #sigma_amp_crf = np.sqrt(abs(sigma2_amp_crf))
+                        #sigma_phase_crf = np.sqrt(abs(sigma2_phase_crf))
+
+                        print('along flow amp error: ', sigma2_amp_alf, sigma_amp_alf)
 
                         # Convert phase to days
                         sigma_phase_alf_deg = self.rad2deg(sigma_phase_alf)
@@ -3621,7 +3687,7 @@ class fourdvel(basics):
                         quant["Msf_along_flow_displacement_phase_in_deg"] = 0
 
                         quant["Msf_alf_speed_div_secular_speed"] = np.nan
-    
+                        quant["Msf_crf_speed_div_secular_speed"] = np.nan
     
                         quant["Msf_cross_flow_displacement_amplitude"] = sigma_amp_crf
                         quant["Msf_cross_flow_displacement_phase"] = sigma_phase_crf_days
@@ -3813,7 +3879,9 @@ class fourdvel(basics):
 
                     # value in velocity model > 0
                     #if (ampU > thres) or (state=='uq') :
-                    if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up>0)):
+                    #if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up>0)):
+                    # clip values outside ice-shelf for Rutford and Evans
+                    if (ampU >=thres or state == 'uq') and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)):
 
                         value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
@@ -3885,7 +3953,9 @@ class fourdvel(basics):
                     #if ampU >=thres or state == 'uq':
 
                     # clip values outside ice-shelf for Evans
-                    if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up > 0)):
+                    #if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up > 0)):
+                    # clip values outside ice-shelf for Rutford and Evans
+                    if (ampU >=thres or state == 'uq') and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)):
 
                         value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
@@ -3944,7 +4014,9 @@ class fourdvel(basics):
                     model_up = self.get_model_up(point)
 
                     #if (ampU >= thres) or (state=='uq'):
-                    if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up>0)):
+                    #if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up>0)):
+                    # clip values outside ice-shelf for Rutford and Evans
+                    if (ampU >=thres or state == 'uq') and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)):
 
                         value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
