@@ -601,45 +601,62 @@ class fourdvel(basics):
         print("Done with reading parameters")
         return 0
 
-    def check_point_set_with_bbox(self, point_set, bbox):
+    def check_point_set_with_requirements(self, point_set, kind=None, bbox=None):
 
-        if bbox == "ice_shelf":
-            if self.proj == "Rutford":
-                bbox_s, bbox_n, bbox_e, bbox_w = None, self.float_to_int5d(-78.30), None, None
-            elif self.proj == "Evans":
-                bbox_s, bbox_n, bbox_e, bbox_w = None, self.float_to_int5d(-75.80), None, None
+ 
+        if kind in ["bbox", "ice_shelf"]:
+
+            if kind == 'bbox':
+                bbox_s, bbox_n, bbox_e, bbox_w = bbox
+    
+            elif kind == 'ice_shelf':
+                if self.proj == "Rutford":
+                    bbox_s, bbox_n, bbox_e, bbox_w = None, self.float_to_int5d(-78.30), None, None
+                elif self.proj == "Evans":
+                    bbox_s, bbox_n, bbox_e, bbox_w = None, self.float_to_int5d(-75.80), None, None
+                else:
+                    raise ValueError()
+
             else:
-                raise Exception()
+                raise ValueError()
+
+            lons = []
+            lats = []
+            for point in point_set:
+                lons.append(point[0])
+                lats.append(point[1])
+    
+            lons = np.asarray(lons)
+            lats = np.asarray(lats)
+    
+            if bbox_s is not None:
+                if np.nanmax(lats)<bbox_s:
+                    return False
+                
+            if bbox_n is not None:
+                if np.nanmin(lats)>bbox_n:
+                    return False
+     
+            if bbox_e is not None:
+                if np.nanmin(lons)>bbox_e:
+                    return False
+    
+            if bbox_w is not None:
+                if np.nanmax(lons)<bbox_w:
+                    return False
+     
+            return True
+
+        elif kind == 'ephemeral_grounding':
+
+            for point in point_set:
+                if point in self.ephemeral_grounding_points_dict:
+                    return True
+
+            return False
 
         else:
-            bbox_s, bbox_n, bbox_e, bbox_w = bbox
-
-        lons = []
-        lats = []
-        for point in point_set:
-            lons.append(point[0])
-            lats.append(point[1])
-
-        lons = np.asarray(lons)
-        lats = np.asarray(lats)
-
-        if bbox_s is not None:
-            if np.nanmax(lats)<bbox_s:
-                return False
-            
-        if bbox_n is not None:
-            if np.nanmin(lats)>bbox_n:
-                return False
- 
-        if bbox_e is not None:
-            if np.nanmin(lons)>bbox_e:
-                return False
-
-        if bbox_w is not None:
-            if np.nanmax(lons)<bbox_w:
-                return False
- 
-        return True
+            raise Exception()
             
     def get_CSK_trackDates_from_log(self):
         import csv
@@ -1595,6 +1612,9 @@ class fourdvel(basics):
                 self.ephemeral_grounding_points_dict = self.read_xyz_into_dict(eg_point_file)
                 print("Number of ephemeral grounding points: ", len(self.ephemeral_grounding_points_dict))
 
+        #print(self.ephemeral_grounding_points_dict)
+        #print(stop)
+
     def preparation(self):
 
         # Get pre-defined grid points and the corresponding tracks and vectors.
@@ -2173,12 +2193,16 @@ class fourdvel(basics):
     def model_posterior_to_uncertainty_set(self, point_set, tide_vec_set, Cm_p_set):
 
         tide_vec_uq_set = {}
+        secular_cov_set = {}
         for point in point_set:
-            tide_vec_uq_set[point] = self.model_posterior_to_uncertainty(
+            tide_vec_uq, secular_cov = self.model_posterior_to_uncertainty(
                                                 tide_vec = tide_vec_set[point],
                                                 Cm_p = Cm_p_set[point])
 
-        return tide_vec_uq_set
+            tide_vec_uq_set[point] = tide_vec_uq
+            secular_cov_set[point] = secular_cov
+
+        return (tide_vec_uq_set, secular_cov_set)
 
     def model_posterior_to_uncertainty(self, tide_vec, Cm_p):
 
@@ -2190,17 +2214,25 @@ class fourdvel(basics):
         num_tide_params = n_modeling_tides*6
 
         param_uq = np.zeros(shape=(num_params,1))
+        secular_cov = (0, 0, 0)
 
         # If Cm_p is invalid.
         if np.isnan(Cm_p[0,0]):
             # Set param_uq to be np.nan
             param_uq = param_uq + np.nan
-            return param_uq
+            secular_cov = (np.nan, np.nan, np.nan)
+            return (param_uq, secular_cov)
 
         # Now Cm_p is valid, so is tide_vec
-        # Set secular params
+
+        # Get the diagonal component
         variance = np.diag(Cm_p)
+
+        # Get the secular params
         param_uq[0:3,0] = variance[0:3]
+
+        # Get the covariance of secular term
+        secular_cov = (Cm_p[0,1], Cm_p[0,2], Cm_p[1,2])
         
         # Set param_uq params 
         param_uq[3 + num_tide_params:, 0] = variance[3 + num_tide_params:]
@@ -2246,7 +2278,7 @@ class fourdvel(basics):
         #param_uq = np.sqrt(param_uq)
         #param_uq = np.sqrt(np.absolute(param_uq))
         
-        return param_uq
+        return (param_uq, secular_cov)
 
     #def simple_data_uncertainty_set(self, point_set, data_vec_set, noise_sigma_set):
     #    
@@ -2473,6 +2505,10 @@ class fourdvel(basics):
         else:
             return np.nan
 
+    def export_to_others_set_secular_cov(self, point_set, secular_cov_set, others_set):
+        for point in point_set:
+            others_set[point]['secular_cov'] = secular_cov_set[point]
+
     ## For linear model, tides_3 ##
     def export_to_others_set_wrt_gl(self, point_set, grounding_level, model_vec_set, model_likelihood_set, resid_set, others_set):
 
@@ -2684,7 +2720,8 @@ class fourdvel(basics):
                 # calculate credible interval
                 if len(grounding_levels)>=2:
                     # Need to consider the case if the enumeration is not even
-                    # Do interpolation on [-4,0] spacing = 0.01
+                    # Do interpolation on [-4,0] for Rutford, [-3, 0] for Evans
+                    # spacing = 0.01
                     interp_fun = interp1d(grounding_levels, likelihoods, kind='linear')
    
                     # interpolation every 1cm (10**(-2))
@@ -3176,7 +3213,7 @@ class fourdvel(basics):
             # reduce the dimension
             data_vec = input_tide_vec[:,0]
 
-        # Output nan, if not exist.
+        # Set the output to be nan, if quantity name does not exist.
         extra_list = ['up_amplitude_scaling', 'topo_resid']
         item_name = quant_name.split('_')[0]
         if (not item_name == 'secular') and (not item_name in modeling_tides) and (not quant_name in extra_list):
@@ -3187,13 +3224,22 @@ class fourdvel(basics):
         if quant_name == 'secular_horizontal_speed':
             quant = np.sqrt(data_vec[0]**2 + data_vec[1]**2)
 
+            if state == 'uq':
+                quant = np.nan
+
         # Secular east.
         elif quant_name == 'secular_east_velocity':
             quant = data_vec[0]
 
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
         # Secular north.
         elif quant_name == 'secular_north_velocity':
             quant = data_vec[1]
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
 
         # Secular horizontal speed.
         elif quant_name == 'secular_horizontal_velocity':
@@ -3219,6 +3265,9 @@ class fourdvel(basics):
         elif quant_name == 'secular_up_velocity':
             quant = data_vec[2]
 
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
         ################### Msf #################################
         # Msf horizontal amplitude (speed).        
         elif quant_name == 'Msf_horizontal_velocity_amplitude':
@@ -3231,6 +3280,9 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+            if state == 'uq':
+                quant = np.nan
+
         # Msf lumped horizontal displacement amplitude.
         elif quant_name == 'Msf_horizontal_displacement_amplitude':
             k = 0
@@ -3242,6 +3294,9 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+            if state == 'uq':
+                quant = np.nan
+
         # Msf up displacement amplitude.
         elif quant_name == 'Msf_up_displacement_amplitude':
             k = 0
@@ -3251,6 +3306,10 @@ class fourdvel(basics):
                     quant = ampU
                 else:
                     k=k+1
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
 
         # Msf Up phase. 
         elif quant_name.startswith('Msf_up_displacement_phase'):
@@ -3265,8 +3324,7 @@ class fourdvel(basics):
 
                     #if (self.grid_set_velo[point][2]>0 and ampU > thres) or (state=='uq'):
                     # clip values outside ice-shelf for Rutford and Evans
-                    if (ampU >=thres or state == 'uq') and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)):
-
+                    if (state == 'uq') or ( (ampU >=thres) and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)) ):
 
                         value = data_vec[3+k*6+5]
 
@@ -3287,6 +3345,9 @@ class fourdvel(basics):
                         quant = np.nan
                 else:
                     k=k+1
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
 
         elif quant_name == "Msf_horizontal_displacement_group":
 
@@ -3714,6 +3775,10 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
+
         # Msf East phase.
         elif quant_name == 'Msf_east_displacement_phase':
             k = 0
@@ -3737,6 +3802,10 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
+
         # Msf North amp.
         elif quant_name == 'Msf_north_displacement_amplitude':
             k = 0
@@ -3746,6 +3815,10 @@ class fourdvel(basics):
                     quant = ampN
                 else:
                     k=k+1
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
 
         # Msf North phase.
         elif quant_name == 'Msf_north_displacement_phase':
@@ -3771,6 +3844,10 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
+
         ############### End of Msf ###############
 
         # Mf lumped horizontal displacement amplitude.
@@ -3784,6 +3861,10 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
+
         # Mf up displacement amplitude.
         elif quant_name == 'Mf_up_displacement_amplitude':
             k = 0
@@ -3793,6 +3874,10 @@ class fourdvel(basics):
                     quant = ampU
                 else:
                     k=k+1
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
 
         # Mf Up phase. 
         elif quant_name.startswith('Mf_up_displacement_phase'):
@@ -3824,6 +3909,10 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
+
         ################## End of Mf ###########################################
 
 
@@ -3840,6 +3929,10 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
+
         # O1 lumped horizontal displacement amplitude.
         elif quant_name == 'O1_horizontal_displacement_amplitude':
             k = 0
@@ -3850,6 +3943,10 @@ class fourdvel(basics):
                     quant = np.sqrt(ampE**2 + ampN**2)
                 else:
                     k=k+1
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
 
         ##################################################################3
         # Up component
@@ -3863,7 +3960,10 @@ class fourdvel(basics):
                     quant = np.sqrt(ampU**2)
                 else:
                     k=k+1
-        
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
         # O1 Up phase. 
         # (only on ice shelves)
         elif quant_name.startswith('O1_up_displacement_phase'):
@@ -3881,7 +3981,7 @@ class fourdvel(basics):
                     #if (ampU > thres) or (state=='uq') :
                     #if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up>0)):
                     # clip values outside ice-shelf for Rutford and Evans
-                    if (ampU >=thres or state == 'uq') and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)):
+                    if (state == 'uq') or ( (ampU >=thres) and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)) ):
 
                         value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
@@ -3910,6 +4010,10 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
+
         # M2 Up amplitude.
         elif quant_name == 'M2_up_displacement_amplitude':
             k = 0
@@ -3919,6 +4023,10 @@ class fourdvel(basics):
                     quant = np.sqrt(ampU**2)
                 else:
                     k=k+1
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
 
         # M2 Up phase. 
         # convert to minute
@@ -3955,7 +4063,7 @@ class fourdvel(basics):
                     # clip values outside ice-shelf for Evans
                     #if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up > 0)):
                     # clip values outside ice-shelf for Rutford and Evans
-                    if (ampU >=thres or state == 'uq') and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)):
+                    if (state=='uq') or ( (ampU >=thres) and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)) ):
 
                         value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
@@ -3987,6 +4095,9 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
         # N2 Up amplitude.
         elif quant_name == 'N2_up_displacement_amplitude':
             k = 0
@@ -3996,6 +4107,11 @@ class fourdvel(basics):
                     quant = np.sqrt(ampU**2)
                 else:
                     k=k+1
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
+
         
         # N2 Up phase. 
         # convert to minute
@@ -4016,7 +4132,7 @@ class fourdvel(basics):
                     #if (ampU >= thres) or (state=='uq'):
                     #if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up>0)):
                     # clip values outside ice-shelf for Rutford and Evans
-                    if (ampU >=thres or state == 'uq') and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)):
+                    if (state == 'uq') or ( (ampU >=thres) and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)) ):
 
                         value = data_vec[3+k*6+5]
                         if state in [ 'true','est']:
@@ -4050,6 +4166,10 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
+
         # Q1 Up amplitude.
         elif quant_name == 'Q1_up_displacement_amplitude':
             k = 0
@@ -4059,6 +4179,10 @@ class fourdvel(basics):
                     quant = np.sqrt(ampU**2)
                 else:
                     k=k+1
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
 
         # Q1 Up phase. 
         # convert to minute
@@ -4103,6 +4227,11 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
+
         # Additonal parameters
         elif quant_name == "up_amplitude_scaling":
             assert len(data_vec)>= 3 + self.n_modeling_tides*6 + 1, print("length of param_uq_vec has problem for up_amplitude scaling ", len(data_vec))
@@ -4119,6 +4248,9 @@ class fourdvel(basics):
                 quant = data_vec[ind]
             else:
                 raise ValueError()
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
 
         elif quant_name == "topo_resid":
             
@@ -4137,6 +4269,9 @@ class fourdvel(basics):
                 quant = data_vec[ind]
             else:
                 raise ValueError()
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
 
         else:
             quant = None

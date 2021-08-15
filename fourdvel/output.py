@@ -254,15 +254,18 @@ class output(fourdvel):
                     + str(test_id) + '_' + 'grid_set_others.pkl','rb') as f:
             this_grid_set = pickle.load(f)
 
+        # Set quant_list for others
+        quant_list = ['secular_east_north_velocity_corr','secular_east_up_velocity_corr','secular_north_up_velocity_corr']
+
         if self.task_name == 'tides_3':
             # credible interval needs to before grounding level for filtering purposes
-            quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "height", "num_of_offset_pairs"]
+            quant_list = quant_list + ["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "height", "num_of_offset_pairs"]
             #quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "grounding_duration", "height"]
 
             quant_list_for_bias = ['optimal_grounding_level', 'up_scale']
 
         elif self.task_name == 'tides_1':
-            quant_list = ['height', 'max_num_of_offset_pairs', 'num_of_offset_pairs', 'ratio_of_valid_offset_pairs']
+            quant_list = quant_list + ['height', 'max_num_of_offset_pairs', 'num_of_offset_pairs', 'ratio_of_valid_offset_pairs']
 
             quant_list_for_bias = []
 
@@ -446,6 +449,37 @@ class output(fourdvel):
                                 grid_set_quant[point] = np.nan
                         else:
                             raise ValueError()
+
+                    elif quant_name in ["secular_east_north_velocity_corr"]:
+                        if state == 'true':
+                            grid_set_quant[point] = 0
+
+                        elif state == 'est':
+                            secular_cov = this_grid_set[point]['secular_cov'][0]
+        
+                        else:
+                            raise ValueError()
+
+                    elif quant_name in ["secular_east_up_velocity_corr"]:
+                        if state == 'true':
+                            grid_set_quant[point] = 0
+
+                        elif state == 'est':
+                            secular_cov = this_grid_set[point]['secular_cov'][1]
+        
+                        else:
+                            raise ValueError()
+
+                    elif quant_name in ["secular_north_up_velocity_corr"]:
+                        if state == 'true':
+                            grid_set_quant[point] = 0
+
+                        elif state == 'est':
+                            secular_cov = this_grid_set[point]['secular_cov'][2]
+        
+                        else:
+                            raise ValueError()
+
                     else:
                         raise Exception()
 
@@ -830,6 +864,7 @@ class output(fourdvel):
                                     try:
                                         grid_set_quant[sub_quant_name][point] = quant_group[sub_quant_name]
                                     except:
+                                        print(quant_group.keys())
                                         print(grid_set_quant.keys())
                                         print(stop)
     

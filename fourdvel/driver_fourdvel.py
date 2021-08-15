@@ -195,7 +195,7 @@ class driver_fourdvel():
                 #print('Number of points in this tile: ', len(point_set))
 
                 # Check if the point_set is in the bbox
-                if not self.tasks.check_point_set_with_bbox(point_set, self.tasks.bbox):
+                if not self.tasks.check_point_set_with_requirements(point_set, kind='bbox', bbox=self.tasks.bbox):
                     print("This point set is not in bbox: ", lon, lat)
                     skip_this_tile = True
 
@@ -424,7 +424,7 @@ class driver_fourdvel():
         ## Save the final results in dictionary manager
         forceUnSaveTides = False
 
-        forceSaveTides = False
+        forceSaveTides = True
 
         forceSaveAnalysis = True
 

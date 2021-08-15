@@ -67,6 +67,7 @@ class estimate(configure):
         resid_of_tides_set = {}
         residual_analysis_set = {}
 
+        # For every point, others set is a dictionary
         others_set = {}
         for point in point_set:
             others_set[point] = {}
@@ -136,8 +137,8 @@ class estimate(configure):
 
                 # Set the mode for running
 
-                #tides_3_mode = "find_optimal_gl"
-                tides_3_mode = "invert_optimal_gl"
+                tides_3_mode = "find_optimal_gl"
+                #tides_3_mode = "invert_optimal_gl"
 
                 #gl_option = 'manual'
                 gl_option = 'auto'
@@ -282,13 +283,27 @@ class estimate(configure):
                         raise ValueError("Unknown auto gl option")
 
                     # Set the search range parameters for auto
-                    # full range
-                    #gl_low  =   -4.0
-                    #gl_high =   4.0
+                    # Range of search
+                    if self.proj == 'Rutford':
+                        # full range
+                        #gl_low  =   -4.0
+                        #gl_high =   4.0
 
-                    # half range
-                    gl_low = -4.0
-                    gl_high = 0.0
+                        # half range
+                        gl_low = -4.0
+                        gl_high = 0.0
+
+                    elif self.proj == 'Evans':
+                        # full range
+                        gl_low  =   -3.0
+                        gl_high =   3.0
+
+                        # half range
+                        #gl_low = -3.0
+                        #gl_high = 0.0
+
+                    else:
+                        raise ValueError()
 
                     # Derive the gl values to be enumerated
                     if current_auto_enum_stage == 0:
@@ -380,7 +395,10 @@ class estimate(configure):
     
                 # To save the computing time, check if the point set is on the ice shelf
                 # If not, override all previous settings, and just make the -10 the only enumeration
-                if not self.check_point_set_with_bbox(point_set, bbox="ice_shelf"):
+                #point_set_check_kind = 'ice_shelf'
+                point_set_check_kind = 'ephemeral_grounding'
+                if not self.check_point_set_with_requirements(point_set, kind=point_set_check_kind):
+                    print("This point_set does not pass the check for coverage, skip enumeration")
                     point_set_on_ice_shelf = False
 
                     # enforce a single enumeration at -10m
@@ -397,6 +415,7 @@ class estimate(configure):
 
                     print("Outside of the ice shelf, reset enum grounding level: ", enum_grounding_level_int)
                 else:
+                    print("This point_set passes the check for coverage, perform enumeration")
                     point_set_on_ice_shelf = True
 
                 ## Check for finding optimal gl or inverting optimal gl
@@ -582,7 +601,9 @@ class estimate(configure):
     
                 # Convert model posterior to uncertainty of params.
                 # Require: tide_vec and Cm_p
-                tide_vec_uq_set = self.model_posterior_to_uncertainty_set(point_set, tide_vec_set, Cm_p_set)
+                tide_vec_uq_set, secular_cov_set = self.model_posterior_to_uncertainty_set(point_set, tide_vec_set, Cm_p_set)
+                self.export_to_others_set_secular_cov(point_set, secular_cov_set, others_set)
+
                 print('Uncertainty set estimation Done')
         
                 print('Point set inversion Done')
@@ -675,6 +696,10 @@ class estimate(configure):
             show_control = False
             if self.single_point_mode:
                 show_control = True
+
+            if self.est_topo_resid:
+                # The length has problem
+                show_control = False
             
             if (self.show_vecs == True or show_control== True) and self.task_name == "tides_1":
    
