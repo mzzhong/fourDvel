@@ -208,6 +208,9 @@ class fourdvel(basics):
         # resid topo
         self.est_topo_resid = False
 
+        # options to skip some point sets
+        self.point_set_check_kind = None
+
         # params for creating grid set
         self.min_num_of_csk_tracks = 1
         self.min_num_of_s1_tracks = 100
@@ -307,6 +310,10 @@ class fourdvel(basics):
                 self.bbox_s, self.bbox_n, self.bbox_e, self.bbox_w = self.bbox
 
                 print('bbox: ',self.bbox)
+
+            if name == 'point_set_check_kind':
+                self.point_set_check_kind = value
+                print('point_set_check_kind', value)
 
             # CSK
             if name == 'use_csk':
@@ -444,6 +451,7 @@ class fourdvel(basics):
                 self.data_uncert_grid_set_pklfile = value
                 print('data_uncert_grid_set_pklfile', value)
             ##
+
 
             ## Modeling ##
             if name == 'up_disp_mode':
@@ -604,12 +612,12 @@ class fourdvel(basics):
     def check_point_set_with_requirements(self, point_set, kind=None, bbox=None):
 
  
-        if kind in ["bbox", "ice_shelf"]:
+        if kind in ["bbox", "southern_half"]:
 
             if kind == 'bbox':
                 bbox_s, bbox_n, bbox_e, bbox_w = bbox
     
-            elif kind == 'ice_shelf':
+            elif kind == 'southern_half':
                 if self.proj == "Rutford":
                     bbox_s, bbox_n, bbox_e, bbox_w = None, self.float_to_int5d(-78.30), None, None
                 elif self.proj == "Evans":
@@ -647,6 +655,14 @@ class fourdvel(basics):
      
             return True
 
+        elif kind == 'ice_shelf':
+
+            for point in point_set:
+                if point in self.shelf_points_dict:
+                    return True
+
+            return False
+
         elif kind == 'ephemeral_grounding':
 
             for point in point_set:
@@ -656,7 +672,7 @@ class fourdvel(basics):
             return False
 
         else:
-            raise Exception()
+            raise ValueError()
             
     def get_CSK_trackDates_from_log(self):
         import csv
@@ -1615,6 +1631,22 @@ class fourdvel(basics):
         #print(self.ephemeral_grounding_points_dict)
         #print(stop)
 
+    def get_shelf_points(self):
+        
+        if self.proj == "Rutford":
+            shelf_points_test_id = 0
+        
+        elif self.proj == 'Evans':
+            shelf_points_test_id = 20211931 
+    
+        shelf_point_file = '/net/kamb/ssd-tmp1/mzzhong/insarRoutines/quick_studies/' + str(shelf_points_test_id) + '_shelf_points.xyz'
+        
+        if os.path.exists(shelf_point_file):
+            self.shelf_points_dict = self.read_xyz_into_dict(shelf_point_file)
+            print("Number of shelf points: ", len(self.shelf_points_dict))
+        else:
+            self.shelf_points_dict = None
+
     def preparation(self):
 
         # Get pre-defined grid points and the corresponding tracks and vectors.
@@ -1662,6 +1694,9 @@ class fourdvel(basics):
 
         # Load error model
         self.get_error_model()
+
+        # Load ice shelf points
+        self.get_shelf_points()
 
         # Load ephemeral grounding points
         self.get_ephemeral_grounding_points()
@@ -2193,16 +2228,16 @@ class fourdvel(basics):
     def model_posterior_to_uncertainty_set(self, point_set, tide_vec_set, Cm_p_set):
 
         tide_vec_uq_set = {}
-        secular_cov_set = {}
+        secular_corr_set = {}
         for point in point_set:
-            tide_vec_uq, secular_cov = self.model_posterior_to_uncertainty(
+            tide_vec_uq, secular_corr = self.model_posterior_to_uncertainty(
                                                 tide_vec = tide_vec_set[point],
                                                 Cm_p = Cm_p_set[point])
 
             tide_vec_uq_set[point] = tide_vec_uq
-            secular_cov_set[point] = secular_cov
+            secular_corr_set[point] = secular_corr
 
-        return (tide_vec_uq_set, secular_cov_set)
+        return (tide_vec_uq_set, secular_corr_set)
 
     def model_posterior_to_uncertainty(self, tide_vec, Cm_p):
 
@@ -2214,14 +2249,14 @@ class fourdvel(basics):
         num_tide_params = n_modeling_tides*6
 
         param_uq = np.zeros(shape=(num_params,1))
-        secular_cov = (0, 0, 0)
+        secular_corr = (0, 0, 0)
 
         # If Cm_p is invalid.
         if np.isnan(Cm_p[0,0]):
             # Set param_uq to be np.nan
             param_uq = param_uq + np.nan
-            secular_cov = (np.nan, np.nan, np.nan)
-            return (param_uq, secular_cov)
+            secular_corr = (np.nan, np.nan, np.nan)
+            return (param_uq, secular_corr)
 
         # Now Cm_p is valid, so is tide_vec
 
@@ -2232,7 +2267,10 @@ class fourdvel(basics):
         param_uq[0:3,0] = variance[0:3]
 
         # Get the covariance of secular term
-        secular_cov = (Cm_p[0,1], Cm_p[0,2], Cm_p[1,2])
+        en_corr = Cm_p[0,1]/ np.sqrt(Cm_p[0,0] * Cm_p[1,1])
+        eu_corr = Cm_p[0,2]/ np.sqrt(Cm_p[0,0] * Cm_p[2,2])
+        nu_corr = Cm_p[1,2]/ np.sqrt(Cm_p[1,1] * Cm_p[2,2])
+        secular_corr = (en_corr, eu_corr, nu_corr)
         
         # Set param_uq params 
         param_uq[3 + num_tide_params:, 0] = variance[3 + num_tide_params:]
@@ -2278,7 +2316,7 @@ class fourdvel(basics):
         #param_uq = np.sqrt(param_uq)
         #param_uq = np.sqrt(np.absolute(param_uq))
         
-        return (param_uq, secular_cov)
+        return (param_uq, secular_corr)
 
     #def simple_data_uncertainty_set(self, point_set, data_vec_set, noise_sigma_set):
     #    
@@ -2505,9 +2543,9 @@ class fourdvel(basics):
         else:
             return np.nan
 
-    def export_to_others_set_secular_cov(self, point_set, secular_cov_set, others_set):
+    def export_to_others_set_secular_corr(self, point_set, secular_corr_set, others_set):
         for point in point_set:
-            others_set[point]['secular_cov'] = secular_cov_set[point]
+            others_set[point]['secular_corr'] = secular_corr_set[point]
 
     ## For linear model, tides_3 ##
     def export_to_others_set_wrt_gl(self, point_set, grounding_level, model_vec_set, model_likelihood_set, resid_set, others_set):
@@ -2596,8 +2634,8 @@ class fourdvel(basics):
             if self.proj == 'Rutford':
                 alpha = 0.95
             elif self.proj == 'Evans':
-                #alpha = 0.68
-                alpha = 0.5
+                alpha = 0.68
+                #alpha = 0.5
                 #alpha = 0.3
             else:
                 raise ValueError()
@@ -2725,8 +2763,17 @@ class fourdvel(basics):
                     interp_fun = interp1d(grounding_levels, likelihoods, kind='linear')
    
                     # interpolation every 1cm (10**(-2))
-                    gls_interp = np.arange(min(grounding_levels),max(grounding_levels)+1e-6, 10**(-2) * 10**6)
-                    likelihoods_interp = interp_fun(gls_interp)
+                    #gls_interp = np.arange(min(grounding_levels),max(grounding_levels)+1e-6, 10**(-2) * 10**6)
+                    # give up the last point, to make sure gls_interp is within grounding_levels
+                    gls_interp = np.arange(min(grounding_levels),max(grounding_levels), 10**(-2) * 10**6)
+
+                    try:
+                        likelihoods_interp = interp_fun(gls_interp)
+                    except:
+                        print(grounding_levels)
+                        print(likelihoods)
+                        print(gls_interp)
+                        raise Exception("Interpolation error")
     
                     ## Get the probability ##
                     # normalize the likelihood in log space
@@ -3212,6 +3259,8 @@ class fourdvel(basics):
         else:
             # reduce the dimension
             data_vec = input_tide_vec[:,0]
+
+        #print(point, len(data_vec))
 
         # Set the output to be nan, if quantity name does not exist.
         extra_list = ['up_amplitude_scaling', 'topo_resid']
@@ -3732,7 +3781,7 @@ class fourdvel(basics):
                         #sigma_amp_crf = np.sqrt(abs(sigma2_amp_crf))
                         #sigma_phase_crf = np.sqrt(abs(sigma2_phase_crf))
 
-                        print('along flow amp error: ', sigma2_amp_alf, sigma_amp_alf)
+                        #print('along flow amp error: ', sigma2_amp_alf, sigma_amp_alf)
 
                         # Convert phase to days
                         sigma_phase_alf_deg = self.rad2deg(sigma_phase_alf)
@@ -4234,18 +4283,24 @@ class fourdvel(basics):
 
         # Additonal parameters
         elif quant_name == "up_amplitude_scaling":
-            assert len(data_vec)>= 3 + self.n_modeling_tides*6 + 1, print("length of param_uq_vec has problem for up_amplitude scaling ", len(data_vec))
+
+            if state in ['est','uq']:
+                assert len(data_vec)>= 3 + self.n_modeling_tides*6 + 1, print("length of param_uq_vec has problem for up_amplitude scaling ", len(data_vec), data_vec)
 
             # the first index after tidal params
             ind = 3 + self.n_modeling_tides * 6
 
             # TODO, Need to import true up amp scaling here
             if state in ['true']:
-                quant = 0
+                quant = float(self.grid_set_velo[point][2])
+
             elif state in ['est']:
+
                 quant = data_vec[ind]
+
             elif state in ['uq']:
                 quant = data_vec[ind]
+
             else:
                 raise ValueError()
 

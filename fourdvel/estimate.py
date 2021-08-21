@@ -101,8 +101,11 @@ class estimate(configure):
 
         # Put the number of data points for this point into others set
         for point in point_set:
-            others_set[point]['num_of_offset_pairs'] = len(offsetfields_set[point])
-            others_set[point]['max_num_of_offset_pairs'] = max_num_of_offsets_set[point]
+            others_set[point]['num_of_csk_offset_pairs'] = len([data_info for data_info in data_info_set[point] if data_info[0]=='csk'])
+            others_set[point]['max_num_of_csk_offset_pairs'] = max_num_of_offsets_set[point].get('csk',0)
+
+            others_set[point]['num_of_s1_offset_pairs'] = len([data_info for data_info in data_info_set[point] if data_info[0]=='s1'])
+            others_set[point]['max_num_of_s1_offset_pairs'] = max_num_of_offsets_set[point].get('s1',0)
 
         #print(max_num_of_offsets_set)
 
@@ -137,11 +140,11 @@ class estimate(configure):
 
                 # Set the mode for running
 
-                tides_3_mode = "find_optimal_gl"
-                #tides_3_mode = "invert_optimal_gl"
+                #tides_3_mode = "find_optimal_gl"
+                tides_3_mode = "invert_optimal_gl"
 
-                #gl_option = 'manual'
-                gl_option = 'auto'
+                gl_option = 'manual'
+                #gl_option = 'auto'
 
                 print("tides_3_mode: ", tides_3_mode)
 
@@ -198,50 +201,57 @@ class estimate(configure):
                 
                 elif gl_option == "manual":
 
-                    gl_list_option = 7
+                    gl_list_option = 8
+
+                    enum_grounding_level = None
 
                     if gl_list_option == 0:
                         enum_space = 0.1
                         gl_low = -4.0
                         gl_high = 0.0
 
-                    if gl_list_option == 1:
+                    elif gl_list_option == 1:
                         enum_space = 0.05
                         gl_low  =   -4.0
                         gl_high =   -0.0
 
-                    if gl_list_option == 2:
+                    elif gl_list_option == 2:
                         enum_space = 0.025
                         gl_low  =   -4.0
                         gl_high =   -0.0
 
-                    if gl_list_option == 3:
+                    elif gl_list_option == 3:
                         enum_space = 0.01
                         gl_low  =   -1.6
                         gl_high =   -1.4
 
-                    if gl_list_option == 4:
+                    elif gl_list_option == 4:
                         enum_space = 0.1
                         gl_low  =   -2
                         gl_high =   -1
 
-                    if gl_list_option == 5:
+                    elif gl_list_option == 5:
                         enum_space = 0.1
                         gl_low  =   -4.0
                         gl_high =   4.0
 
-                    if gl_list_option == 6:
+                    elif gl_list_option == 6:
                         enum_space = 0.1
                         gl_low  =   -4.0
                         gl_high =   -3.0
 
-                    if gl_list_option == 7:
+                    elif gl_list_option == 7:
                         gl_low = -10
                         gl_high = -10
                         enum_space = 1
+
+                    elif gl_list_option == 8:
+                        enum_grounding_level = np.asarray([-3.00, -2.10, -1.60, -1.20, -0.90, -0.70, -0.60, -0.56, -0.53, -0.51, -0.5, -0.49, -0.47, -0.44, -0.40, -0.30, -0.10, 0.20, 0.60, 1.10, 1.70, 2.40, 3.00])
  
-                    enum_grounding_level = np.arange(gl_low, gl_high+1e-6, enum_space)
-                    print(enum_grounding_level)
+                    if enum_grounding_level is None:
+                        enum_grounding_level = np.arange(gl_low, gl_high+1e-6, enum_space)
+                    
+                    print('enum_grounding_level for manual mode: ', enum_grounding_level)
 
                     # convert to integer
                     enum_grounding_level_int = [int(round(gl*(10**6))) if gl else None for gl in enum_grounding_level]
@@ -395,8 +405,11 @@ class estimate(configure):
     
                 # To save the computing time, check if the point set is on the ice shelf
                 # If not, override all previous settings, and just make the -10 the only enumeration
-                #point_set_check_kind = 'ice_shelf'
-                point_set_check_kind = 'ephemeral_grounding'
+                point_set_check_kind = 'southern_half'
+
+                if self.point_set_check_kind is not None:
+                    point_set_check_kind = self.point_set_check_kind
+
                 if not self.check_point_set_with_requirements(point_set, kind=point_set_check_kind):
                     print("This point_set does not pass the check for coverage, skip enumeration")
                     point_set_on_ice_shelf = False
@@ -544,11 +557,12 @@ class estimate(configure):
 
                     # Modifying G matrix to add direct modeling of vertical displacement
                     linear_design_mat_set = self.modify_G_set(point_set, linear_design_mat_set, offsetfields_set, up_disp_set, grounding_level = given_grounding_level, gl_name = gl_name)
-                    print("Modified matrix (obs) set is Done")
+                    print("Modified matrix (obs) set for tide_3 mode is Done. Matrix shape ", linear_design_mat_set[self.test_point].shape)
 
                 # If invert for topographic residual, add another column for G
                 if self.est_topo_resid:
                     linear_design_mat_set = self.modify_G_for_topo_resid_set(point_set, linear_design_mat_set, offsetfields_set, data_info_set, demfactor_set)
+                    print("Modified matrix (obs) set for topo resid is Done. Matrix shape ", linear_design_mat_set[self.test_point].shape)
 
                 # Model prior.
                 invCm_set = self.model_prior_set(point_set)
@@ -601,8 +615,8 @@ class estimate(configure):
     
                 # Convert model posterior to uncertainty of params.
                 # Require: tide_vec and Cm_p
-                tide_vec_uq_set, secular_cov_set = self.model_posterior_to_uncertainty_set(point_set, tide_vec_set, Cm_p_set)
-                self.export_to_others_set_secular_cov(point_set, secular_cov_set, others_set)
+                tide_vec_uq_set, secular_corr_set = self.model_posterior_to_uncertainty_set(point_set, tide_vec_set, Cm_p_set)
+                self.export_to_others_set_secular_corr(point_set, secular_corr_set, others_set)
 
                 print('Uncertainty set estimation Done')
         

@@ -509,9 +509,12 @@ class analysis(configure):
         # It is not None, if it comes from the estimation part
         all_data_set =  self.data_set_formation(point_set, tracks_set, data_mode)
 
-        data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set, height_set, demfactor_set = all_data_set
+        (data_info_set, data_vec_set, noise_sigma_set, offsetfields_set, true_tide_vec_set, height_set, demfactor_set, max_num_of_offsets_set) = all_data_set
 
         linear_design_mat_set = self.build_G_set(point_set, offsetfields_set=offsetfields_set)
+
+        if self.est_topo_resid:
+            linear_design_mat_set = self.modify_G_for_topo_resid_set(point_set, linear_design_mat_set, offsetfields_set, data_info_set, demfactor_set)
 
         # Perform estimation on each point
         analysis_set = {}
@@ -624,6 +627,7 @@ class analysis(configure):
         tide_taxis = self.tide_taxis
         delta = tide_taxis[1] - tide_taxis[0]
         tide_data = self.tide_data
+
 
         data_info_summary = self.summarize_data_info(data_info)
         for i, track in enumerate(data_info_summary):
@@ -851,6 +855,7 @@ class analysis(configure):
             show_analysis = True
 
         if show_analysis:
+
             ### Show results with all tracks merged
             if self.proj == 'Rutford':
                 plot_start_day = datetime.date(2013,5,10)
@@ -860,8 +865,8 @@ class analysis(configure):
                 off2_day = datetime.date(2014,6,1)
 
             elif self.proj == 'Evans':
-                plot_start_day = datetime.date(2017,1,1)
-                plot_stop_day = datetime.date(2022,1,1)
+                plot_start_day = datetime.date(2016,11,1)
+                plot_stop_day = datetime.date(2021,11,1)
 
                 off1_day = datetime.date(2017,2,1)
                 off2_day = datetime.date(2021,6,1)
@@ -884,8 +889,18 @@ class analysis(configure):
             ax.set_xlabel("Time (days)",fontsize=15)
 
             # yaxis
-            ax.set_ylim([-4.5,4.5])
-            ax.set_ylabel("Tidal displacement (m)",fontsize=15)
+            if self.proj == 'Rutford':
+                ax.set_ylim([-4.5,4.5])
+                #ax.set_ylabel("Tidal displacement (m)",fontsize=15)
+                ax.set_ylabel("Tide height (m)",fontsize=15)
+
+            elif self.proj == 'Evans':
+                ax.set_ylim([-3.5,3.5])
+                #ax.set_ylabel("Tidal displacement (m)",fontsize=15)
+                ax.set_ylabel("Tide height (m)",fontsize=15)
+
+            else:
+                raise ValueError()
 
             # 2013.06.01 to 2014.06.01, 7823 days, 8188 days
             #off1 = (datetime.date(2013,8,1) - self.t_origin.date()).days
@@ -896,15 +911,25 @@ class analysis(configure):
 
             ax.plot([off1,off1],[-5,5],linewidth=4, color='blue')
             ax.plot([off2,off2],[-5,5],linewidth=4, color='blue')
-            
-            ax.text(off1+8,-3.65, "2013-08-01",fontsize=15)
-            ax.text(off2-55,-3.65, "2014-06-01",fontsize=15)
+           
+
+            if self.proj == 'Rutford': 
+                ax.text(off1+8,-3.65, "2013-08-01",fontsize=15)
+                ax.text(off2-55,-3.65, "2014-06-01",fontsize=15)
+
+            elif self.proj == 'Evans':
+                ax.text(off1+8,-2.65, "2017-02-01",fontsize=15)
+                ax.text(off2-240,-2.65, "2021-06-01",fontsize=15)
 
             # Plot the acquisitions on the tide time series
             plot_acquisition_times = 1
+            csk_track_label = 'init_label'
+            s1_track_label = 'init_label'
             if plot_acquisition_times:
-                #ax.plot([tide_taxis[0],tide_taxis[-1]],[-1.7,-1.7],color='red', linewidth=5,linestyle='--')
-                ax.plot([tide_taxis[0] - self.count_days(plot_start_day), tide_taxis[-1] - self.count_days(plot_start_day)],[-1.7,-1.7], color='orange', linewidth=4,linestyle='--')
+
+                if self.proj == 'Rutford':
+                    #ax.plot([tide_taxis[0],tide_taxis[-1]],[-1.7,-1.7],color='red', linewidth=5,linestyle='--')
+                    ax.plot([tide_taxis[0] - self.count_days(plot_start_day), tide_taxis[-1] - self.count_days(plot_start_day)],[-1.7,-1.7], color='orange', linewidth=4,linestyle='--')
 
                 np.random.seed(2021)
                 colors = np.random.rand(len(data_info_summary)*3).reshape(len(data_info_summary),3)
@@ -929,8 +954,32 @@ class analysis(configure):
                         master_time_track = [pair_t[0] for pair_t in pair_acq_time_track]
                         slave_time_track = [pair_t[1] for pair_t in pair_acq_time_track]
                         track_label = " ".join(["Track", sate_name, str(track_num)])
-                        #track_label = "Track "+ str(count_track)
-                        ax.plot(np.asarray(master_time_track) - self.count_days(plot_start_day), master_tide_proxy_track, '.',color=colors[i,:], markersize=10, label=track_label)
+
+                        if self.proj == 'Rutford':
+                            #track_label = "Track "+ str(count_track)
+                            ax.plot(np.asarray(master_time_track) - self.count_days(plot_start_day), master_tide_proxy_track, '.',color=colors[i,:], markersize=10, label=track_label)
+
+                        elif self.proj == 'Evans':
+
+                            if sate_name == 'csk':
+
+                                if csk_track_label == 'init_label':
+                                    csk_track_label = 'CSK acquisitions'
+                                elif csk_track_label == 'CSK acquisitions':
+                                    csk_track_label = None
+
+                                ax.plot(np.asarray(master_time_track) - self.count_days(plot_start_day), master_tide_proxy_track, '.',color='red', markersize=10, label=csk_track_label)
+ 
+                            elif sate_name == 's1':
+
+                                if s1_track_label == 'init_label':
+                                    s1_track_label = 'S1 acquisitions'
+                                elif s1_track_label == 'S1 acquisitions':
+                                    s1_track_label = None
+
+                                ax.plot(np.asarray(master_time_track) - self.count_days(plot_start_day), master_tide_proxy_track, '.',color='darkgreen', markersize=10, label=s1_track_label)
+                            else:
+                                raise ValueError()
     
                 ax.legend(prop={'size': 12}, loc='lower left')
     

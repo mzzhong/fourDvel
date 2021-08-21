@@ -62,22 +62,7 @@ class output(fourdvel):
 
         self.no_phase_correction = inps.no_phase_correction
 
-        self.load_shelf_points()
-
-    def load_shelf_points(self):
-        
-        if self.proj == "Rutford":
-            shelf_points_test_id = 0
-
-        elif self.proj == 'Evans':
-            shelf_points_test_id = 20211931 
-
-        shelf_point_file = '/net/kamb/ssd-tmp1/mzzhong/insarRoutines/quick_studies/' + str(shelf_points_test_id) + '_shelf_points.xyz'
-        if os.path.exists(shelf_point_file):
-            self.shelf_points_dict = self.read_xyz_into_dict(shelf_point_file)
-            print("Number of shelf points: ", len(self.shelf_points_dict))
-        else:
-            self.shelf_points_dict = None
+        self.get_shelf_points()
 
     def run_output_residual(self):
 
@@ -255,22 +240,32 @@ class output(fourdvel):
             this_grid_set = pickle.load(f)
 
         # Set quant_list for others
-        quant_list = ['secular_east_north_velocity_corr','secular_east_up_velocity_corr','secular_north_up_velocity_corr']
+        quant_list = [  'secular_east_north_velocity_corr',
+                        'secular_east_up_velocity_corr',
+                        'secular_north_up_velocity_corr',
+                        'height',
+                        'max_num_of_csk_offset_pairs', 
+                        'num_of_csk_offset_pairs', 
+                        'ratio_of_valid_csk_offset_pairs',
+                        'max_num_of_s1_offset_pairs', 
+                        'num_of_s1_offset_pairs', 
+                        'ratio_of_valid_s1_offset_pairs',
+                        ]
 
         if self.task_name == 'tides_3':
             # credible interval needs to before grounding level for filtering purposes
-            quant_list = quant_list + ["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "height", "num_of_offset_pairs"]
+            quant_list = quant_list + ["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level"] 
             #quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "grounding_duration", "height"]
 
             quant_list_for_bias = ['optimal_grounding_level', 'up_scale']
 
         elif self.task_name == 'tides_1':
-            quant_list = quant_list + ['height', 'max_num_of_offset_pairs', 'num_of_offset_pairs', 'ratio_of_valid_offset_pairs']
-
             quant_list_for_bias = []
 
         else:
             raise ValueError()
+
+        print("others list: ", quant_list)
 
         states = ['true', 'est']
 
@@ -338,25 +333,26 @@ class output(fourdvel):
 
                             # Remove points if the lowest_tide_height is too close to the obtained value
                             lowest_tide_height = this_grid_set[point]['lowest_tide_height']
-                            print('state: ', state)
-                            print('lowest_tide_height: ', lowest_tide_height)
-                            print('obtained ogl: ', optimal_grounding_level)
+                            #print('state: ', state)
+                            #print('lowest_tide_height: ', lowest_tide_height)
+                            #print('obtained ogl: ', optimal_grounding_level)
                             #if optimal_grounding_level - lowest_tide_height <= 0.1:
                             #    continue
 
-                            # Remove points with csk coverage but only have ascending tracks
-                            #print(self.grid_set[point])
-                            csk_exists = False
-                            csk_desc_exists = False
-                            for track in self.grid_set[point]:
-                                if track[3] == 'csk':
-                                    csk_exists = True
+                            # For Evans project, remove points with csk coverage but only have ascending tracks
+                            # For real data only!!
+                            if self.proj == 'Evans' and self.s1_data_mode == 3:
+                                csk_exists = False
+                                csk_desc_exists = False
+                                for track in self.grid_set[point]:
+                                    if track[3] == 'csk':
+                                        csk_exists = True
 
-                                if track[3] == 'csk' and track[0]>=11:
-                                    csk_desc_exists = True
+                                    if track[3] == 'csk' and track[0]>=11:
+                                        csk_desc_exists = True
 
-                            if csk_exists == True and csk_desc_exists == False:
-                                continue
+                                if csk_exists == True and csk_desc_exists == False:
+                                    continue
     
                     # Record everything, including np.nan
                     # np.nan is filtered in write_dict_to_xyz
@@ -422,7 +418,11 @@ class output(fourdvel):
                         else:
                             raise ValueError()
 
-                    elif quant_name in ["max_num_of_offset_pairs"]:
+                        if grid_set_quant[point] == 0:
+                            grid_set_quant[point] = np.nan
+
+
+                    elif quant_name in ["max_num_of_csk_offset_pairs", "max_num_of_s1_offset_pairs", "num_of_csk_offset_pairs", "num_of_s1_offset_pairs"]:
                         if state == "true":
                             grid_set_quant[point] = np.nan
                         elif state == 'est':
@@ -430,21 +430,28 @@ class output(fourdvel):
                         else:
                             raise ValueError()
 
-                    elif quant_name in ["num_of_offset_pairs"]:
-                        if state == "true":
+                        if grid_set_quant[point] == 0:
                             grid_set_quant[point] = np.nan
-                        elif state == 'est':
-                            grid_set_quant[point] = this_grid_set[point].get(quant_name, np.nan)
-                        else:
-                            raise ValueError()
 
-                    elif quant_name in ["ratio_of_valid_offset_pairs"]:
+                    elif quant_name in ["ratio_of_valid_csk_offset_pairs"]:
                         if state == "true":
                             grid_set_quant[point] = np.nan
                         
                         elif state == 'est':
-                            if grid_set_max_num_of_offset_pairs.get(point, np.nan)>0:
-                                grid_set_quant[point] = grid_set_num_of_offset_pairs.get(point, np.nan) / grid_set_max_num_of_offset_pairs.get(point, np.nan)
+                            if grid_set_max_num_of_csk_offset_pairs.get(point, np.nan)>0:
+                                grid_set_quant[point] = grid_set_num_of_csk_offset_pairs.get(point, np.nan) / grid_set_max_num_of_csk_offset_pairs.get(point, np.nan)
+                            else:
+                                grid_set_quant[point] = np.nan
+                        else:
+                            raise ValueError()
+
+                    elif quant_name in ["ratio_of_valid_s1_offset_pairs"]:
+                        if state == "true":
+                            grid_set_quant[point] = np.nan
+                        
+                        elif state == 'est':
+                            if grid_set_max_num_of_s1_offset_pairs.get(point, np.nan)>0:
+                                grid_set_quant[point] = grid_set_num_of_s1_offset_pairs.get(point, np.nan) / grid_set_max_num_of_s1_offset_pairs.get(point, np.nan)
                             else:
                                 grid_set_quant[point] = np.nan
                         else:
@@ -455,7 +462,7 @@ class output(fourdvel):
                             grid_set_quant[point] = 0
 
                         elif state == 'est':
-                            secular_cov = this_grid_set[point]['secular_cov'][0]
+                            grid_set_quant[point] = this_grid_set[point]['secular_corr'][0]
         
                         else:
                             raise ValueError()
@@ -465,7 +472,7 @@ class output(fourdvel):
                             grid_set_quant[point] = 0
 
                         elif state == 'est':
-                            secular_cov = this_grid_set[point]['secular_cov'][1]
+                            grid_set_quant[point] = this_grid_set[point]['secular_corr'][1]
         
                         else:
                             raise ValueError()
@@ -475,26 +482,32 @@ class output(fourdvel):
                             grid_set_quant[point] = 0
 
                         elif state == 'est':
-                            secular_cov = this_grid_set[point]['secular_cov'][2]
+                            grid_set_quant[point] = this_grid_set[point]['secular_corr'][2]
         
                         else:
                             raise ValueError()
 
                     else:
-                        raise Exception()
+                        print(quant_name, "is not found")
+                        raise ValueError()
 
                 # Save some results for processing other quantities
                 if state == 'est' and quant_name in ["grounding_level_credible_interval"]:
                     grid_set_gl_ci = grid_set_quant
 
                 # Save some results for processing other quantities
-                if state == 'est' and quant_name in ["max_num_of_offset_pairs"]:
-                    grid_set_max_num_of_offset_pairs = grid_set_quant
-                    #print(grid_set_max_num_of_offset_pairs)
+                if state == 'est' and quant_name in ["max_num_of_csk_offset_pairs"]:
+                    grid_set_max_num_of_csk_offset_pairs = grid_set_quant
 
-                if state == 'est' and quant_name in ["num_of_offset_pairs"]:
-                    grid_set_num_of_offset_pairs = grid_set_quant
-                    #print(grid_set_num_of_offset_pairs)
+                if state == 'est' and quant_name in ["num_of_csk_offset_pairs"]:
+                    grid_set_num_of_csk_offset_pairs = grid_set_quant
+
+                if state == 'est' and quant_name in ["max_num_of_s1_offset_pairs"]:
+                    grid_set_max_num_of_s1_offset_pairs = grid_set_quant
+
+                if state == 'est' and quant_name in ["num_of_s1_offset_pairs"]:
+                    grid_set_num_of_s1_offset_pairs = grid_set_quant
+
 
                 # Write to xyz file.
                 xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + 'others' + '_' + quant_name + '.xyz')
@@ -1005,12 +1018,14 @@ class output(fourdvel):
 
                         for point in true_grid_set_quant.keys():
                             if point in est_grid_set_quant:
+                                
                                 if isinstance(true_grid_set_quant[point], float):
                                     grid_set_quant[sub_quant_name][point] = est_grid_set_quant[point] - true_grid_set_quant[point]
+                                
                                 elif isinstance(true_grid_set_quant[point], tuple):
                                     grid_set_quant[sub_quant_name][point] = tuple([est_grid_set_quant[point][j]-true_grid_set_quant[point][j] for j in range(len(true_grid_set_quant[point]))])
                                 else:
-                                    raise Exception("Unknown type of data")
+                                    raise Exception("Unknown type of true_grid_set_quant: ", type(true_grid_set_quant[point]))
                 else:
                     raise ValueError('Unknown state')
 
@@ -1165,8 +1180,10 @@ def main(iargs=None):
         ### Prepare the outout ###
         # Start to output
         # First output others
-        #if out.output_others:
-        #    out.run_output_others()
+        if out.output_others:
+            out.run_output_others()
+
+        #return 0 
 
         # Then output estimations
         output_states = []

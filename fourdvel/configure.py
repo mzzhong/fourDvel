@@ -581,7 +581,7 @@ class configure(fourdvel):
 
 
         ### Put together information from different satellites ###
-        # data_info_set(deprecated): For each point a list of (track_num, sate_name, number of data points)
+        # data_info_set: For each point a list of (track_num, sate_name, number of data points)
         # data_vec_set: For each point, a vector
         # noise_sigma_set: For each point, a two value tuple (range error and azimuth error)
         # offsetfields_set: For each point, a list of offsetfield info [date1, date2, vec1, vec2, t_frac]
@@ -597,7 +597,9 @@ class configure(fourdvel):
         
         for point in point_set:
             final_demfactor_set[point] = {}
-            final_max_num_of_offsets_set[point] = 0
+            final_max_num_of_offsets_set[point] = {}
+            for sate_name in sate_names:
+                final_max_num_of_offsets_set[point][sate_name] = 0
 
         # Find the true_tide_vec_set from any non-empty satellite result
         final_true_tide_vec_set = {}
@@ -635,7 +637,7 @@ class configure(fourdvel):
                 final_demfactor_set[point].update(demfactor_set_dict[sate_name][point])
 
                 # max num of offsets_set
-                final_max_num_of_offsets_set[point] = final_max_num_of_offsets_set[point] + max_num_of_offsets_set_dict[sate_name][point]
+                final_max_num_of_offsets_set[point][sate_name] = final_max_num_of_offsets_set[point][sate_name] + max_num_of_offsets_set_dict[sate_name][point]
 
 
         print('======= SUMMARY OF DATA SET FORMATION ========')
