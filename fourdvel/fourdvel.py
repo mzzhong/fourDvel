@@ -620,8 +620,10 @@ class fourdvel(basics):
             elif kind == 'southern_half':
                 if self.proj == "Rutford":
                     bbox_s, bbox_n, bbox_e, bbox_w = None, self.float_to_int5d(-78.30), None, None
+
                 elif self.proj == "Evans":
                     bbox_s, bbox_n, bbox_e, bbox_w = None, self.float_to_int5d(-75.80), None, None
+
                 else:
                     raise ValueError()
 
@@ -1634,7 +1636,7 @@ class fourdvel(basics):
     def get_shelf_points(self):
         
         if self.proj == "Rutford":
-            shelf_points_test_id = 0
+            shelf_points_test_id = 20200661
         
         elif self.proj == 'Evans':
             shelf_points_test_id = 20211931 
@@ -2632,7 +2634,8 @@ class fourdvel(basics):
 
         if alpha is None:
             if self.proj == 'Rutford':
-                alpha = 0.95
+                #alpha = 0.95
+                alpha = 0.68
             elif self.proj == 'Evans':
                 alpha = 0.68
                 #alpha = 0.5
@@ -2985,8 +2988,8 @@ class fourdvel(basics):
         for point in point_set:
 
             # check if it is single point mode
-            #if self.single_point_mode and point!=test_point:
-            #    continue
+            if self.single_point_mode and point!=test_point:
+                continue
 
             # Find data and model for the test point
             data_info = data_info_set[point]
@@ -3021,7 +3024,6 @@ class fourdvel(basics):
 
                 residual_analysis_set[point] = None
 
-
         return residual_analysis_set
 
     def point_residual_analysis(self, point, data_info, offsetfields, data_vec, data_vec_pred, data_vec_residual):
@@ -3048,9 +3050,15 @@ class fourdvel(basics):
         # The residual of each track at this point
         track_residual = {}
         
-        # Look through by track
+        # Loop through by track
         data_info_summary = self.summarize_data_info(data_info)
+
+        # Save the residual from all tracks
+        range_residual_all_tracks = []
+        azimuth_residual_all_tracks = []
+
         for i, track in enumerate(data_info_summary):
+
             # check if it is single point mode
             #if self.single_point_mode and point!=self.test_point:
             #    continue
@@ -3084,13 +3092,18 @@ class fourdvel(basics):
 
             # Obtain the residual of this track
             data_vec_residual_track = data_vec_residual[ data_num_total*2 : (data_num_total + data_num)*2 ]
+            
             # range & azimuth
             range_residual_track = data_vec_residual_track[::2,0]
             azimuth_residual_track = data_vec_residual_track[1::2,0]
 
-            # Save the residual
+            # Save the residual, the std per track per looking angle
             track_residual[((sate_name, track_num), 'range')] = np.nanstd(range_residual_track)
             track_residual[((sate_name, track_num), 'azimuth')] = np.nanstd(azimuth_residual_track)
+
+            # Save the residual to all track list
+            range_residual_all_tracks = range_residual_all_tracks + list(range_residual_track)
+            azimuth_residual_all_tracks = azimuth_residual_all_tracks + list(azimuth_residual_track)
 
             # Move to next track
             data_num_total += data_num
@@ -3121,6 +3134,16 @@ class fourdvel(basics):
 
                 # Record the sampled tide by master and slave
                 tide_proxy_list.append((z1, z2, track_num, offsetfield[0], offsetfield[1]))
+
+        # Calcuate the residual, the std per looking angle
+        #print('data info summary: ', data_info_summary)
+
+        track_residual[(('all-sate','all-track'),'range')] = np.std(range_residual_all_tracks)
+        track_residual[(('all-sate','all-track'),'azimuth')] = np.std(azimuth_residual_all_tracks)
+
+        #print(track_residual[(('all-sate','all-track'),'range')])
+        #print(track_residual[(('all-sate','all-track'),'azimuth')])
+        #print(stop)
 
         # Check if the coords are correct: 2 x length of coords == length of residual
         assert(len(coords_list)*2 == len(data_vec_residual)), \
@@ -3622,8 +3645,16 @@ class fourdvel(basics):
                         # filter the crf phases
                         if v_model > thres_for_v and amp_crf > thres_for_amp_crf:
                             if self.proj == "Rutford" and lat<-77.8:
-                                pass
-    
+                                # only keep the valus on ice shelf
+                                if model_up > 0:
+                                    pass
+
+                                # also keep values outside ice shelf
+                                elif model_up == 0:
+                                    phase_crf = np.nan
+                                    phase_crf_in_deg = np.nan
+                                    pass
+                            
                             elif self.proj == "Evans":
                                 # only keep the valus on ice shelf
                                 if model_up > 0:
@@ -4021,8 +4052,16 @@ class fourdvel(basics):
                 if tide_name == 'O1':
                     ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
                     thres = 0.1
-                    # 2021.01.29
-                    thres = 0.06
+
+                    if self.proj == 'Evans':
+                        # 2021.01.29
+                        thres = 0.06
+
+                    elif self.proj == 'Rutford':
+                        # 2021.09.13
+                        thres = 0.01
+                    else:
+                        raise ValueError()
 
                     model_up = self.get_model_up(point)
 
@@ -4170,11 +4209,20 @@ class fourdvel(basics):
             for tide_name in modeling_tides:
                 if tide_name == 'N2':
                     ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
-                    thres = 0.1
-                    # 2021.01.29
-                    thres = 0.04
-                    # 2021.04.06
-                    thres = 0.03
+
+
+                    if self.proj == 'Evans':
+                        thres = 0.1
+                        # 2021.01.29
+                        thres = 0.04
+                        # 2021.04.06
+                        thres = 0.03
+
+                    elif self.proj == 'Rutford':
+                        # 2021.09.13
+                        thres = 0.01
+                    else:
+                        raise ValueError()
 
                     model_up = self.get_model_up(point)
 

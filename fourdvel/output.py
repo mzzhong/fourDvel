@@ -322,8 +322,8 @@ class output(fourdvel):
                                 continue
 
                             #gl_ci_thres = 100
-                            gl_ci_thres = 0.5
-                            #gl_ci_thres = 1.0
+                            #gl_ci_thres = 0.5
+                            gl_ci_thres = 1.0
                             #gl_ci_thres = 1.5
                             
                             # Remove based obtained credible level
@@ -462,7 +462,10 @@ class output(fourdvel):
                             grid_set_quant[point] = 0
 
                         elif state == 'est':
-                            grid_set_quant[point] = this_grid_set[point]['secular_corr'][0]
+                            try:
+                                grid_set_quant[point] = this_grid_set[point]['secular_corr'][0]
+                            except:
+                                grid_set_quant[point] = np.nan
         
                         else:
                             raise ValueError()
@@ -472,7 +475,10 @@ class output(fourdvel):
                             grid_set_quant[point] = 0
 
                         elif state == 'est':
-                            grid_set_quant[point] = this_grid_set[point]['secular_corr'][1]
+                            try:
+                                grid_set_quant[point] = this_grid_set[point]['secular_corr'][1]
+                            except:
+                                grid_set_quant[point] = np.nan
         
                         else:
                             raise ValueError()
@@ -482,7 +488,10 @@ class output(fourdvel):
                             grid_set_quant[point] = 0
 
                         elif state == 'est':
-                            grid_set_quant[point] = this_grid_set[point]['secular_corr'][2]
+                            try:
+                                grid_set_quant[point] = this_grid_set[point]['secular_corr'][2]
+                            except:
+                                grid_set_quant[point] = np.nan
         
                         else:
                             raise ValueError()
@@ -964,6 +973,12 @@ class output(fourdvel):
 
                                 if self.proj == "Evans" and state == 'est'  and sub_quant_name == "Msf_cross_flow_displacement_phase":
                                     center = -3.0
+
+                                if self.proj == "Rutford" and state == 'est'  and sub_quant_name == "Msf_along_flow_displacement_phase":
+                                    center = -4.68
+
+                                if self.proj == "Rutford" and state == 'est'  and sub_quant_name == "Msf_cross_flow_displacement_phase":
+                                    center = -1.6
  
                                 # Save the mean phase
                                 f_mp.write(state + '_' + sub_quant_name + ' ' + str(center)+'\n')

@@ -181,16 +181,29 @@ class configure(fourdvel):
                 noise_sigma_set[point] = [ (np.sqrt(value[0])/5, np.sqrt(value[1])/5 ) for value in offsetsVar_set[point] ]
 
         elif self.data_error_mode == 'external':
+            data_uncert_external_option = 'per track per obs'
+            #data_uncert_external_option = 'per obs'
+
             for point in point_set:
                 data_info = data_info_set[point]
-                data_uncert_point = self.data_uncert_grid_set[point]
+                
+                data_uncert_point = self.data_uncert_grid_set.get(point, None)
 
                 noise_sigma_point = []
 
                 for i in range(len(data_info)):
 
                     if not data_uncert_point is None:
-                        noise_sigma_pair = [data_uncert_point[(data_info[i], 'range')], data_uncert_point[(data_info[i], 'azimuth')]]
+             
+                        if data_uncert_external_option == 'per track per obs':           
+                            noise_sigma_pair = [data_uncert_point.get((data_info[i], 'range'), 1.0), data_uncert_point.get((data_info[i], 'azimuth'), 1.0)]
+
+                        elif data_uncert_external_option == 'per obs':
+                            noise_sigma_pair = [data_uncert_point.get((('all-sate','all-track'), 'range'), 1.0), data_uncert_point.get((('all-sate','all-track'), 'azimuth'), 1.0)]
+
+                        else:
+                            raise ValueError()
+
                     else:
                         noise_sigma_pair = [np.nan, np.nan]
                     

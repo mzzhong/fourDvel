@@ -48,6 +48,11 @@ class grouping(fourdvel):
 
         # for Ruford
         self.rutford_shelf_grid_points = self.Ant_Data_dir + "/GroundingLines/RIS_bedmap2_shelf_latlon.xyz"
+        
+        # the problem is bedmap2 for RIS is no accurate
+        self.rutford_shelf_grid_points = self.Ant_Data_dir + "/GroundingLines/RIS_20200661_shelf_latlon.xyz"
+
+        # for Evans
         self.evans_shelf_grid_points = self.Ant_Data_dir + "/GroundingLines/EIS_bedmap2_shelf_latlon.xyz"
         
         # End of __init__
@@ -816,8 +821,11 @@ class grouping(fourdvel):
 
         if self.proj == "Rutford":
             shelf_xyz = self.rutford_shelf_grid_points
+
         elif self.proj == "Evans":
+
             shelf_xyz = self.evans_shelf_grid_points
+
         else:
             raise ValueError()
 

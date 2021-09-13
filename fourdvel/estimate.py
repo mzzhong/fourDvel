@@ -143,8 +143,8 @@ class estimate(configure):
                 #tides_3_mode = "find_optimal_gl"
                 tides_3_mode = "invert_optimal_gl"
 
-                gl_option = 'manual'
-                #gl_option = 'auto'
+                gl_option = 'auto'
+                #gl_option = 'manual'
 
                 print("tides_3_mode: ", tides_3_mode)
 
@@ -201,7 +201,8 @@ class estimate(configure):
                 
                 elif gl_option == "manual":
 
-                    gl_list_option = 8
+                    gl_list_option = 7
+                    #gl_list_option = 8
 
                     enum_grounding_level = None
 
@@ -405,6 +406,8 @@ class estimate(configure):
     
                 # To save the computing time, check if the point set is on the ice shelf
                 # If not, override all previous settings, and just make the -10 the only enumeration
+
+                # The default check kind is 'southern half'
                 point_set_check_kind = 'southern_half'
 
                 if self.point_set_check_kind is not None:
