@@ -648,172 +648,172 @@ class grouping(fourdvel):
         f.close()
         return 0
 
-    def create_grid_set_velo_3d_evans_old(self):
-
-        from dense_offset import dense_offset
-        from scipy.signal import  medfilt
-
-        print('Add vertical component to grid set model...')
-
-        redo = 0
-        key = self.test_point
-
-        if not os.path.exists(self.grid_set_velo_3d_pkl_name) or redo==1:
-
-            # Load the double difference data. 
-            stack = 'tops'
-            workdir = '/net/kraken/nobak/mzzhong/S1-Evans'
-            track_num = 37
-            name = 'track_' + str(track_num)
-            runid = 20180703
-    
-            offset = dense_offset(stack=stack, workdir=workdir, runid=runid)
-            offset.initiate(trackname = name)
-    
-            doub_diff_file = self.doub_diff_file
-    
-            # Read in the double difference file.
-            dataset = gdal.Open(doub_diff_file)
-            doub_diff_map = dataset.GetRasterBand(1).ReadAsArray()
-    
-            # Remove the invalid.
-            doub_diff_map[np.isnan(doub_diff_map)] = 0
-            #doub_diff_map[doub_diff_map==0]=np.nan
-    
-            # Set the maxvalue, and do normalization.
-            maxval = 0.4
-            doub_diff_map[doub_diff_map<0] = 0
-            doub_diff_map[doub_diff_map>maxval] = maxval
-            doub_diff_map = doub_diff_map/maxval
-    
-            # Remove noise manually.
-            p1 = (160,0)
-            p2 = (550,800)
-            k = (p2[1]-p1[1])/(p2[0]-p1[0])
-            b = p1[1] - p1[0]*k
-    
-            for y in range(doub_diff_map.shape[0]):
-                for x in range(doub_diff_map.shape[1]):
-                    if y == np.round(k*x+b):
-                        doub_diff_map[y,x] = 1
-                    if y >= np.round(k*x+b):
-                        doub_diff_map[y,x] = 0
-    
-            p1 = (0,800)
-            p2 = (700,0)
-            k = (p2[1]-p1[1])/(p2[0]-p1[0])
-            b = p1[1] - p1[0]*k
-    
-            for y in range(doub_diff_map.shape[0]):
-                for x in range(doub_diff_map.shape[1]):
-                    if y == np.round(k*x+b):
-                        doub_diff_map[y,x] = 1
-                    if y <= np.round(k*x+b):
-                        doub_diff_map[y,x] = 0
-    
-            c = (550,420)
-            r = 70
-            
-            for y in range(doub_diff_map.shape[0]):
-                for x in range(doub_diff_map.shape[1]):
-                    if r == np.round(np.sqrt((x-c[0])**2 + (y-c[1])**2)):
-                        doub_diff_map[y,x] = 1
-                    if r >= np.round(np.sqrt((x-c[0])**2 + (y-c[1])**2)):
-                        doub_diff_map[y,x] = 0
-    
-    
-            # Median filter
-            doub_diff_map = medfilt(doub_diff_map, kernel_size = 7)
-           
-            # Plot it.
-            #fig = plt.figure(figsize=(10,10))
-            #ax = fig.add_subplot(111)
-            #im = ax.imshow(doub_diff_map)
-            #fig.colorbar(im)
-            #fig.savefig('./fig_sim/double_diff.png',format='png')
-    
-            ######## Provide the third component.
-            grid_set_velo_2d = self.grid_set_velo_2d
-            print("Number of points in 2d grid set: ", len(grid_set_velo_2d))
-    
-            test_point = self.test_point
-            all_points = grid_set_velo_2d.keys()
-    
-            # Create grid_set_velo_3d
-            grid_set_velo_3d = {}
-            count = 0
-            for point in all_points:
-                ind_x, ind_y = offset.point_index(point)
-    
-                #if point == test_point:
-                #    print(ind_x,ind_y)
-                #    print(grid_set_velo_2d[point])
-                #    print(doub_diff_map[ind_y, ind_x])
-                #    print(doub_diff_map.shape)
-                #    print(type(doub_diff_map))
-    
-                velo_2d = grid_set_velo_2d[point]
-                if ind_x is not None and ind_y is not None:
-                    try:
-                        velo_up = [doub_diff_map[ind_y, ind_x]]
-                        count+=1
-                    except:
-                        velo_up = [0]
-                else:
-                    velo_up = [0]
-                velo_3d = velo_2d + velo_up
-    
-                grid_set_velo_3d[point] = velo_3d
-    
-            # Done with creating 3d grid set
-
-            try: 
-                print("test point: ", key, grid_set_velo_3d[key])
-            except:
-                pass
-
-            print("set vertical count: ", count)
-            print("total grid points: ", len(grid_set_velo_3d))
-    
-            self.grid_set_velo_3d = grid_set_velo_3d
-    
-            with open(self.grid_set_velo_3d_pkl_name, 'wb') as f:
-                pickle.dump(self.grid_set_velo_3d , f)
-
-        else:
-            print(self.grid_set_velo_3d_pkl_name, "exists.")
-            print("Loading...")
-            with open(self.grid_set_velo_3d_pkl_name, 'rb') as f:
-                grid_set_velo_3d = pickle.load(f)
-
-            self.grid_set_velo_3d = grid_set_velo_3d
-
-            try:
-                print("test point: ", key, self.grid_set_velo_3d[key])
-            except:
-                pass
-
-            print("total grid points: ", len(self.grid_set_velo_3d))
-
-        ##################
-
-        print('Done with 3d velocity fields')
-
-        write_to_file = True
-        if write_to_file:
-            xyz_file = self.pickle_dir +'/grid_set_velo_3d_verti.xyz'
-            f = open(xyz_file,'w')
-            for key in sorted(grid_set_velo_3d.keys()):
-                lon, lat = key
-                value = np.sqrt(grid_set_velo_3d[key][2]**2)
-
-                # Only save values larger than zero.
-                if not np.isnan(value) and value>0:
-                    f.write(str(lon)+' '+str(lat)+' '+str(value)+'\n')
-
-        f.close()
-
-        return
+#    def create_grid_set_velo_3d_evans_old(self):
+#
+#        from dense_offset import dense_offset
+#        from scipy.signal import  medfilt
+#
+#        print('Add vertical component to grid set model...')
+#
+#        redo = 0
+#        key = self.test_point
+#
+#        if not os.path.exists(self.grid_set_velo_3d_pkl_name) or redo==1:
+#
+#            # Load the double difference data. 
+#            stack = 'tops'
+#            workdir = '/net/kraken/nobak/mzzhong/S1-Evans'
+#            track_num = 37
+#            name = 'track_' + str(track_num)
+#            runid = 20180703
+#    
+#            offset = dense_offset(stack=stack, workdir=workdir, runid=runid)
+#            offset.initiate(trackname = name)
+#    
+#            doub_diff_file = self.doub_diff_file
+#    
+#            # Read in the double difference file.
+#            dataset = gdal.Open(doub_diff_file)
+#            doub_diff_map = dataset.GetRasterBand(1).ReadAsArray()
+#    
+#            # Remove the invalid.
+#            doub_diff_map[np.isnan(doub_diff_map)] = 0
+#            #doub_diff_map[doub_diff_map==0]=np.nan
+#    
+#            # Set the maxvalue, and do normalization.
+#            maxval = 0.4
+#            doub_diff_map[doub_diff_map<0] = 0
+#            doub_diff_map[doub_diff_map>maxval] = maxval
+#            doub_diff_map = doub_diff_map/maxval
+#    
+#            # Remove noise manually.
+#            p1 = (160,0)
+#            p2 = (550,800)
+#            k = (p2[1]-p1[1])/(p2[0]-p1[0])
+#            b = p1[1] - p1[0]*k
+#    
+#            for y in range(doub_diff_map.shape[0]):
+#                for x in range(doub_diff_map.shape[1]):
+#                    if y == np.round(k*x+b):
+#                        doub_diff_map[y,x] = 1
+#                    if y >= np.round(k*x+b):
+#                        doub_diff_map[y,x] = 0
+#    
+#            p1 = (0,800)
+#            p2 = (700,0)
+#            k = (p2[1]-p1[1])/(p2[0]-p1[0])
+#            b = p1[1] - p1[0]*k
+#    
+#            for y in range(doub_diff_map.shape[0]):
+#                for x in range(doub_diff_map.shape[1]):
+#                    if y == np.round(k*x+b):
+#                        doub_diff_map[y,x] = 1
+#                    if y <= np.round(k*x+b):
+#                        doub_diff_map[y,x] = 0
+#    
+#            c = (550,420)
+#            r = 70
+#            
+#            for y in range(doub_diff_map.shape[0]):
+#                for x in range(doub_diff_map.shape[1]):
+#                    if r == np.round(np.sqrt((x-c[0])**2 + (y-c[1])**2)):
+#                        doub_diff_map[y,x] = 1
+#                    if r >= np.round(np.sqrt((x-c[0])**2 + (y-c[1])**2)):
+#                        doub_diff_map[y,x] = 0
+#    
+#    
+#            # Median filter
+#            doub_diff_map = medfilt(doub_diff_map, kernel_size = 7)
+#           
+#            # Plot it.
+#            #fig = plt.figure(figsize=(10,10))
+#            #ax = fig.add_subplot(111)
+#            #im = ax.imshow(doub_diff_map)
+#            #fig.colorbar(im)
+#            #fig.savefig('./fig_sim/double_diff.png',format='png')
+#    
+#            ######## Provide the third component.
+#            grid_set_velo_2d = self.grid_set_velo_2d
+#            print("Number of points in 2d grid set: ", len(grid_set_velo_2d))
+#    
+#            test_point = self.test_point
+#            all_points = grid_set_velo_2d.keys()
+#    
+#            # Create grid_set_velo_3d
+#            grid_set_velo_3d = {}
+#            count = 0
+#            for point in all_points:
+#                ind_x, ind_y = offset.point_index(point)
+#    
+#                #if point == test_point:
+#                #    print(ind_x,ind_y)
+#                #    print(grid_set_velo_2d[point])
+#                #    print(doub_diff_map[ind_y, ind_x])
+#                #    print(doub_diff_map.shape)
+#                #    print(type(doub_diff_map))
+#    
+#                velo_2d = grid_set_velo_2d[point]
+#                if ind_x is not None and ind_y is not None:
+#                    try:
+#                        velo_up = [doub_diff_map[ind_y, ind_x]]
+#                        count+=1
+#                    except:
+#                        velo_up = [0]
+#                else:
+#                    velo_up = [0]
+#                velo_3d = velo_2d + velo_up
+#    
+#                grid_set_velo_3d[point] = velo_3d
+#    
+#            # Done with creating 3d grid set
+#
+#            try: 
+#                print("test point: ", key, grid_set_velo_3d[key])
+#            except:
+#                pass
+#
+#            print("set vertical count: ", count)
+#            print("total grid points: ", len(grid_set_velo_3d))
+#    
+#            self.grid_set_velo_3d = grid_set_velo_3d
+#    
+#            with open(self.grid_set_velo_3d_pkl_name, 'wb') as f:
+#                pickle.dump(self.grid_set_velo_3d , f)
+#
+#        else:
+#            print(self.grid_set_velo_3d_pkl_name, "exists.")
+#            print("Loading...")
+#            with open(self.grid_set_velo_3d_pkl_name, 'rb') as f:
+#                grid_set_velo_3d = pickle.load(f)
+#
+#            self.grid_set_velo_3d = grid_set_velo_3d
+#
+#            try:
+#                print("test point: ", key, self.grid_set_velo_3d[key])
+#            except:
+#                pass
+#
+#            print("total grid points: ", len(self.grid_set_velo_3d))
+#
+#        ##################
+#
+#        print('Done with 3d velocity fields')
+#
+#        write_to_file = True
+#        if write_to_file:
+#            xyz_file = self.pickle_dir +'/grid_set_velo_3d_verti.xyz'
+#            f = open(xyz_file,'w')
+#            for key in sorted(grid_set_velo_3d.keys()):
+#                lon, lat = key
+#                value = np.sqrt(grid_set_velo_3d[key][2]**2)
+#
+#                # Only save values larger than zero.
+#                if not np.isnan(value) and value>0:
+#                    f.write(str(lon)+' '+str(lat)+' '+str(value)+'\n')
+#
+#        f.close()
+#
+#        return
 
     def create_grid_set_velo_3d(self):
 
@@ -829,7 +829,7 @@ class grouping(fourdvel):
         else:
             raise ValueError()
 
-        redo = 0
+        redo = 1
         key = self.test_point
 
         if not os.path.exists(self.grid_set_velo_3d_pkl_name) or redo==1:

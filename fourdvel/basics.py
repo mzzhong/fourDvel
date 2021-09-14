@@ -335,7 +335,7 @@ class basics():
     def read_tides_params(self, params_file=None):
 
         # Read in tide params exported from TMD MATLAB code
-        print("Reading tide model...")
+        print("Reading tide model...", params_file)
         
         if params_file is None:
             raise Exception()
