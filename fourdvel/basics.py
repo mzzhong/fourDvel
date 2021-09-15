@@ -332,6 +332,7 @@ class basics():
         #print(len(data_info))
         return data_info_summary
 
+
     def read_tides_params(self, params_file=None):
 
         # Read in tide params exported from TMD MATLAB code
@@ -648,7 +649,45 @@ class basics():
         else:
             mean_phase = None
 
-        return mean_phase 
+        return mean_phase
+
+    def get_ref_point(self, data_prefix):
+
+        ## Get the reference point
+        if data_prefix == "RIS1":
+            ref_point = (-82.0, -78.8)
+        
+        elif data_prefix == 'EIS':
+            ref_point = (-76.32, -76.75)
+        
+        else:
+            raise ValueError()
+
+        return ref_point
+ 
+    def read_ref_point_data_in_up_disp(self, project, data_folder, prefix, test_id, ref_point):
+
+        file_name_dict = {}
+
+        file_name_dict['M2_up_disp_amp'] = 'M2_up_displacement_amplitude'
+        file_name_dict['N2_up_disp_amp'] = 'N2_up_displacement_amplitude'
+        file_name_dict['O1_up_disp_amp'] = 'O1_up_displacement_amplitude'
+
+        file_name_dict['M2_up_disp_phase'] = 'M2_up_displacement_phase'
+        file_name_dict['N2_up_disp_phase'] = 'N2_up_displacement_phase'
+        file_name_dict['O1_up_disp_phase'] = 'O1_up_displacement_phase'
+
+        data_dict = {}
+        for data_name in file_name_dict.keys(): 
+
+            file_name = os.path.join(data_folder, str(test_id), str(test_id) + '_' + prefix + '_' + file_name_dict[data_name]+ '.xyz')
+    
+            winsize = (3,3)
+            point_data = self.read_point_data_from_xyz(ref_point, file_name, project, winsize=winsize)
+
+            data_dict[data_name] = point_data
+
+        return data_dict
 
 ######################
 def main():

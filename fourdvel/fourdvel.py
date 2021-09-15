@@ -4033,7 +4033,7 @@ class fourdvel(basics):
         # Up component
 
         # O1 Up amp.
-        elif quant_name == 'O1_up_displacement_amplitude':
+        elif quant_name in ['O1_up_displacement_amplitude', 'O1_up_displacement_amplitude_norm']:
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'O1':
@@ -4104,7 +4104,7 @@ class fourdvel(basics):
 
 
         # M2 Up amplitude.
-        elif quant_name == 'M2_up_displacement_amplitude':
+        elif quant_name in ['M2_up_displacement_amplitude', 'M2_up_displacement_amplitude_norm']:
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'M2':
@@ -4188,7 +4188,7 @@ class fourdvel(basics):
                 quant = np.sqrt(quant)
 
         # N2 Up amplitude.
-        elif quant_name == 'N2_up_displacement_amplitude':
+        elif quant_name in ['N2_up_displacement_amplitude', 'N2_up_displacement_amplitude_norm']:
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'N2':
@@ -4269,7 +4269,7 @@ class fourdvel(basics):
 
 
         # Q1 Up amplitude.
-        elif quant_name == 'Q1_up_displacement_amplitude':
+        elif quant_name in ['Q1_up_displacement_amplitude', 'Q1_up_displacement_amplitude_norm']:
             k = 0
             for tide_name in modeling_tides:
                 if tide_name == 'Q1':

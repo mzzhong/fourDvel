@@ -714,7 +714,11 @@ class output(fourdvel):
                         'O1_up_displacement_phase',
                         'N2_up_displacement_amplitude',
                         'N2_up_displacement_phase',
- 
+
+                        'M2_up_displacement_amplitude_norm',
+                        'O1_up_displacement_amplitude_norm',
+                        'N2_up_displacement_amplitude_norm',
+
                         # Msf
                         "Msf_horizontal_displacement_group",
                         "Msf_up_displacement_amplitude",
@@ -1139,11 +1143,7 @@ class output(fourdvel):
 
         # cross-flow phase
         elif self.proj == 'Evans' and state == 'est' and quant_name == "Msf_cross_flow_displacement_phase":
-
-
-            #print(hasattr(self, 'saved_points_for_evans_est_Msf_along_flow_disp_phase'))
-            #print(state)
-            #print(quant_name)
+            
             if hasattr(self, 'saved_points_for_evans_est_Msf_along_flow_disp_phase'):
                 processed_grid_set_quant = {}
                 for point in self.saved_points_for_evans_est_Msf_along_flow_disp_phase:
@@ -1153,6 +1153,7 @@ class output(fourdvel):
 
         # msf alf speed / secular speed
         elif self.proj == 'Evans' and state == 'est' and quant_name in ["Msf_alf_speed_div_secular_speed", "Msf_crf_speed_div_secular_speed"]:
+            
             if hasattr(self, 'saved_points_for_evans_est_Msf_along_flow_disp_phase'):
                 processed_grid_set_quant = {}
                 for point in self.saved_points_for_evans_est_Msf_along_flow_disp_phase:
@@ -1160,8 +1161,44 @@ class output(fourdvel):
             else:
                 processed_grid_set_quant = grid_set_quant_orig
 
+
+        # Normalized M2, N2 and O1 amplitude
+        elif state == 'est' and quant_name.endswith('up_displacement_amplitude_norm'):
+
+            # Read in the values at the reference point
+
+            # Get the ref point
+            if self.proj == 'Rutford':
+                data_prefix = 'RIS1'
+                ref_point = self.get_ref_point(data_prefix)
+
+            elif self.proj == 'Evans':
+                data_prefix = 'EIS'
+                ref_point = self.get_ref_point(data_prefix)
+
+            else:
+                raise ValueError()
+
+            #print('ref_point: ', ref_point)
+            #print(quant_name)
+
+            # Get the filename
+            file_name = os.path.join(self.estimation_dir, str(self.test_id) + '_est_' + quant_name[:-5] + '.xyz')
+
+            #print(file_name)
+
+            # Get the winsize
+            winsize = (11,11)
+
+            ref_value = self.read_point_data_from_xyz(ref_point, file_name, self.proj, winsize = winsize)
+
+            processed_grid_set_quant = {}
+            for point in grid_set_quant_orig:
+                processed_grid_set_quant[point] = grid_set_quant_orig[point]/ref_value
+
         # no processing
         else:
+
             processed_grid_set_quant = grid_set_quant_orig
 
         return processed_grid_set_quant
@@ -1197,8 +1234,6 @@ def main(iargs=None):
         # First output others
         if out.output_others:
             out.run_output_others()
-
-        #return 0 
 
         # Then output estimations
         output_states = []
