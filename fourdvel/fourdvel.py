@@ -693,6 +693,7 @@ class fourdvel(basics):
 
         num_products = 0
         num_frames = 0
+        
         with open(data_file) as dataset:
             csv_reader = csv.reader(dataset, delimiter=';')
             line = 0
