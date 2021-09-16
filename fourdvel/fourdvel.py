@@ -1713,6 +1713,7 @@ class fourdvel(basics):
 
         track_timefraction = self.track_timefraction
 
+        data_info_list = []
         offsetfields = []
 
         for it in range(len(tracks)):
@@ -1746,9 +1747,11 @@ class fourdvel(basics):
                 for d2 in dates:
                     if d1<d2 and (d2-d1).days<=max_delta:
                         #print(d1,d2)
+                        data_info_list.append((sate, track_num))
+
                         offsetfields.append([d1,d2,vec1,vec2,t_frac])
 
-        return offsetfields
+        return data_info_list, offsetfields
 
     def build_G_set(self, point_set, offsetfields_set):
         

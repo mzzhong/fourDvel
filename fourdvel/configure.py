@@ -304,19 +304,23 @@ class configure(fourdvel):
                     this_sate_tracks = [track for track in tracks_set[point] if track[3] == sate_name]
 
                     # Create all offsetfields
-                    offsetfields_set[point] = self.tracks_to_full_offsetfields(this_sate_tracks)
+                    # Only offsetfields_set is needed to generate the synthetic data
+                    data_info_set[point], offsetfields_set[point] = self.tracks_to_full_offsetfields(this_sate_tracks)
                     
                     # Not available
                     offsets_set[point] = "data_mode is 1"
     
                     # Not avaiable, because all tracks are derived at once
-                    data_info_set[point] = "data_mode is 1"
+                    #data_info_set[point] = "data_mode is 1"
 
-                    # Set height to 0
-                    height_set[point].append(0)
+                    # Set height to np.nan, for each track
+                    for sate_track in this_sate_tracks:
+                        height_set[point].append(np.nan)
 
-                    # Set dem factor to be 0
-                    demfactor_set[point].append(0)
+                    # Set dem factor to be None
+                    # should be demfactor[(sate_name, track_num)] = value
+                    for data_info in data_info_set[point]:
+                        demfactor_set[point][data_info] = np.nan
     
                 # Synthetic data.
                 fourD_sim = self.fourD_sim
@@ -387,7 +391,6 @@ class configure(fourdvel):
                 for point in point_set:
                     demfactor_set[point] = {}
                     max_num_of_offsets_set[point] = 0
-
 
                 # Default value, because data_mode(3) doesn't have true_tide_vec_set
                 true_tide_vec_set = {}
@@ -511,6 +514,7 @@ class configure(fourdvel):
                 ### End of extraction for data_mode 2 and data_mode 3 ###
 
                 # For data_mode 2, generate synthetic data
+                # Only offsetfields_set is needed
                 if this_data_mode == 2:
                     # Synthetic data.
                     fourD_sim = self.fourD_sim
