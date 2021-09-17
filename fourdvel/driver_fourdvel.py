@@ -305,8 +305,8 @@ class driver_fourdvel():
             # Chop into multiple threads. 
             #nthreads = 10
             #nthreads = 8
-            nthreads = 6
-            #nthreads = 5
+            #nthreads = 6
+            nthreads = 5
             #nthreads = 4
             #nthreads = 1
             self.nthreads = nthreads
