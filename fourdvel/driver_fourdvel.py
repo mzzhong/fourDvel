@@ -36,6 +36,10 @@ def createParser():
     parser.add_argument('-p','--param_file', dest='param_file',type=str,help='parameter file',required=True)
 
     parser.add_argument('-t','--task_name',dest='task_name',type=str, help='task name', required=True)
+    
+    parser.add_argument('-n','--nthreads',dest='nthreads',type=int, help='number of threads', required=False, default=None)
+    
+    parser.add_argument('-m','--mode',dest='mode',type=str, help='mode (calc or load)', required=False, default='calc')
 
     return parser
 
@@ -48,6 +52,8 @@ class driver_fourdvel():
 
         self.param_file = inps.param_file
         self.task_name = inps.task_name
+        self.nthreads = inps.nthreads
+        self.mode = inps.mode
 
         self.estimate_tasks = ["do_nothing", "tides_1", "tides_2", "tides_3", "tides_4", "tides_5"]
 
@@ -145,6 +151,24 @@ class driver_fourdvel():
             # Work on a particular tile.
             lon, lat = tile
 
+
+            # Set the name of the pklfile to save to the disk
+            point_result_folder = self.estimation_dir + '/point_result'
+        
+            point_name = str(lon) + '_' + str(lat)
+
+            point_result_pklname = point_result_folder + "/" + point_name + ".pkl"
+
+            # If this one is calculated then skip it
+            if os.path.exists(point_result_pklname):
+                print(point_result_pklname, "is already calculated")
+                continue
+            else:
+                print(point_result_pklname, "is waiting for calculation")
+                #continue
+
+            #continue
+ 
             ############################################################################
             # (1) Run all in serial. # (2) Only run the test point tile
 
@@ -225,12 +249,8 @@ class driver_fourdvel():
                         if (use_threading and task_name in ["tides_1", "tides_3"] and tasks.inversion_method == 'Bayesian_Linear') or \
                             (use_threading and task_name in ["tides_2"] and tasks.inversion_method == "Nonlinear_Optimization"):
         
-                            # Save the results to disk
-                            point_result_folder = self.estimation_dir + '/point_result'
-        
-                            point_name = str(lon) + '_' + str(lat)
-        
-                            with open(point_result_folder + "/" + point_name + ".pkl","wb") as f:
+       
+                            with open(point_result_pklname, "wb") as f:
                                 pickle.dump(all_sets, f)
     
                             # Say that this tile is record
@@ -294,7 +314,12 @@ class driver_fourdvel():
         tile_set = tasks.tile_set
 
         # Count the number of tiles
-        do_calculation = True
+        if self.mode == 'calc':
+            do_calculation = True
+        elif self.mode == 'load':
+            do_calculation = False
+        else:
+            raise ValueError()
 
         if do_calculation:
 
@@ -302,14 +327,19 @@ class driver_fourdvel():
             n_tiles = len(tile_set.keys())
             print('Total number of tiles: ', n_tiles)
     
-            # Chop into multiple threads. 
-            #nthreads = 10
-            #nthreads = 8
-            #nthreads = 6
-            nthreads = 5
-            #nthreads = 4
-            #nthreads = 1
-            self.nthreads = nthreads
+            # Chop into multiple threads.
+            if self.nthreads is None:
+                #nthreads = 10
+                #nthreads = 8
+                #nthreads = 6
+                nthreads = 5
+                #nthreads = 4
+                #nthreads = 1
+
+            else:
+                nthreads = self.nthreads
+
+ 
             total_number = n_tiles
     
             # Only calculate the first half
@@ -329,44 +359,66 @@ class driver_fourdvel():
             print('nthreads: ', nthreads)
             print("full divide: ", divide)
     
-            # Multithreading starts here.
-            # The function to run every chunk.
-            func = self.driver_serial_tile
-    
-            # Setup the array.
-            manager = multiprocessing.Manager()
-            
-            all_grid_sets = {}
-            ## estimate_tasks
-            all_grid_sets['grid_set_true_tide_vec'] = manager.dict()
-            all_grid_sets['grid_set_tide_vec'] = manager.dict()
-            all_grid_sets['grid_set_tide_vec_uq'] = manager.dict()
-            all_grid_sets['grid_set_resid_of_secular'] = manager.dict()
-            all_grid_sets['grid_set_resid_of_tides'] = manager.dict()
-            all_grid_sets['grid_set_others'] = manager.dict()
-            all_grid_sets['grid_set_residual_analysis'] = manager.dict()
+            if nthreads > 1:
 
-            ## analysis_tasks
-            all_grid_sets['grid_set_analysis'] = manager.dict()
+                # Multithreading starts here.
+                # The function to run every chunk.
+                func = self.driver_serial_tile
+        
+                # Setup the array.
+                manager = multiprocessing.Manager()
+                
+                all_grid_sets = {}
+                ## estimate_tasks
+                all_grid_sets['grid_set_true_tide_vec'] = manager.dict()
+                all_grid_sets['grid_set_tide_vec'] = manager.dict()
+                all_grid_sets['grid_set_tide_vec_uq'] = manager.dict()
+                all_grid_sets['grid_set_resid_of_secular'] = manager.dict()
+                all_grid_sets['grid_set_resid_of_tides'] = manager.dict()
+                all_grid_sets['grid_set_others'] = manager.dict()
+                all_grid_sets['grid_set_residual_analysis'] = manager.dict()
     
-            jobs=[]
-            for ip in range(nthreads):
+                ## analysis_tasks
+                all_grid_sets['grid_set_analysis'] = manager.dict()
+    
+                jobs=[]
+                for ip in range(nthreads):
+                    start_tile = divide[ip]
+                    stop_tile = divide[ip+1]
+        
+                    # Use contiguous chunks
+                    p=multiprocessing.Process(target=func, args=(start_tile, stop_tile, True,
+                                                            all_grid_sets, ip))
+        
+                    # Based on modulus
+                    #p=multiprocessing.Process(target=func, args=(0, n_tiles, True,
+                    #                                        all_grid_sets, ip))
+        
+                    jobs.append(p)
+                    p.start()
+        
+                for ip in range(nthreads):
+                    jobs[ip].join()
+
+            else:
+                all_grid_sets = {}
+                ## estimate_tasks
+                all_grid_sets['grid_set_true_tide_vec'] = {}
+                all_grid_sets['grid_set_tide_vec'] = {}
+                all_grid_sets['grid_set_tide_vec_uq'] = {}
+                all_grid_sets['grid_set_resid_of_secular'] = {}
+                all_grid_sets['grid_set_resid_of_tides'] = {}
+                all_grid_sets['grid_set_others'] = {}
+                all_grid_sets['grid_set_residual_analysis'] = {}
+    
+                ## analysis_tasks
+                all_grid_sets['grid_set_analysis'] = {}
+
+                ip = 0
                 start_tile = divide[ip]
                 stop_tile = divide[ip+1]
-    
-                # Use contiguous chunks
-                p=multiprocessing.Process(target=func, args=(start_tile, stop_tile, True,
-                                                        all_grid_sets, ip))
-    
-                # Based on modulus
-                #p=multiprocessing.Process(target=func, args=(0, n_tiles, True,
-                #                                        all_grid_sets, ip))
-    
-                jobs.append(p)
-                p.start()
-    
-            for ip in range(nthreads):
-                jobs[ip].join()
+ 
+                self.driver_serial_tile(start_tile, stop_tile, True, all_grid_sets, ip)
 
             # Convert the results to normal dictionary.
             # Save the results to the class.

@@ -1528,16 +1528,33 @@ class fourdvel(basics):
 
                 # ad hoc, 2020.01.02
                 special_case = False
-                if self.proj == "Evans" and track_num == 12 and special_case:
-                    track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), "v13"])) +  ".pkl")
 
-                elif self.proj == "Evans":
-                    track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), self.csk_version])) +  ".pkl")
+                dtype = 'float32'
+                dtype = 'float16'
+                if dtype == 'float32':
+                    if self.proj == "Evans" and track_num == 12 and special_case:
+                        track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), "v13"])) +  ".pkl")
+    
+                    elif self.proj == "Evans":
+                        track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), self.csk_version])) +  ".pkl")
+    
+                    elif self.proj == "Rutford":
+                        track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), self.csk_version])) +  ".pkl")
+                    else:
+                        raise Exception()
 
-                elif self.proj == "Rutford":
-                    track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), self.csk_version])) +  ".pkl")
+                elif dtype == 'float16':
+
+                    if self.proj == "Evans":
+                        track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), self.csk_version])) +  "_float16.pkl")
+    
+                    elif self.proj == "Rutford":
+                        track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), self.csk_version])) +  "_float16.pkl")
+                    else:
+                        raise Exception()
+
                 else:
-                    raise Exception()
+                    raise ValueError()
 
                 if os.path.exists(track_offsetFieldStack_pkl):
                     print("Loading: ", track_offsetFieldStack_pkl)

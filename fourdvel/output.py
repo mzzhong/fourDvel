@@ -715,9 +715,9 @@ class output(fourdvel):
                         'N2_up_displacement_amplitude',
                         'N2_up_displacement_phase',
 
-                        'M2_up_displacement_amplitude_norm',
-                        'O1_up_displacement_amplitude_norm',
-                        'N2_up_displacement_amplitude_norm',
+                        #'M2_up_displacement_amplitude_norm',
+                        #'O1_up_displacement_amplitude_norm',
+                        #'N2_up_displacement_amplitude_norm',
 
                         # Msf
                         "Msf_horizontal_displacement_group",
@@ -1256,7 +1256,8 @@ def main(iargs=None):
             if out.proj=="Evans":
                 # Evans
                 #out.run_output_difference(compare_id=620, compare_prefix='true')
-                out.run_output_difference(compare_id=20211514, compare_prefix='true')
+                #out.run_output_difference(compare_id=20211514, compare_prefix='true')
+                out.run_output_difference(compare_id=20211525, compare_prefix='true')
 
             elif out.proj == "Rutford":
                 # Rutford
