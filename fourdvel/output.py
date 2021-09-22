@@ -25,7 +25,7 @@ def createParser():
     parser.add_argument('-t','--task_name', dest='task_name', type=str, help='task_name', required=True)
 
     # This is for further narrow down the output quantity
-    parser.add_argument('--output_name', dest='output_name', type=str, help='output_name', default=None)
+    parser.add_argument('--output_names', dest='output_names', type=str, help='output_names e.g., true,est', default=None)
 
     parser.add_argument('-q','--quant_list_name', dest='quant_list_name', type=str, help='quant_list_name', default=None)
 
@@ -54,7 +54,7 @@ class output(fourdvel):
 
         self.output_mode = inps.output_mode
 
-        self.output_name = inps.output_name
+        self.output_names = inps.output_names
 
         self.quant_list_name = inps.quant_list_name
 
@@ -318,12 +318,12 @@ class output(fourdvel):
                             if self.proj == 'Rutford' and optimal_grounding_level <= -2.8:
                                 continue
 
-                            if self.proj == 'Evans' and optimal_grounding_level <= -3.0:
+                            if self.proj == 'Evans' and optimal_grounding_level <= -2.0:
                                 continue
 
                             #gl_ci_thres = 100
-                            #gl_ci_thres = 0.5
-                            gl_ci_thres = 1.0
+                            gl_ci_thres = 0.5
+                            #gl_ci_thres = 1.0
                             #gl_ci_thres = 1.5
                             
                             # Remove based obtained credible level
@@ -545,6 +545,7 @@ class output(fourdvel):
                     continue
  
                 grid_set_quant[point] = est_grid_set_quant.get(point,np.nan) - true_grid_set_quant.get(point,np.nan)
+
 
             # Write to xyz file.
             xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + 'others' + '_' + quant_name + '.xyz')
@@ -1215,8 +1216,8 @@ def main(iargs=None):
     # output estimation
     if out.output_mode == 'estimation':
 
-        # If output_name is provided, we need to override the default output names
-        if out.output_name is not None:
+        # If output_names is provided, we need to override the default output names
+        if out.output_names is not None:
             # override the settings from param file
             out.output_true = False
             out.output_est = False
@@ -1225,9 +1226,10 @@ def main(iargs=None):
             out.output_difference = False
             out.output_analysis = False
             out.output_others = False
-    
-            # Set this output name to be True
-            setattr(out, 'output_' + out.output_name, True)
+
+            for output_name in out.output_names.split(','):
+                # Set this output name to be True
+                setattr(out, 'output_' + output_name, True)
 
         ### Prepare the outout ###
         # Start to output

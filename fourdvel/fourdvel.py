@@ -1514,6 +1514,10 @@ class fourdvel(basics):
         print("necessary tracks: ", track_num_set)
         print(self.use_csk)
 
+        # 2021.09.21
+        #dtype = 'float32'
+        dtype = 'float16'
+
         if self.use_csk:
             for track_num in self.csk_tracks:
                 if track_num_set and not (track_num,"csk") in track_num_set:
@@ -1529,8 +1533,6 @@ class fourdvel(basics):
                 # ad hoc, 2020.01.02
                 special_case = False
 
-                dtype = 'float32'
-                dtype = 'float16'
                 if dtype == 'float32':
                     if self.proj == "Evans" and track_num == 12 and special_case:
                         track_offsetFieldStack_pkl = os.path.join(self.csk_workdir, "track_" + str(track_num).zfill(3) + '_0', "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.csk_id), "v13"])) +  ".pkl")
@@ -1577,7 +1579,13 @@ class fourdvel(basics):
                     print("s1 data mode is 1, skip loading offset field stack")
                     continue
 
-                track_offsetFieldStack_pkl = os.path.join(self.s1_workdir, "track_" + str(track_num), "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.s1_id), self.s1_version])) + ".pkl")
+                if dtype=='float32':
+                    track_offsetFieldStack_pkl = os.path.join(self.s1_workdir, "track_" + str(track_num), "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.s1_id), self.s1_version])) + ".pkl")
+                
+                elif dtype == 'float16':
+                    track_offsetFieldStack_pkl = os.path.join(self.s1_workdir, "track_" + str(track_num), "cuDenseOffsets", "_".join(filter(None, ["offsetFieldStack", str(self.s1_id), self.s1_version])) + "_float16.pkl")
+                else:
+                    raise ValueError()
 
                 if os.path.exists(track_offsetFieldStack_pkl):
                     print("Loading: ", track_offsetFieldStack_pkl)
@@ -3692,6 +3700,12 @@ class fourdvel(basics):
                                 phase_crf_in_deg = np.nan
                         
                         else:
+                            phase_crf = np.nan
+                            phase_crf_in_deg = np.nan
+
+
+                        # Enforced: The input phase for cross flow is not defined
+                        if state == 'true':
                             phase_crf = np.nan
                             phase_crf_in_deg = np.nan
 

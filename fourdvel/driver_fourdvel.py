@@ -40,6 +40,10 @@ def createParser():
     parser.add_argument('-n','--nthreads',dest='nthreads',type=int, help='number of threads', required=False, default=None)
     
     parser.add_argument('-m','--mode',dest='mode',type=str, help='mode (calc or load)', required=False, default='calc')
+    
+    parser.add_argument('-f','--tile_fraction',dest='tile_fraction',type=str, help='the fraction of tile to calculate(e.g., 3,1), default: 1,0', required=False, default='1,0')
+    
+    parser.add_argument('-u','--update',dest='update', type=bool, help='update (overriding) the existing result (point result), default: True', required=False, default=True)
 
     return parser
 
@@ -54,6 +58,9 @@ class driver_fourdvel():
         self.task_name = inps.task_name
         self.nthreads = inps.nthreads
         self.mode = inps.mode
+        self.tile_fraction = [int(i) for i in inps.tile_fraction.split(',')]
+
+        self.update = inps.update
 
         self.estimate_tasks = ["do_nothing", "tides_1", "tides_2", "tides_3", "tides_4", "tides_5"]
 
@@ -160,8 +167,8 @@ class driver_fourdvel():
             point_result_pklname = point_result_folder + "/" + point_name + ".pkl"
 
             # If this one is calculated then skip it
-            if os.path.exists(point_result_pklname):
-                print(point_result_pklname, "is already calculated")
+            if os.path.exists(point_result_pklname) and self.update == False:
+                print(point_result_pklname, "is already calculated and update mode is turend off. Skip")
                 continue
             else:
                 print(point_result_pklname, "is waiting for calculation")
@@ -174,6 +181,9 @@ class driver_fourdvel():
 
             if (count_tile >= start_tile) and (count_tile < stop_tile):
 
+
+
+            # Deprecated
             #if ((count_tile >= start_tile) and (count_tile < stop_tile) and (test_point is None)):
         
             #if (count_tile >= start_tile and count_tile < stop_tile and count_tile % 2 == 1):
@@ -221,6 +231,14 @@ class driver_fourdvel():
                 # Check if the point_set is in the bbox
                 if not self.tasks.check_point_set_with_requirements(point_set, kind='bbox', bbox=self.tasks.bbox):
                     print("This point set is not in bbox: ", lon, lat)
+                    skip_this_tile = True
+
+
+                # Check if this tile satisfies the portion requirement
+                # default n%1 != 0 is always False, then do not skip
+                # e.g., if n%3 != 1 skip. Then only for n=1,4,7,10: n%3 != 1 case is False, and skip is not turned on and they are calculated
+                if count_tile % self.tile_fraction[0] != self.tile_fraction[1]:
+                    print("This point set is not in the requested fraction: ", lon, lat)
                     skip_this_tile = True
 
                 ## Find tracks_set from point_set
