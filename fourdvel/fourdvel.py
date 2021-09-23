@@ -208,6 +208,9 @@ class fourdvel(basics):
         # resid topo
         self.est_topo_resid = False
 
+        # est secular variation
+        self.est_secular_variation = False
+
         # options to skip some point sets
         self.point_set_check_kind = None
 
@@ -543,7 +546,16 @@ class fourdvel(basics):
                     self.est_topo_resid = True
                 else:
                     self.est_topo_resid = False
+
                 print('est_topo_resid: ', value)
+
+            ## Secular variation
+            if name == 'est_secular_variation':
+                if value == 'True':
+                    self.est_secular_variation = True
+                else:
+                    self.est_secular_variation = False
+                print('est_secular_variation: ', value)
 
             ## Analysis ##
             if name == 'analysis_name':
@@ -1976,6 +1988,76 @@ class fourdvel(basics):
         return G
         # End of modifying G.
 
+    def modify_G_for_secular_variation_set(self, point_set, G_set, offsetfields_set, data_info_set):
+
+        for point in point_set:
+
+            #if point != self.test_point:
+            #    continue
+            
+            G = G_set[point]
+
+            offsetfields = offsetfields_set[point]
+
+            data_info = data_info_set[point]
+
+            G_set[point] = self.modify_G_for_secular_variation(point=point, G=G, offsetfields=offsetfields)
+
+        return G_set
+
+    def modify_G_for_secular_variation(self, point, G, offsetfields):
+
+        # Control the number of offsetfields
+        n_offsets = len(offsetfields)
+
+        # Important: accounting for the no offsetfield scenario
+        if n_offsets ==0:
+            G = np.zeros(shape=(1,1)) + np.nan
+            return G 
+
+        # Find delta_td_2
+        delta_td_2 = np.zeros(shape=(n_offsets,))
+        
+        for i in range(n_offsets):
+
+            delta_td = (offsetfields[i][1] - offsetfields[i][0]).days
+
+            # t^2
+            delta_td_2[i] = delta_td**2
+
+        ## Modify the G matrix
+        # Find the shape of G
+        n_rows, n_cols = G.shape
+        #print("n_rows, n_cols: ", n_rows, n_cols)
+
+        # Add three columns to model secular variation
+        G = np.hstack((G, np.zeros(shape=(n_rows,3))))
+
+        # Iterate over offsetfields
+        for i in range(n_offsets):
+
+            # Find the observation vector (los, azi) refering to "create_grid_set"
+            vecs = [offsetfields[i][2],offsetfields[i][3]]
+
+            # Two observation vectors, LOS and AZI
+            for j in range(2):
+
+                # Get the vector (represent E,N,U)
+                vector = np.asarray(vecs[j])
+
+                # Secular variation component, the last three columns. 
+                # A vector multiplies a scalar. Put it in into G.
+                G[i*2+j,-3:] = vector * delta_td_2[i]
+
+        #print(n_offsets)
+        #print(i)
+        #print(G)
+        #print(G.shape)
+        #print(stop)
+
+        return G
+        # End of modifying G for secular variation.
+
     def modify_G_set(self, point_set, G_set, offsetfields_set, up_disp_set, grounding_level, gl_name):
 
         # Extract the stack of up displacement from the tide model
@@ -2418,6 +2500,9 @@ class fourdvel(basics):
         # For tides_3, add one param for up_disp scale
         if self.task_name == "tides_3":
             num_params +=1
+
+        if self.est_secular_variation:
+            num_params +=3
 
         # If est topo resid (the last one)
         if self.est_topo_resid:
@@ -3315,7 +3400,7 @@ class fourdvel(basics):
         #print(point, len(data_vec))
 
         # Set the output to be nan, if quantity name does not exist.
-        extra_list = ['up_amplitude_scaling', 'topo_resid']
+        extra_list = ['up_amplitude_scaling', 'topo_resid', 'secular_east_velocity_variation', 'secular_north_velocity_variation', 'secular_up_velocity_variation']
         item_name = quant_name.split('_')[0]
         if (not item_name == 'secular') and (not item_name in modeling_tides) and (not quant_name in extra_list):
             quant = np.nan
@@ -4395,10 +4480,47 @@ class fourdvel(basics):
             if state in ['est', 'uq']:
                 assert len(data_vec)>= 3 + self.n_modeling_tides*6 + 1, print("length of param_uq_vec has problem for topo resid ", len(data_vec))
 
-            # For now, the last index is topo_resid
+            # I use the last index as topo resid
             ind = -1
 
             # TODO, Need to import true topo resid
+            if state in ['true']:
+                quant = 0.0
+            elif state in ['est']:
+                quant = data_vec[ind]
+            elif state in ['uq']:
+                quant = data_vec[ind]
+            else:
+                raise ValueError()
+
+            if state == 'uq':
+                quant = np.sqrt(quant)
+
+        elif quant_name in ["secular_east_velocity_variation", "secular_north_velocity_variation", "secular_up_velocity_variation"]:
+            
+            if state in ['est', 'uq']:
+                assert len(data_vec)>= 3 + self.n_modeling_tides*6 + 3, print("length of param_uq_vec has problem for secular variation ", len(data_vec))
+
+            # I use the last index as topo resid, find the index of secular variation accordingly
+            if self.topo_resid:
+                ind_east = -4
+                ind_north = -3
+                ind_up = -2
+            else:
+                ind_east = -3
+                ind_north = -2
+                ind_up = -1
+
+            if quant_name == 'secular_east_velocity_variation':
+                ind = ind_east
+            elif quant_name == 'secular_north_velocity_variation':
+                ind = ind_north
+            elif quant_name == 'secular_up_velocity_variation':
+                ind = ind_up
+            else:
+                raise ValueError()
+
+            # TODO, Need to import true secular variation
             if state in ['true']:
                 quant = 0.0
             elif state in ['est']:

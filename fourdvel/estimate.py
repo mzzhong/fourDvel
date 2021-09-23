@@ -562,10 +562,19 @@ class estimate(configure):
                     linear_design_mat_set = self.modify_G_set(point_set, linear_design_mat_set, offsetfields_set, up_disp_set, grounding_level = given_grounding_level, gl_name = gl_name)
                     print("Modified matrix (obs) set for tide_3 mode is Done. Matrix shape ", linear_design_mat_set[self.test_point].shape)
 
+                # If invert for secular variation, add three column for G
+                if self.est_topo_secular_variation:
+                    linear_design_mat_set = self.modify_G_for_secular_variation_set(point_set, linear_design_mat_set, offsetfields_set, data_info_set)
+                    print("Modified matrix (obs) set for secular variation is Done. Matrix shape ", linear_design_mat_set[self.test_point].shape)
+
                 # If invert for topographic residual, add another column for G
                 if self.est_topo_resid:
                     linear_design_mat_set = self.modify_G_for_topo_resid_set(point_set, linear_design_mat_set, offsetfields_set, data_info_set, demfactor_set)
                     print("Modified matrix (obs) set for topo resid is Done. Matrix shape ", linear_design_mat_set[self.test_point].shape)
+
+
+                ## The order of making modification is required. 1. tides_3 change 2. secular variation 3. topo resid
+                ##########################################################################################################
 
                 # Model prior.
                 invCm_set = self.model_prior_set(point_set)
