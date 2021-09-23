@@ -140,8 +140,8 @@ class estimate(configure):
 
                 # Set the mode for running
 
-                tides_3_mode = "find_optimal_gl"
-                #tides_3_mode = "invert_optimal_gl"
+                #tides_3_mode = "find_optimal_gl"
+                tides_3_mode = "invert_optimal_gl"
 
                 gl_option = 'auto'
                 #gl_option = 'manual'

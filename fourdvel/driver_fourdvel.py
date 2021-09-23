@@ -43,7 +43,7 @@ def createParser():
     
     parser.add_argument('-f','--tile_fraction',dest='tile_fraction',type=str, help='the fraction of tile to calculate(e.g., 3,1), default: 1,0', required=False, default='1,0')
     
-    parser.add_argument('-u','--update',dest='update', type=bool, help='update (overriding) the existing result (point result), default: True', required=False, default=True)
+    parser.add_argument('--no_update',dest='update', help='update (overriding) the existing result (point result), default: True', required=False, action='store_false')
 
     return parser
 
@@ -61,6 +61,8 @@ class driver_fourdvel():
         self.tile_fraction = [int(i) for i in inps.tile_fraction.split(',')]
 
         self.update = inps.update
+        print('Update results: ', self.update)
+        #print(stop)
 
         self.estimate_tasks = ["do_nothing", "tides_1", "tides_2", "tides_3", "tides_4", "tides_5"]
 

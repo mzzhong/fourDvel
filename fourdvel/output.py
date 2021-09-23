@@ -318,7 +318,7 @@ class output(fourdvel):
                             if self.proj == 'Rutford' and optimal_grounding_level <= -2.8:
                                 continue
 
-                            if self.proj == 'Evans' and optimal_grounding_level <= -2.0:
+                            if self.proj == 'Evans' and optimal_grounding_level <= -3.0:
                                 continue
 
                             #gl_ci_thres = 100
