@@ -140,8 +140,8 @@ class estimate(configure):
 
                 # Set the mode for running
 
-                #tides_3_mode = "find_optimal_gl"
-                tides_3_mode = "invert_optimal_gl"
+                tides_3_mode = "find_optimal_gl"
+                #tides_3_mode = "invert_optimal_gl"
 
                 gl_option = 'auto'
                 #gl_option = 'manual'
@@ -563,7 +563,7 @@ class estimate(configure):
                     print("Modified matrix (obs) set for tide_3 mode is Done. Matrix shape ", linear_design_mat_set[self.test_point].shape)
 
                 # If invert for secular variation, add three column for G
-                if self.est_topo_secular_variation:
+                if self.est_secular_variation:
                     linear_design_mat_set = self.modify_G_for_secular_variation_set(point_set, linear_design_mat_set, offsetfields_set, data_info_set)
                     print("Modified matrix (obs) set for secular variation is Done. Matrix shape ", linear_design_mat_set[self.test_point].shape)
 

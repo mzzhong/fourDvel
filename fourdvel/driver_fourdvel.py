@@ -128,7 +128,7 @@ class driver_fourdvel():
         # Get the basics
         self.estimation_dir = self.tasks.estimation_dir
 
-    def driver_serial_tile(self, start_tile=None, stop_tile=None, use_threading = False, all_grid_sets=None, threadId=None):
+    def driver_serial_tile(self, start_tile=None, stop_tile=None, use_threading = False, all_grid_sets=None, threadId=None, thread_to_tiles=None):
 
         task_name = self.task_name
         tasks = self.tasks
@@ -160,7 +160,6 @@ class driver_fourdvel():
             # Work on a particular tile.
             lon, lat = tile
 
-
             # Set the name of the pklfile to save to the disk
             point_result_folder = self.estimation_dir + '/point_result'
         
@@ -168,22 +167,12 @@ class driver_fourdvel():
 
             point_result_pklname = point_result_folder + "/" + point_name + ".pkl"
 
-            # If this one is calculated then skip it
-            if os.path.exists(point_result_pklname) and self.update == False:
-                print(point_result_pklname, "is already calculated and update mode is turend off. Skip")
-                continue
-            else:
-                print(point_result_pklname, "is waiting for calculation")
-                #continue
-
             #continue
  
             ############################################################################
             # (1) Run all in serial. # (2) Only run the test point tile
 
-            if (count_tile >= start_tile) and (count_tile < stop_tile):
-
-
+            if (thread_to_tiles is None and count_tile >= start_tile and count_tile < stop_tile) or (not thread_to_tiles is None and count_tile in thread_to_tiles):
 
             # Deprecated
             #if ((count_tile >= start_tile) and (count_tile < stop_tile) and (test_point is None)):
@@ -194,6 +183,15 @@ class driver_fourdvel():
             #if count_tile >= start_tile and count_tile < stop_tile and tile == self.float_lonlat_to_int5d((-83.0, -78.6)):
 
             ################################################################################
+
+                # If this one is calculated then skip it
+                if os.path.exists(point_result_pklname) and self.update == False:
+                    print(point_result_pklname, "is already calculated and update mode is turend off. Skip")
+                    continue
+                else:
+                    print(point_result_pklname, "is waiting for calculation")
+                    #continue
+
                 #print("Find the tile", tile)
                 #print('***  Start a new tile ***')
                 #self.print_int5d([lon, lat])
@@ -235,13 +233,14 @@ class driver_fourdvel():
                     print("This point set is not in bbox: ", lon, lat)
                     skip_this_tile = True
 
-
                 # Check if this tile satisfies the portion requirement
                 # default n%1 != 0 is always False, then do not skip
                 # e.g., if n%3 != 1 skip. Then only for n=1,4,7,10: n%3 != 1 case is False, and skip is not turned on and they are calculated
                 if count_tile % self.tile_fraction[0] != self.tile_fraction[1]:
                     print("This point set is not in the requested fraction: ", lon, lat)
                     skip_this_tile = True
+
+                print("Passed all check. Let's work on tile: ", point_name)
 
                 ## Find tracks_set from point_set
                 tracks_set = {}
@@ -378,6 +377,18 @@ class driver_fourdvel():
             print('total number: ', total_number)
             print('nthreads: ', nthreads)
             print("full divide: ", divide)
+
+
+            # Distribute the tiles onto different threads
+            thread_to_tiles = {}
+            for ip in range(nthreads):
+                thread_to_tiles[ip] = []
+
+            for it in range(n_tiles):
+                thread_to_tiles[it % nthreads].append(it)
+
+            print('thread to tiles: : ', thread_to_tiles)
+            #print(stop)
     
             if nthreads > 1:
 
@@ -408,7 +419,7 @@ class driver_fourdvel():
         
                     # Use contiguous chunks
                     p=multiprocessing.Process(target=func, args=(start_tile, stop_tile, True,
-                                                            all_grid_sets, ip))
+                                                            all_grid_sets, ip, thread_to_tiles[ip], ))
         
                     # Based on modulus
                     #p=multiprocessing.Process(target=func, args=(0, n_tiles, True,

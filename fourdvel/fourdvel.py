@@ -2053,6 +2053,8 @@ class fourdvel(basics):
         #print(i)
         #print(G)
         #print(G.shape)
+        #print(delta_td_2[0])
+        #print(G[0,:])
         #print(stop)
 
         return G
@@ -4502,7 +4504,7 @@ class fourdvel(basics):
                 assert len(data_vec)>= 3 + self.n_modeling_tides*6 + 3, print("length of param_uq_vec has problem for secular variation ", len(data_vec))
 
             # I use the last index as topo resid, find the index of secular variation accordingly
-            if self.topo_resid:
+            if self.est_topo_resid:
                 ind_east = -4
                 ind_north = -3
                 ind_up = -2

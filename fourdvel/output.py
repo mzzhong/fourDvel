@@ -716,10 +716,6 @@ class output(fourdvel):
                         'N2_up_displacement_amplitude',
                         'N2_up_displacement_phase',
 
-                        #'M2_up_displacement_amplitude_norm',
-                        #'O1_up_displacement_amplitude_norm',
-                        #'N2_up_displacement_amplitude_norm',
-
                         # Msf
                         "Msf_horizontal_displacement_group",
                         "Msf_up_displacement_amplitude",
@@ -744,6 +740,15 @@ class output(fourdvel):
                         'O1_horizontal_displacement_amplitude'
                         ]
 
+        #quant_list = [      'secular_east_velocity_variation',
+        #                    'secular_north_velocity_variation',
+        #                    'secular_up_velocity_variation']
+
+
+        if self.task_name == 'tides_1':
+            quant_list = quant_list + [ 'M2_up_displacement_amplitude_norm',
+                                        'O1_up_displacement_amplitude_norm',
+                                        'N2_up_displacement_amplitude_norm']
 
         if quant_list_name == "BM_2017":
             quant_list = [  'secular_horizontal_speed',
