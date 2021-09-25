@@ -25,7 +25,7 @@ def createParser():
     parser.add_argument('-t','--task_name', dest='task_name', type=str, help='task_name', required=True)
 
     # This is for further narrow down the output quantity
-    parser.add_argument('--output_names', dest='output_names', type=str, help='output_names e.g., true,est', default=None)
+    parser.add_argument('-o', '--output_names', dest='output_names', type=str, help='output_names e.g., true,est', default=None)
 
     parser.add_argument('-q','--quant_list_name', dest='quant_list_name', type=str, help='quant_list_name', default=None)
 
