@@ -143,8 +143,8 @@ class estimate(configure):
                 tides_3_mode = "find_optimal_gl"
                 #tides_3_mode = "invert_optimal_gl"
 
-                gl_option = 'auto'
-                #gl_option = 'manual'
+                #gl_option = 'auto'
+                gl_option = 'manual'
 
                 print("tides_3_mode: ", tides_3_mode)
 
@@ -201,8 +201,9 @@ class estimate(configure):
                 
                 elif gl_option == "manual":
 
-                    gl_list_option = 7
+                    #gl_list_option = 7
                     #gl_list_option = 8
+                    gl_list_option = 9
 
                     enum_grounding_level = None
 
@@ -248,6 +249,11 @@ class estimate(configure):
 
                     elif gl_list_option == 8:
                         enum_grounding_level = np.asarray([-3.00, -2.10, -1.60, -1.20, -0.90, -0.70, -0.60, -0.56, -0.53, -0.51, -0.5, -0.49, -0.47, -0.44, -0.40, -0.30, -0.10, 0.20, 0.60, 1.10, 1.70, 2.40, 3.00])
+
+                    elif gl_list_option == 9:
+                        enum_space = 0.1
+                        gl_low = -3.0
+                        gl_high = 0.0
  
                     if enum_grounding_level is None:
                         enum_grounding_level = np.arange(gl_low, gl_high+1e-6, enum_space)
@@ -667,7 +673,7 @@ class estimate(configure):
                 print("####")
 
                 # plot gl marginal dist at test point
-                plot_gl_dist = False
+                plot_gl_dist = True
 
                 if plot_gl_dist:
                     gls = []
@@ -698,8 +704,20 @@ class estimate(configure):
                     
                     ax.set_ylabel("probability density",fontsize=15)
                     ax.set_xlabel("grounding level",fontsize=15)
-                    fig.savefig("prob.png")
+                    fig.savefig(self.estimation_dir + "/prob_{}.png".format(self.test_point_str))
                     plt.close(1)
+
+                    # Save the results
+                    test_point_gl_dist_pkl = self.estimation_dir + '/dist_{}.pkl'.format(self.test_point_str)
+                    gl_dist = {}
+                    gl_dist['gls'] = gls
+                    gl_dist['gl_probs'] = gl_probs
+                    gl_dist['gl_ci'] = gl_ci
+                    gl_dist['alpha'] = 0.68
+                    gl_dist['lowest_tide'] = lowest_tide_height
+
+                    with open(test_point_gl_dist_pkl, 'wb') as f:
+                        pickle.dump(gl_dist, f)
 
                     print(stop)
 

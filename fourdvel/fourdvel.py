@@ -178,6 +178,10 @@ class fourdvel(basics):
             self.test_point = self.point_rounding(self.test_point)
             print("After rounding: ", self.test_point)
 
+            # Save the test point str after rounding
+            self.test_point_str = str(self.test_point[0]) + '_' + str(self.test_point[1])
+
+
         print("fourdvel initialization done")
 
     def read_parameters(self, param_file):
@@ -283,6 +287,7 @@ class fourdvel(basics):
                                 self.test_point = self.float_lonlat_to_int5d(the_point)
                                 print("Turn on single point mode")
                                 self.single_point_mode = True
+
                             except:
                                 continue
                     if self.test_point is None:
