@@ -318,13 +318,13 @@ class output(fourdvel):
                             if self.proj == 'Rutford' and optimal_grounding_level <= -2.8:
                                 continue
 
-                            if self.proj == 'Evans' and optimal_grounding_level <= -3.0:
-                                continue
+                            #if self.proj == 'Evans' and optimal_grounding_level <= -3.0:
+                            #    continue
 
                             #gl_ci_thres = 100
-                            gl_ci_thres = 0.5
+                            #gl_ci_thres = 0.5
                             #gl_ci_thres = 1.0
-                            #gl_ci_thres = 1.5
+                            gl_ci_thres = 1.5
                             
                             # Remove based obtained credible level
                             gl_ci = grid_set_gl_ci.get(point, np.nan)
@@ -947,6 +947,16 @@ class output(fourdvel):
     
                     ## Do phase correction with the mean phase of true model
                     do_correction_with_true = False
+
+
+                    # If S1 is not used. Remove wrong estimation where there is only one csk track
+                    for sub_quant_name in sub_quant_names:
+                        if self.proj == 'Evans' and self.s1_data_date_option == 'no_data':
+                            for point in grid_set_quant[sub_quant_name].keys():
+                                csk_tracks = [track_info[0] for track_info in self.grid_set[point] if track_info[3] == 'csk']
+                                # Need at least two track and cannot be both asc or desc
+                                if len(csk_tracks)<=1 or len(csk_tracks) == len([ i for i in csk_tracks if i<=10]) or len(csk_tracks) == len([i for i in csk_tracks if i>=11]):
+                                    grid_set_quant[sub_quant_name][point] = np.nan
     
                     for sub_quant_name in sub_quant_names:
                         if (state=='true' or state=='est') and 'phase' in sub_quant_name:
@@ -956,6 +966,8 @@ class output(fourdvel):
                                 # Need at least two track
                                 if len(self.grid_set[point])<=1:
                                     grid_set_quant[sub_quant_name][point] = np.nan
+
+
 
                             # Make a copy of the quant before phase correction
                             grid_set_quant_npc[(state, sub_quant_name)] = grid_set_quant[sub_quant_name].copy()

@@ -353,6 +353,52 @@ class simulation(fourdvel):
             #Mf 0.02596 -32.713
             #Mm 0.01606 11.603
 
+        if model_num == 101:
+            # Same as model 18 for horizontal components
+            # Use the params from CATS2008 for vertical motion at ref point RIS (-76.32, -76.75)
+            # Divide the amplitude and phase of Msf by 2
+            tidesRut_params['M2'] =    [0.0,     176.33,     118.369,     105.988]
+            tidesRut_params['S2'] =    [0.0,     154.53,     76.538,     -23.469]  
+            tidesRut_params['N2'] =    [0.0,        163,        19.739,       9.971]
+            tidesRut_params['K2'] =    [0.0,      160.31,     19.825,      159.217]
+
+
+            tidesRut_params['K1'] =    [0.0,     -147.35,    36.119,      18.359]
+            tidesRut_params['O1'] =    [0.0,     -143.32,    36.581,      126.542]
+            tidesRut_params['P1'] =    [0.0,     -176.12,    12.555,      8.048]
+            tidesRut_params['Q1'] =    [0.0,     -176.12,    8.235,       23.499]
+
+            tidesRut_params['Mf'] =    [0.0,     157.98,     2.596,       -32.713]
+            tidesRut_params['Msf'] =   [35.00 / 2,      260,        0.00,       0.00]
+
+            tidesRut_params['Mm'] =    [0.0,    -19.52,     1.606,        11.603]
+            tidesRut_params['Ssa'] =   [0.0,    -167.22,    0.00,        179]
+            tidesRut_params['Sa'] =    [0.0,    -163.61,    0.00,        179]
+
+
+        if model_num == 102:
+            # Same as model 18 for horizontal components
+            # Use the params from CATS2008 for vertical motion at ref point RIS (-76.32, -76.75)
+            # Divide the amplitude and phase of Msf by 2
+            tidesRut_params['M2'] =    [0.6826,     176.33,     118.369,     105.988]
+            tidesRut_params['S2'] =    [0.9567,     154.53,     76.538,     -23.469]  
+            tidesRut_params['N2'] =    [0.0,        163,        19.739,       9.971]
+            tidesRut_params['K2'] =    [0.817,      160.31,     19.825,      159.217]
+
+
+            tidesRut_params['K1'] =    [0.5008,     -147.35,    36.119,      18.359]
+            tidesRut_params['O1'] =    [0.6958,     -143.32,    36.581,      126.542]
+            tidesRut_params['P1'] =    [0.6325,     -176.12,    12.555,      8.048]
+            tidesRut_params['Q1'] =    [0.6325,     -176.12,    8.235,       23.499]
+
+            tidesRut_params['Mf'] =    [0.2,     157.98,     2.596,       -32.713]
+            tidesRut_params['Msf'] =   [35.00 / 2,      260,        0.00,       0.00]
+
+            tidesRut_params['Mm'] =    [13.2831,    -19.52,     1.606,        11.603]
+            tidesRut_params['Ssa'] =   [70.4744,    -167.22,    0.00,        179]
+            tidesRut_params['Sa'] =    [50.5497,    -163.61,    0.00,        179]
+
+
         ################# EIS model #############################################
  
         if model_num == 2:
@@ -1122,6 +1168,8 @@ class simulation(fourdvel):
 
         # Azimuth.
         data_vector[1::2] = data_vector[1::2] + np.random.normal(scale = noise_sigma[1], size=data_vector[1::2].shape)
+
+        print('noise sigma: ', noise_sigma)
 
         return data_vector
 

@@ -507,7 +507,7 @@ class driver_fourdvel():
         ## Save the final results in dictionary manager
         forceUnSaveTides = False
 
-        forceSaveTides = False
+        forceSaveTides = True
 
         forceSaveAnalysis = True
 

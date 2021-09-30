@@ -122,7 +122,7 @@ class estimate(configure):
             
             # Get data error prior.
             invCd_set = self.real_data_uncertainty_set(point_set, data_vec_set, noise_sigma_set)
-            print("Data error prior) set is Done")
+            print("Data error prior set is Done")
 
             # Get design matrix.
             linear_design_mat_set_orig = self.build_G_set(point_set, offsetfields_set=offsetfields_set)
@@ -143,8 +143,8 @@ class estimate(configure):
                 tides_3_mode = "find_optimal_gl"
                 #tides_3_mode = "invert_optimal_gl"
 
-                #gl_option = 'auto'
-                gl_option = 'manual'
+                gl_option = 'auto'
+                #gl_option = 'manual'
 
                 print("tides_3_mode: ", tides_3_mode)
 
@@ -183,6 +183,8 @@ class estimate(configure):
 
                         # Load the auto enumeration stage if exists
                         if "current_auto_enum_stage" in others_set:
+                            #others_set['current_auto_enum_stage'] = 1
+
                             current_auto_enum_stage = others_set['current_auto_enum_stage']
 
                     else:
@@ -312,12 +314,16 @@ class estimate(configure):
 
                     elif self.proj == 'Evans':
                         # full range
-                        gl_low  =   -3.0
-                        gl_high =   3.0
+                        #gl_low  =   -3.0
+                        #gl_high =   3.0
 
                         # half range
-                        #gl_low = -3.0
-                        #gl_high = 0.0
+                        gl_low = -3.0
+                        gl_high = 0.0
+
+                        # ad hoc
+                        gl_low = -2.3
+                        gl_high = -0.7
 
                     else:
                         raise ValueError()
@@ -583,8 +589,11 @@ class estimate(configure):
                 ##########################################################################################################
 
                 # Model prior.
-                invCm_set = self.model_prior_set(point_set)
-                print("Model prior set Done")
+                if ienum == 0:
+                    invCm_set = self.model_prior_set(point_set)
+                    print("Model prior set Done")
+                else:
+                    print('Reuse the model prior set')
         
                 # Model posterior (Singular matrix will come back with nan).
                 Cm_p_set = self.model_posterior_set(point_set, linear_design_mat_set, invCd_set, invCm_set, test_point = self.test_point)
@@ -719,7 +728,7 @@ class estimate(configure):
                     with open(test_point_gl_dist_pkl, 'wb') as f:
                         pickle.dump(gl_dist, f)
 
-                    print(stop)
+                    #print(stop)
 
                 if not np.isnan(optimal_grounding_level_int):
                     up_scale = others_set[self.test_point]['grounding_level_up_scale'][optimal_grounding_level_int]

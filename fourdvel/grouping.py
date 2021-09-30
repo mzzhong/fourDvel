@@ -93,10 +93,19 @@ class grouping(fourdvel):
                 # Find the track directory
                 if sate == 'csk' and self.proj == "Rutford":
                     trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(3)+'_0')
+
                 elif sate == "csk" and self.proj == "Evans":
-                    trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(3)+'_0')
+
+                    # This is for cov_v4. To the get full footprints of the five tracks
+                    istack = 0
+                    if track_num in [14,15,16,17,18]:
+                        istack = 1
+
+                    trackdir = os.path.join(directory[sate],'track_' + str(track_num).zfill(3) + '_' + str(istack))
+
                 elif sate == "s1":
                     trackdir = os.path.join(directory[sate],'track_' + str(track_num))
+
                 else:
                     raise Exception("Undefined")
 
@@ -167,8 +176,8 @@ class grouping(fourdvel):
                 #print(grid_lat_1d,len(grid_lat_1d))
     
                 # Read the observation vectors
-                enu_gc_losfile = os.path.join(trackdir,'merged','geom_master','enu_gc_los_offset_' + sources[sate] + '.rdr.vrt')
-                enu_gc_azifile = os.path.join(trackdir,'merged','geom_master','enu_gc_azi_offset_' + sources[sate] + '.rdr.vrt')
+                enu_gc_losfile = os.path.join(trackdir, 'merged','geom_master','enu_gc_los_offset_' + sources[sate] + '.rdr.vrt')
+                enu_gc_azifile = os.path.join(trackdir, 'merged','geom_master','enu_gc_azi_offset_' + sources[sate] + '.rdr.vrt')
                 
                 try:
                     dataset = gdal.Open(enu_gc_losfile)
@@ -331,7 +340,11 @@ class grouping(fourdvel):
         tile_set_pkl_name = self.get_tile_set_info()
 
         print(tile_set_pkl_name)
-        redo_tile = 1
+        redo_tile = 0
+
+        if redo_tile==1:
+            print('Redo tile is turned on')
+
         if os.path.exists(tile_set_pkl_name) and redo_tile==0:
             print("tile set file exists!")
         
@@ -829,10 +842,14 @@ class grouping(fourdvel):
         else:
             raise ValueError()
 
-        redo = 1
+        redo_3d = 0
+
+        if redo_3d == 1:
+            print('Redo 3d is turned on')
+
         key = self.test_point
 
-        if not os.path.exists(self.grid_set_velo_3d_pkl_name) or redo==1:
+        if not os.path.exists(self.grid_set_velo_3d_pkl_name) or redo_3d==1:
 
             ###### Load in the ice shelf map with 100m x 100m resolution ####
             f = open(shelf_xyz,"r")

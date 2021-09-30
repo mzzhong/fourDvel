@@ -24,6 +24,8 @@ import multiprocessing
 
 from basics import basics
 
+from numba import jit
+
 class fourdvel(basics):
 
     def __init__(self, param_file=None):
@@ -738,7 +740,7 @@ class fourdvel(basics):
                 if coverage<1:
                     continue
 
-                print(acq_datefmt, t_frac_fmt, t_frac)
+                #print(acq_datefmt, t_frac_fmt, t_frac)
 
                 # Convert date string to date object
                 date_comp = [int(item) for item in acq_datefmt.split('-')]
@@ -754,7 +756,7 @@ class fourdvel(basics):
                     else:
                         track = [ i for i in tracks if i>=11 ]
 
-                    print(sate, track, coverage)
+                    #print(sate, track, coverage)
                     assert len(track)==1, print("Fail to derive the track number")
 
                     if coverage < min_cov[track[0]]:
@@ -1069,22 +1071,27 @@ class fourdvel(basics):
             self.grid_set_name= "_".join((grid_set_prefix, grid_set_datasets, grid_set_sources, grid_set_resolution))
         
         elif self.proj == 'Evans':
-            #grid_set_cov_version = 'cov_v0'
-            #grid_set_cov_version = 'cov_v1'
-            #grid_set_cov_version = 'cov_v2'
+
+            # Need to collaborate and configure all these in grouping.py method: create_grid_set
 
             # cov_v3:
             # min_num_of_csk_tracks = 1
             # min_num_of_s1_tracks = 3
             # do not count track 7
             # remove points with 50, 64, 65 which are all ascending tracks
-            # need to collaborate and configure all these in grouping.py
+
+            # cov_v4:
+            # Same as cov_v3, but for T14,15,16,17,18, I use the full footprint
+            # track_014_1, track_015_1, ... track_018_1
+
+            # Set the version
+            #grid_set_cov_version = 'cov_v0'
+            #grid_set_cov_version = 'cov_v1'
+            #grid_set_cov_version = 'cov_v2'
             grid_set_cov_version = 'cov_v3'
+            #grid_set_cov_version = 'cov_v4'
 
             self.grid_set_name= "_".join((grid_set_prefix, grid_set_datasets, grid_set_sources, grid_set_resolution, grid_set_cov_version))
-
-            #print(self.grid_set_name)
-            #print(stop)
 
         return (self.pickle_dir + '/' + self.grid_set_name + '.pkl')
 
@@ -2141,6 +2148,7 @@ class fourdvel(basics):
 
         return G_set
 
+    #@jit(nopython=True)
     def modify_G(self, point, offsetfields, G, tide_height_master, tide_height_slave, grounding_level):
 
         lon,lat = point
@@ -2569,6 +2577,7 @@ class fourdvel(basics):
 
         return invCm
 
+    #@jit(nopython=True)
     def model_posterior_set(self, point_set, linear_design_mat_set, data_prior_set, model_prior_set, test_point=None):
 
         Cm_p_set = {}
@@ -2579,6 +2588,7 @@ class fourdvel(basics):
                                                     model_prior_set[point])
         return Cm_p_set
 
+    #@jit(nopython=True)
     def model_posterior(self, design_mat, data_prior, model_prior):
 
         G = design_mat
