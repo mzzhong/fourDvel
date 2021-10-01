@@ -321,10 +321,13 @@ class output(fourdvel):
                             #if self.proj == 'Evans' and optimal_grounding_level <= -3.0:
                             #    continue
 
+                            #if self.proj == 'Evans' and optimal_grounding_level <= -2.2:
+                            #    continue
+
                             #gl_ci_thres = 100
-                            #gl_ci_thres = 0.5
+                            gl_ci_thres = 0.5
                             #gl_ci_thres = 1.0
-                            gl_ci_thres = 1.5
+                            #gl_ci_thres = 1.5
                             
                             # Remove based obtained credible level
                             gl_ci = grid_set_gl_ci.get(point, np.nan)
@@ -715,6 +718,8 @@ class output(fourdvel):
                         'O1_up_displacement_phase',
                         'N2_up_displacement_amplitude',
                         'N2_up_displacement_phase',
+                        'Q1_up_displacement_amplitude',
+                        'Q1_up_displacement_phase',
 
                         # Msf
                         "Msf_horizontal_displacement_group",

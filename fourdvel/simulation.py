@@ -560,6 +560,9 @@ class simulation(fourdvel):
 
         param_vec[0:3,0] = secular_v
 
+        #print(tide_amp)
+        #print(stop)
+
         # M2, O1, Msf, etc
         for k in range(n_modeling_tides):
 

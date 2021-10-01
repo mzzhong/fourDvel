@@ -1088,8 +1088,9 @@ class fourdvel(basics):
             #grid_set_cov_version = 'cov_v0'
             #grid_set_cov_version = 'cov_v1'
             #grid_set_cov_version = 'cov_v2'
-            grid_set_cov_version = 'cov_v3'
-            #grid_set_cov_version = 'cov_v4'
+            
+            #grid_set_cov_version = 'cov_v3'
+            grid_set_cov_version = 'cov_v4'
 
             self.grid_set_name= "_".join((grid_set_prefix, grid_set_datasets, grid_set_sources, grid_set_resolution, grid_set_cov_version))
 
