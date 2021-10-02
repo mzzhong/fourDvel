@@ -182,6 +182,8 @@ class fourdvel(basics):
 
             # Save the test point str after rounding
             self.test_point_str = str(self.test_point[0]) + '_' + str(self.test_point[1])
+        else:
+            self.test_point_str = 'none'
 
 
         print("fourdvel initialization done")

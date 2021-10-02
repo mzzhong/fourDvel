@@ -305,6 +305,7 @@ class simulation(fourdvel):
             tidesRut_params['Ssa'] =   [70.4744,    -167.22,    0.00,        179]
             tidesRut_params['Sa'] =    [50.5497,    -163.61,    0.00,        179]
 
+            # Vertical
             #M2 0.5175 1.647 120.69
             #S2 0.5 1.087 -10.82
             #N2 0.5274 0.277 24.6
@@ -316,6 +317,20 @@ class simulation(fourdvel):
             #Mf 13.6608 0.02 5.32
             #Mm 27.5546 0.017 11.99
 
+
+            # Horizontal (Murray's model with translation) ./analyze_and_create_time_series.py -p R -t 'translate'
+            #K2 0.817 160.31
+            #S2 0.9567 154.53
+            #M2 0.6826 176.33
+            #K1 0.5008 -147.35
+            #P1 0.6325 -176.12
+            #O1 0.6958 -143.32
+            #Mf 6.6943 157.98
+            #Msf 35.0 -100.0
+            #Mm 13.2831 -19.52
+            #Ssa 70.4744 -167.22
+            #Sa 50.5497 -163.61
+
         ################# RIS model #############################################
 
         ################# EIS model #############################################
@@ -323,7 +338,7 @@ class simulation(fourdvel):
         if model_num == 100:
             # Same as model 18 for horizontal components
             # Use the params from CATS2008 for vertical motion at ref point RIS (-76.32, -76.75)
-            # Divide the amplitude and phase of Msf by 2
+            # Divide the amplitude of Msf by 2
             tidesRut_params['M2'] =    [0.6826,     176.33,     118.369,     105.988]
             tidesRut_params['S2'] =    [0.9567,     154.53,     76.538,     -23.469]  
             tidesRut_params['N2'] =    [0.0,        163,        19.739,       9.971]
@@ -379,25 +394,24 @@ class simulation(fourdvel):
         if model_num == 102:
             # Same as model 18 for horizontal components
             # Use the params from CATS2008 for vertical motion at ref point RIS (-76.32, -76.75)
-            # Divide the amplitude and phase of Msf by 2
-            tidesRut_params['M2'] =    [0.6826,     176.33,     118.369,     105.988]
-            tidesRut_params['S2'] =    [0.9567,     154.53,     76.538,     -23.469]  
-            tidesRut_params['N2'] =    [0.0,        163,        19.739,       9.971]
-            tidesRut_params['K2'] =    [0.817,      160.31,     19.825,      159.217]
+            # Divide the amplitude by 2
+            tidesRut_params['M2'] =    [0.6826 / 2,     176.33,     118.369,     105.988]
+            tidesRut_params['S2'] =    [0.9567 / 2,     154.53,     76.538,     -23.469]  
+            tidesRut_params['N2'] =    [0.0 / 2,        163,        19.739,       9.971]
+            tidesRut_params['K2'] =    [0.817 / 2,      160.31,     19.825,      159.217]
 
 
-            tidesRut_params['K1'] =    [0.5008,     -147.35,    36.119,      18.359]
-            tidesRut_params['O1'] =    [0.6958,     -143.32,    36.581,      126.542]
-            tidesRut_params['P1'] =    [0.6325,     -176.12,    12.555,      8.048]
-            tidesRut_params['Q1'] =    [0.6325,     -176.12,    8.235,       23.499]
+            tidesRut_params['K1'] =    [0.5008 / 2,     -147.35,    36.119,      18.359]
+            tidesRut_params['O1'] =    [0.6958 / 2,     -143.32,    36.581,      126.542]
+            tidesRut_params['P1'] =    [0.6325 / 2,     -176.12,    12.555,      8.048]
+            tidesRut_params['Q1'] =    [0.6325 / 2,     -176.12,    8.235,       23.499]
 
-            tidesRut_params['Mf'] =    [0.2,     157.98,     2.596,       -32.713]
-            tidesRut_params['Msf'] =   [35.00 / 2,      260,        0.00,       0.00]
+            tidesRut_params['Mf'] =    [6.6943 / 2,     157.98,     2.596,       -32.713]
+            tidesRut_params['Msf'] =   [35.00 /  2,      260,        0.00,       0.00]
 
-            tidesRut_params['Mm'] =    [13.2831,    -19.52,     1.606,        11.603]
-            tidesRut_params['Ssa'] =   [70.4744,    -167.22,    0.00,        179]
-            tidesRut_params['Sa'] =    [50.5497,    -163.61,    0.00,        179]
-
+            tidesRut_params['Mm'] =    [13.2831 / 2,    -19.52,     1.606,        11.603]
+            tidesRut_params['Ssa'] =   [70.4744 / 2,    -167.22,    0.00,        179]
+            tidesRut_params['Sa'] =    [50.5497 / 2,    -163.61,    0.00,        179]
 
         ################# EIS model #############################################
  

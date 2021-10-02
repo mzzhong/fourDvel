@@ -143,8 +143,8 @@ class estimate(configure):
                 tides_3_mode = "find_optimal_gl"
                 #tides_3_mode = "invert_optimal_gl"
 
-                gl_option = 'auto'
-                #gl_option = 'manual'
+                #gl_option = 'auto'
+                gl_option = 'manual'
 
                 print("tides_3_mode: ", tides_3_mode)
 
@@ -203,9 +203,9 @@ class estimate(configure):
                 
                 elif gl_option == "manual":
 
-                    #gl_list_option = 7
+                    gl_list_option = 7
                     #gl_list_option = 8
-                    gl_list_option = 9
+                    #gl_list_option = 9
 
                     enum_grounding_level = None
 
@@ -682,7 +682,7 @@ class estimate(configure):
                 print("####")
 
                 # plot gl marginal dist at test point
-                plot_gl_dist = True
+                plot_gl_dist = False
 
                 if plot_gl_dist:
                     gls = []
