@@ -324,10 +324,17 @@ class output(fourdvel):
                             #if self.proj == 'Evans' and optimal_grounding_level <= -2.2:
                             #    continue
 
-                            #gl_ci_thres = 100
-                            gl_ci_thres = 0.5
-                            #gl_ci_thres = 1.0
-                            #gl_ci_thres = 1.5
+                            if self.proj == 'Rutford':
+                                #gl_ci_thres = 100
+                                gl_ci_thres = 0.5
+                                #gl_ci_thres = 1.0
+                                #gl_ci_thres = 1.5
+
+                            elif self.proj == 'Evans':
+                                gl_ci_thres = 0.5
+
+                            else:
+                                raise ValueError()
                             
                             # Remove based obtained credible level
                             gl_ci = grid_set_gl_ci.get(point, np.nan)

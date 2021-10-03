@@ -36,6 +36,8 @@ def createParser():
     parser.add_argument('-p','--param_file', dest='param_file',type=str,help='parameter file',required=True)
 
     parser.add_argument('-t','--task_name',dest='task_name',type=str, help='task name', required=True)
+
+    parser.add_argument('-s','--sub_task_name',dest='sub_task_name',type=str, help='sub task name (tides_3: x2_run, find, invert)')
     
     parser.add_argument('-n','--nthreads',dest='nthreads',type=int, help='number of threads', required=False, default=None)
     
@@ -56,6 +58,7 @@ class driver_fourdvel():
 
         self.param_file = inps.param_file
         self.task_name = inps.task_name
+        self.sub_task_name = inps.sub_task_name
         self.nthreads = inps.nthreads
         self.mode = inps.mode
         self.tile_fraction = [int(i) for i in inps.tile_fraction.split(',')]
@@ -109,14 +112,14 @@ class driver_fourdvel():
             self.tasks = estimate(self.param_file)
 
             # Set the task name
-            self.tasks.set_task_name(task_name = self.task_name)
+            self.tasks.set_task_name(task_name = self.task_name, sub_task_name = self.sub_task_name)
         
         elif self.task_name in self.analysis_tasks:
             
             self.tasks = analysis(self.param_file)
 
             # Set the task name
-            self.tasks.set_task_name(task_name = self.task_name)
+            self.tasks.set_task_name(task_name = self.task_name, sub_task_name = self.sub_task_name)
 
         else:
             print("Undefined task_name")

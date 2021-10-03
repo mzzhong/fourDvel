@@ -37,9 +37,11 @@ class estimate(configure):
         else:
             raise Exception("Need to provide parameter file to class inversion")
 
-    def set_task_name(self, task_name):
+    def set_task_name(self, task_name, sub_task_name=None):
     
         self.task_name = task_name
+
+        self.sub_task_name = sub_task_name
 
     def estimate(self, point_set, tracks_set):
 
@@ -140,13 +142,32 @@ class estimate(configure):
 
                 # Set the mode for running
 
+                # Default
                 tides_3_mode = "find_optimal_gl"
-                #tides_3_mode = "invert_optimal_gl"
+                gl_option = 'auto'
+                #gl_option = 'manual'
 
-                #gl_option = 'auto'
-                gl_option = 'manual'
+                if self.sub_task_name == 'x2_run':
+                    tides_3_mode = "find_optimal_gl"
+                    gl_option = 'manual'
+
+                elif self.sub_task_name == 'find':
+                    tides_3_mode = "find_optimal_gl"
+                    gl_option = 'auto'
+
+                elif self.sub_task_name == 'invert':
+                    tides_3_mode = "invert_optimal_gl"
+                    gl_option = 'auto'
+
+                else:
+                    raise ValueError()
 
                 print("tides_3_mode: ", tides_3_mode)
+
+                #print(self.sub_task_name)
+                #print(tides_3_mode)
+                #print(gl_option)
+                #print(stop)
 
                 ## Set the mode (redo, continue) for grounding line level enumeration
                 #enum_grounding_run_mode = "redo"
@@ -206,6 +227,9 @@ class estimate(configure):
                     gl_list_option = 7
                     #gl_list_option = 8
                     #gl_list_option = 9
+
+                    if self.sub_task_name == 'x2_run':
+                        gl_list_option = 7
 
                     enum_grounding_level = None
 

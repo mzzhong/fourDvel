@@ -24,7 +24,7 @@ import multiprocessing
 
 from basics import basics
 
-from numba import jit
+#from numba import jit
 
 class fourdvel(basics):
 
@@ -225,6 +225,9 @@ class fourdvel(basics):
         # params for creating grid set
         self.min_num_of_csk_tracks = 1
         self.min_num_of_s1_tracks = 100
+
+        # whether or not this run is for x2 analysis
+        self.x2_run = False
 
         fmt = '%Y%m%d'
 
@@ -570,6 +573,14 @@ class fourdvel(basics):
             if name == 'analysis_name':
                 self.analysis_name = value
                 print("analysis_name: ",self.analysis_name)
+
+            ## Secular variation
+            if name == 'x2_run':
+                if value == 'True':
+                    self.x2_run = True
+                else:
+                    self.x2_run = False
+                print('x2_run: ', value)
 
             ## Output ###
             if name == "output_true":
@@ -2793,19 +2804,23 @@ class fourdvel(basics):
 
         # Expand from the max point
         while mass < total_mass * alpha:
-            #print(left, right, mass)
-        
+       
+            # Find the candidate on the two sides 
             if left > 0:
                 left_candi = y[left - 1]
+
+            # reach the left end
             else:
                 left_candi = None
         
             if right < l-1:
                 right_candi = y[right+1]
+
+            # reach the right end
             else:
                 right_candi = None
-        
-            # Both are at the end, which should not be possible
+
+            # To determine which one to use
             if left_candi is not None and right_candi is not None:
                 if left_candi > right_candi:
                     left -= 1
@@ -2821,13 +2836,14 @@ class fourdvel(basics):
             elif right_candi is not None:
                 right += 1
                 mass += y[right]
-        
+
+            # Both candidates are at the end and unavaibale, which should not be possible
             else:
                 raise Exception("hpdi_error")
 
         return (x[left], x[right])
 
-    def select_optimal_grounding_level(self, point_set, grid_set_velo, others_set):
+    def select_optimal_grounding_level(self, point_set, grid_set_velo, others_set, gl_specified_range = None):
 
         select_mode = "likelihood"
  
@@ -2873,7 +2889,7 @@ class fourdvel(basics):
                 grounding_levels = []
                 likelihoods = []
 
-                # go from small to large gl
+                # Go from small to large gl to find grounding_levels and likelihoods
                 for grounding_level_int, likelihood in sorted(others_set[point]['grounding_level_model_likelihood'].items()):
                     #print(grounding_level_int, likelihood)
 
@@ -2892,17 +2908,40 @@ class fourdvel(basics):
                 grounding_levels = np.asarray(grounding_levels)
                 likelihoods = np.asarray(likelihoods)
 
+                # Remove the non-grounding case (-10m) from the valid enumeration
+                grounding_levels_proc = []
+                likelihoods_proc = []
+
+                for i, grounding_level_int in enumerate(grounding_levels):
+                    if grounding_level_int != -10 * 10**6:
+                        grounding_levels_proc.append(grounding_levels[i])
+                        likelihoods_proc.append(likelihoods[i])
+
+                grounding_levels_proc = np.asarray(grounding_levels_proc)
+                likelihoods_proc = np.asarray(likelihoods_proc)
+
+                #print(grounding_levels)
+                #print(likelihoods)
+
+                #print(grounding_levels_proc)
+                #print(likelihoods_proc)
+                #print(stop)
+
                 # calculate credible interval
-                if len(grounding_levels)>=2:
+                if len(grounding_levels_proc)>=2:
                     # Need to consider the case if the enumeration is not even
                     # Do interpolation on [-4,0] for Rutford, [-3, 0] for Evans
                     # spacing = 0.01
-                    interp_fun = interp1d(grounding_levels, likelihoods, kind='linear')
+                    interp_fun = interp1d(grounding_levels_proc, likelihoods_proc, kind='linear')
    
                     # interpolation every 1cm (10**(-2))
                     #gls_interp = np.arange(min(grounding_levels),max(grounding_levels)+1e-6, 10**(-2) * 10**6)
                     # give up the last point, to make sure gls_interp is within grounding_levels
-                    gls_interp = np.arange(min(grounding_levels),max(grounding_levels), 10**(-2) * 10**6)
+
+                    gls_interp_min = min(grounding_levels_proc)
+                    gls_interp_max = max(grounding_levels_proc)
+
+                    gls_interp = np.arange(gls_interp_min, gls_interp_max, 10**(-2) * 10**6)
 
                     try:
                         likelihoods_interp = interp_fun(gls_interp)
