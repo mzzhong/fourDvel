@@ -494,7 +494,19 @@ class basics():
 
         f.close()
 
-    def read_xyz_into_dict(self, file_name, f2i=None):
+    def fd_op(self, val, op_name=None):
+
+        if op_name is not None:
+            if op_name == 'abs':
+                return abs(val)
+
+            else:
+                raise ValueError()
+        
+        else:
+            return val
+
+    def read_xyz_into_dict(self, file_name, f2i=None, invalid_val=None):
 
         if f2i is None:
             f2i = self.float2int
@@ -508,8 +520,12 @@ class basics():
 
         data_dict = {}
         for i in range(len(X)):
-            data_dict[(X[i], Y[i])] = values[i]
-
+            if invalid_val is None:
+                data_dict[(X[i], Y[i])] = values[i]
+            else:
+                if values[i]!=invalid_val:
+                    data_dict[(X[i], Y[i])] = values[i]
+                   
         return data_dict
 
     def read_xyz_into_datamat(self, file_name, f2i=None, add_mean_phase=True):
@@ -612,7 +628,7 @@ class basics():
         data_value = np.mean(values[valid_xy])
 
         if add_mean_phase:
- 
+
             mean_phase = self.read_mean_phase(file_name)
 
             if mean_phase is not None:
@@ -632,14 +648,17 @@ class basics():
         if quant_name.split('_')[0] in ['true','est'] and quant_name.split('_')[-1] == 'phase':
             mean_phase_file_name = os.path.join(folder, 'mean_phase.txt')
 
+            #print(mean_phase_file_name)
+
             f = open(mean_phase_file_name)
 
             lines = f.readlines()
 
             for line in lines:
                 line_quant_name, line_value = line.split()
+                #print(line_quant_name, line_value)
                 if line_quant_name == quant_name:
-                    if line_value.lower == 'nan':
+                    if line_value.lower() == 'nan':
                         mean_phase = None
                     else:
                         mean_phase = float(line_value)
@@ -649,6 +668,8 @@ class basics():
         else:
             mean_phase = None
 
+        print(quant_name)
+        print(mean_phase)
         return mean_phase
 
     def get_ref_point(self, data_prefix):

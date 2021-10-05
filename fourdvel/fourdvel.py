@@ -1705,10 +1705,14 @@ class fourdvel(basics):
         elif self.proj == 'Evans':
             shelf_points_test_id = 20211931 
     
-        shelf_point_file = '/net/kamb/ssd-tmp1/mzzhong/insarRoutines/quick_studies/' + str(shelf_points_test_id) + '_shelf_points.xyz'
+        #shelf_point_file = '/net/kamb/ssd-tmp1/mzzhong/insarRoutines/quick_studies/' + str(shelf_points_test_id) + '_shelf_points.xyz'
+        shelf_point_file = '/net/kraken/bak/mzzhong/Ant_Data/GroundingLines/RIS_{}_shelf_latlon.xyz'.format(str(shelf_points_test_id))
         
         if os.path.exists(shelf_point_file):
-            self.shelf_points_dict = self.read_xyz_into_dict(shelf_point_file)
+            # if value is 0, then it is not ice shelf
+            self.shelf_points_dict = self.read_xyz_into_dict(shelf_point_file, invalid_val=0)
+            #self.shelf_points_dict = self.read_xyz_into_dict(shelf_point_file, invalid_val=100)
+
             print("Number of shelf points: ", len(self.shelf_points_dict))
         else:
             self.shelf_points_dict = None
@@ -3477,14 +3481,14 @@ class fourdvel(basics):
             quant = data_vec[0]
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
         # Secular north.
         elif quant_name == 'secular_north_velocity':
             quant = data_vec[1]
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
         # Secular horizontal speed.
         elif quant_name == 'secular_horizontal_velocity':
@@ -3511,7 +3515,7 @@ class fourdvel(basics):
             quant = data_vec[2]
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
         ################### Msf #################################
         # Msf horizontal amplitude (speed).        
@@ -3553,7 +3557,7 @@ class fourdvel(basics):
                     k=k+1
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
 
         # Msf Up phase. 
@@ -3580,6 +3584,7 @@ class fourdvel(basics):
                             
                         elif state in ['uq']:
                             quant = value
+                            quant = np.sqrt(self.fd_op(quant,'abs'))
                             quant = self.rad2deg(quant)
                             quant = self.deg2day(quant, tide_name)
 
@@ -3590,9 +3595,6 @@ class fourdvel(basics):
                         quant = np.nan
                 else:
                     k=k+1
-
-            if state == 'uq':
-                quant = np.sqrt(quant)
 
         elif quant_name == "Msf_horizontal_displacement_group":
 
@@ -3981,17 +3983,17 @@ class fourdvel(basics):
                         #print(stop)
 
                         # Take the square root
-                        sigma_amp_alf = np.sqrt(sigma2_amp_alf)
-                        sigma_phase_alf = np.sqrt(sigma2_phase_alf)
-                        sigma_amp_crf = np.sqrt(sigma2_amp_crf)
-                        sigma_phase_crf = np.sqrt(sigma2_phase_crf)
+                        quant = sigma2_amp_alf
+                        sigma_amp_alf = np.sqrt(self.fd_op(quant,'abs'))
 
-                        #sigma_amp_alf = np.sqrt(abs(sigma2_amp_alf))
-                        #sigma_phase_alf = np.sqrt(abs(sigma2_phase_alf))
-                        #sigma_amp_crf = np.sqrt(abs(sigma2_amp_crf))
-                        #sigma_phase_crf = np.sqrt(abs(sigma2_phase_crf))
+                        quant = sigma2_phase_alf
+                        sigma_phase_alf = np.sqrt(self.fd_op(quant,'abs'))
 
-                        #print('along flow amp error: ', sigma2_amp_alf, sigma_amp_alf)
+                        quant = sigma2_amp_crf
+                        sigma_amp_crf = np.sqrt(self.fd_op(quant,'abs'))
+
+                        quant = sigma2_phase_crf
+                        sigma_phase_crf = np.sqrt(self.fd_op(quant,'abs'))
 
                         # Convert phase to days
                         sigma_phase_alf_deg = self.rad2deg(sigma_phase_alf)
@@ -4035,7 +4037,7 @@ class fourdvel(basics):
                     k=k+1
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
 
         # Msf East phase.
@@ -4052,6 +4054,7 @@ class fourdvel(basics):
                         
                     elif state in ['uq']:
                         quant = value
+                        quant = np.sqrt(self.fd_op(quant,'abs'))
                         quant = self.rad2deg(quant)
                         quant = self.deg2day(quant, tide_name)
 
@@ -4060,9 +4063,6 @@ class fourdvel(basics):
  
                 else:
                     k=k+1
-
-            if state == 'uq':
-                quant = np.sqrt(quant)
 
 
         # Msf North amp.
@@ -4076,7 +4076,7 @@ class fourdvel(basics):
                     k=k+1
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
 
         # Msf North phase.
@@ -4094,6 +4094,7 @@ class fourdvel(basics):
                         
                     elif state in ['uq']:
                         quant = value
+                        quant = np.sqrt(self.fd_op(quant,'abs'))
                         quant = self.rad2deg(quant)
                         quant = self.deg2day(quant, tide_name)
 
@@ -4102,10 +4103,6 @@ class fourdvel(basics):
  
                 else:
                     k=k+1
-
-            if state == 'uq':
-                quant = np.sqrt(quant)
-
 
         ############### End of Msf ###############
 
@@ -4121,7 +4118,7 @@ class fourdvel(basics):
                     k=k+1
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
 
         # Mf up displacement amplitude.
@@ -4135,7 +4132,7 @@ class fourdvel(basics):
                     k=k+1
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
 
         # Mf Up phase. 
@@ -4157,6 +4154,7 @@ class fourdvel(basics):
                             
                         elif state in ['uq']:
                             quant = value
+                            quant = np.sqrt(self.fd_op(quant,'abs'))
                             quant = self.rad2deg(quant)
                             quant = self.deg2day(quant, tide_name)
 
@@ -4167,9 +4165,6 @@ class fourdvel(basics):
                         quant = np.nan
                 else:
                     k=k+1
-
-            if state == 'uq':
-                quant = np.sqrt(quant)
 
 
         ################## End of Mf ###########################################
@@ -4189,7 +4184,7 @@ class fourdvel(basics):
                     k=k+1
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
 
         # O1 lumped horizontal displacement amplitude.
@@ -4204,81 +4199,11 @@ class fourdvel(basics):
                     k=k+1
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
 
         ##################################################################3
         # Up component
-
-        # O1 Up amp.
-        elif quant_name in ['O1_up_displacement_amplitude', 'O1_up_displacement_amplitude_norm']:
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'O1':
-                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
-                    quant = np.sqrt(ampU**2)
-                else:
-                    k=k+1
-
-            if state == 'uq':
-                quant = np.sqrt(quant)
-
-        # O1 Up phase. 
-        # (only on ice shelves)
-        elif quant_name.startswith('O1_up_displacement_phase'):
-            k = 0
-            for tide_name in modeling_tides:
-                if tide_name == 'O1':
-                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
-                    thres = 0.1
-
-                    if self.proj == 'Evans':
-                        # 2021.01.29
-                        thres = 0.06
-
-                    elif self.proj == 'Rutford':
-                        # 2021.09.13
-                        thres = 0.01
-                    else:
-                        raise ValueError()
-
-                    model_up = self.get_model_up(point)
-
-                    # value in velocity model > 0
-                    #if (ampU > thres) or (state=='uq') :
-                    #if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up>0)):
-                    # clip values outside ice-shelf for Rutford and Evans
-                    if (state == 'uq') or ( (ampU >=thres) and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)) ):
-
-                        value = data_vec[3+k*6+5]
-                        if state in [ 'true','est']:
-                            phaseU=self.velo_phase_to_dis_phase(value)
-                            quant = self.rad2deg(phaseU)
-                            if quant_name.endswith("in_deg"):
-                                pass
-                            else:
-                                quant = self.deg2minute(quant, tide_name)
-
-                        elif state in ['uq']:
-                            quant = value
-                            quant = self.rad2deg(quant)
-
-                            if quant_name.endswith("in_deg"):
-                                pass
-                            else:
-                                quant = self.deg2minute(quant,tide_name)
-                        else:
-                            raise Exception("Unknown state")
-
-
-                    # set to np.nan
-                    else:
-                        quant = np.nan
-                else:
-                    k=k+1
-
-            if state == 'uq':
-                quant = np.sqrt(quant)
 
 
         # M2 Up amplitude.
@@ -4292,7 +4217,7 @@ class fourdvel(basics):
                     k=k+1
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
 
         # M2 Up phase. 
@@ -4348,6 +4273,7 @@ class fourdvel(basics):
 
                         elif state in ['uq']:
                             quant = value
+                            quant = np.sqrt(self.fd_op(quant,'abs'))
                             quant = self.rad2deg(quant)
 
                             if quant_name.endswith("in_deg"):
@@ -4362,9 +4288,6 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
-            if state == 'uq':
-                quant = np.sqrt(quant)
-
         # N2 Up amplitude.
         elif quant_name in ['N2_up_displacement_amplitude', 'N2_up_displacement_amplitude_norm']:
             k = 0
@@ -4376,7 +4299,7 @@ class fourdvel(basics):
                     k=k+1
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
 
         
@@ -4427,8 +4350,9 @@ class fourdvel(basics):
 
                         elif state in ['uq']:
                             # Find the phase
-
                             quant = value
+                            quant = np.sqrt(self.fd_op(quant,'abs'))
+
                             quant = self.rad2deg(quant)
 
                             if quant_name.endswith("in_deg"):
@@ -4442,8 +4366,73 @@ class fourdvel(basics):
                 else:
                     k=k+1
 
+        # O1 Up amp.
+        elif quant_name in ['O1_up_displacement_amplitude', 'O1_up_displacement_amplitude_norm']:
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'O1':
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
+                    quant = np.sqrt(ampU**2)
+                else:
+                    k=k+1
+
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
+
+        # O1 Up phase. 
+        # (only on ice shelves)
+        elif quant_name.startswith('O1_up_displacement_phase'):
+            k = 0
+            for tide_name in modeling_tides:
+                if tide_name == 'O1':
+                    ampU = self.velo_amp_to_dis_amp(data_vec[3+k*6+2],tide_name)
+                    thres = 0.1
+
+                    if self.proj == 'Evans':
+                        # 2021.01.29
+                        thres = 0.06
+
+                    elif self.proj == 'Rutford':
+                        # 2021.09.13
+                        thres = 0.01
+                    else:
+                        raise ValueError()
+
+                    model_up = self.get_model_up(point)
+
+                    # value in velocity model > 0
+                    #if (ampU > thres) or (state=='uq') :
+                    #if (ampU >=thres or state == 'uq') and (self.proj == 'Rutford' or (self.proj == 'Evans' and model_up>0)):
+                    # clip values outside ice-shelf for Rutford and Evans
+                    if (state == 'uq') or ( (ampU >=thres) and ((self.proj == 'Rutford' and model_up > 0) or (self.proj == 'Evans' and model_up > 0)) ):
+
+                        value = data_vec[3+k*6+5]
+                        if state in [ 'true','est']:
+                            phaseU=self.velo_phase_to_dis_phase(value)
+                            quant = self.rad2deg(phaseU)
+                            if quant_name.endswith("in_deg"):
+                                pass
+                            else:
+                                quant = self.deg2minute(quant, tide_name)
+
+                        elif state in ['uq']:
+                            quant = value
+                            quant = np.sqrt(self.fd_op(quant,'abs'))
+                            quant = self.rad2deg(quant)
+
+                            if quant_name.endswith("in_deg"):
+                                pass
+                            else:
+                                quant = self.deg2minute(quant,tide_name)
+                        else:
+                            raise Exception("Unknown state")
+
+
+                    # set to np.nan
+                    else:
+                        quant = np.nan
+                else:
+                    k=k+1
 
 
         # Q1 Up amplitude.
@@ -4457,7 +4446,7 @@ class fourdvel(basics):
                     k=k+1
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
 
         # Q1 Up phase. 
@@ -4490,6 +4479,7 @@ class fourdvel(basics):
                         elif state in ['uq']:
                             # Find the phase
                             quant = value
+                            quant = np.sqrt(self.fd_op(quant,'abs'))
                             quant = self.rad2deg(quant)
 
                             if quant_name.endswith("in_deg"):
@@ -4502,10 +4492,6 @@ class fourdvel(basics):
                         quant = np.nan
                 else:
                     k=k+1
-
-
-            if state == 'uq':
-                quant = np.sqrt(quant)
 
 
         # Additonal parameters
@@ -4532,7 +4518,7 @@ class fourdvel(basics):
                 raise ValueError()
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
         elif quant_name == "topo_resid":
             
@@ -4553,7 +4539,7 @@ class fourdvel(basics):
                 raise ValueError()
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
         elif quant_name in ["secular_east_velocity_variation", "secular_north_velocity_variation", "secular_up_velocity_variation"]:
             
@@ -4590,7 +4576,7 @@ class fourdvel(basics):
                 raise ValueError()
 
             if state == 'uq':
-                quant = np.sqrt(quant)
+                quant = np.sqrt(self.fd_op(quant,'abs'))
 
         else:
             quant = None

@@ -145,15 +145,20 @@ class estimate(configure):
                 # Default
                 tides_3_mode = "find_optimal_gl"
                 gl_option = 'auto'
-                #gl_option = 'manual'
 
                 if self.sub_task_name == 'x2_run':
                     tides_3_mode = "find_optimal_gl"
                     gl_option = 'manual'
+                    gl_list_option = 7
 
                 elif self.sub_task_name == 'find':
                     tides_3_mode = "find_optimal_gl"
                     gl_option = 'auto'
+
+                elif self.sub_task_name.startswith('find_manual'):
+                    tides_3_mode = "find_optimal_gl"
+                    gl_option = 'manual'
+                    gl_list_option = int(self.sub_task_name.split(':')[1])
 
                 elif self.sub_task_name == 'invert':
                     tides_3_mode = "invert_optimal_gl"
@@ -224,13 +229,6 @@ class estimate(configure):
                 
                 elif gl_option == "manual":
 
-                    gl_list_option = 7
-                    #gl_list_option = 8
-                    #gl_list_option = 9
-
-                    if self.sub_task_name == 'x2_run':
-                        gl_list_option = 7
-
                     enum_grounding_level = None
 
                     if gl_list_option == 0:
@@ -273,6 +271,7 @@ class estimate(configure):
                         gl_high = -10
                         enum_space = 1
 
+                    # For Evans synthetic test
                     elif gl_list_option == 8:
                         enum_grounding_level = np.asarray([-3.00, -2.10, -1.60, -1.20, -0.90, -0.70, -0.60, -0.56, -0.53, -0.51, -0.5, -0.49, -0.47, -0.44, -0.40, -0.30, -0.10, 0.20, 0.60, 1.10, 1.70, 2.40, 3.00])
 
@@ -280,7 +279,14 @@ class estimate(configure):
                         enum_space = 0.1
                         gl_low = -3.0
                         gl_high = 0.0
- 
+
+                    # For Rutford synthetic test
+                    elif gl_list_option == 10:
+                        enum_grounding_level = np.asarray([-4.00, -3.10, -2.60, -2.20, -1.90, -1.70, -1.60, -1.56, -1.53, -1.51, -1.5, -1.49, -1.47, -1.44, -1.40, -1.30, -1.10, -0.80, -0.40, 0.10, 1.00, 3.00, 4.00])
+
+                    else:
+                        raise ValueError()
+
                     if enum_grounding_level is None:
                         enum_grounding_level = np.arange(gl_low, gl_high+1e-6, enum_space)
                     

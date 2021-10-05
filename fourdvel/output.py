@@ -281,6 +281,9 @@ class output(fourdvel):
 
                 for point in output_keys:
 
+                    ###########################################################
+                    # The ad hoc treatments, to skip some invalid values
+
                     # The point should be tuple. However, there are exceptions for the key, e.g. current_auto_enum_stage
                     if not isinstance(point, tuple):
                         continue
@@ -291,12 +294,11 @@ class output(fourdvel):
                         # If not exists, then the value is 0
                         model_up = self.shelf_points_dict.get(point, 0)
 
-                    # Ad hoc treatment of grounding level
                     if quant_name.startswith("optimal_grounding_level"):
 
                         quant_name_orig = 'optimal_grounding_level'
    
-                        # If the data doesn't exist 
+                        # If the data does not exist 
                         if not quant_name_orig in this_grid_set[point].keys():
                             continue
    
@@ -324,9 +326,11 @@ class output(fourdvel):
                             #if self.proj == 'Evans' and optimal_grounding_level <= -2.2:
                             #    continue
 
+                            # Determine credible interval size
                             if self.proj == 'Rutford':
                                 #gl_ci_thres = 100
-                                gl_ci_thres = 0.5
+                                #gl_ci_thres = 0.5
+                                gl_ci_thres = 0.6
                                 #gl_ci_thres = 1.0
                                 #gl_ci_thres = 1.5
 
@@ -363,10 +367,10 @@ class output(fourdvel):
 
                                 if csk_exists == True and csk_desc_exists == False:
                                     continue
-    
+   
+                    ################################################################################### 
                     # Record everything, including np.nan
                     # np.nan is filtered in write_dict_to_xyz
-
                     # up_scale
                     if quant_name in ["up_scale"]:
                         if state == "true":
@@ -377,10 +381,6 @@ class output(fourdvel):
 
                     # optimal grounding level
                     elif quant_name.startswith("optimal_grounding_level"):
-
-                        #if quant_name.endswith('prescale'):
-                        #print(quant_name)
-                        #print(stop)
 
                         if state == "true":
                             grid_set_quant[point] = this_grid_set[point].get("true_" + "optimal_grounding_level", np.nan)
@@ -408,13 +408,15 @@ class output(fourdvel):
                     elif quant_name in ["grounding_level_credible_interval"]:
                         if state == "true":
                             grid_set_quant[point] = np.nan
+                        
                         elif state == 'est':
                             ci = this_grid_set[point].get("grounding_level_credible_interval", (np.nan, np.nan))
                             grid_set_quant[point] = ci[1] - ci[0]
 
                             # clip every thing outside ice-shelf
                             if model_up == 0:
-                                grid_set_quant[point] = np.nan
+                                #grid_set_quant[point] = np.nan
+                                grid_set_quant[point] = 10
 
                         else:
                             raise ValueError()
@@ -817,7 +819,8 @@ class output(fourdvel):
         saved_grid_set_quant_results = {}
 
         # Create a file to save mean phase
-        f_mp  = open(self.estimation_dir + '/' + 'mean_phase.txt','w')
+        if 'true' in output_states or 'est' in output_states:
+            f_mp  = open(self.estimation_dir + '/' + 'mean_phase.txt','w')
 
         print("output states: ", output_states)
         for state in output_states:
@@ -1099,7 +1102,8 @@ class output(fourdvel):
                         saved_grid_set_quant_results[(state, sub_quant_name)] = grid_set_quant[sub_quant_name]
 
         # close the mean phase file
-        f_mp.close()
+        if 'true' in output_states or 'est' in output_states:
+            f_mp.close()
 
         return 0
 
