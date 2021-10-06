@@ -226,8 +226,8 @@ class fourdvel(basics):
         self.min_num_of_csk_tracks = 1
         self.min_num_of_s1_tracks = 100
 
-        # whether or not this run is for x2 analysis
-        self.x2_run = False
+        # cov version
+        self.grid_set_cov_version = None
 
         fmt = '%Y%m%d'
 
@@ -574,13 +574,13 @@ class fourdvel(basics):
                 self.analysis_name = value
                 print("analysis_name: ",self.analysis_name)
 
-            ## Secular variation
-            if name == 'x2_run':
-                if value == 'True':
-                    self.x2_run = True
+            ## Cov version
+            if name == 'grid_set_cov_version':
+                if value.lower() == 'none':
+                    self.grid_set_cov_version = None
                 else:
-                    self.x2_run = False
-                print('x2_run: ', value)
+                    self.grid_set_cov_version = value
+                print('grid_set_cov_version: ', value)
 
             ## Output ###
             if name == "output_true":
@@ -690,7 +690,6 @@ class fourdvel(basics):
             return True
 
         elif kind == 'ice_shelf':
-
             for point in point_set:
                 if point in self.shelf_points_dict:
                     return True
@@ -1097,13 +1096,28 @@ class fourdvel(basics):
             # Same as cov_v3, but for T14,15,16,17,18, I use the full footprint
             # track_014_1, track_015_1, ... track_018_1
 
+
+            if self.grid_set_cov_version is not None:
+
+                grid_set_cov_version = self.grid_set_cov_version
+
+            else:
+                if self.csk_data_mode == 1:
+                    grid_set_cov_version = 'cov_v4'
+
+                # actual data
+                else:
+                    grid_set_cov_version = 'cov_v3'
+
+            print('cov_version: ', grid_set_cov_version)
+
             # Set the version
             #grid_set_cov_version = 'cov_v0'
             #grid_set_cov_version = 'cov_v1'
             #grid_set_cov_version = 'cov_v2'
-            
+ 
             #grid_set_cov_version = 'cov_v3'
-            grid_set_cov_version = 'cov_v4'
+            #grid_set_cov_version = 'cov_v4'
 
             self.grid_set_name= "_".join((grid_set_prefix, grid_set_datasets, grid_set_sources, grid_set_resolution, grid_set_cov_version))
 
@@ -1701,12 +1715,12 @@ class fourdvel(basics):
         
         if self.proj == "Rutford":
             shelf_points_test_id = 20200661
-        
+            shelf_point_file = '/net/kraken/bak/mzzhong/Ant_Data/GroundingLines/RIS_{}_shelf_latlon.xyz'.format(str(shelf_points_test_id))
+       
         elif self.proj == 'Evans':
-            shelf_points_test_id = 20211931 
-    
-        #shelf_point_file = '/net/kamb/ssd-tmp1/mzzhong/insarRoutines/quick_studies/' + str(shelf_points_test_id) + '_shelf_points.xyz'
-        shelf_point_file = '/net/kraken/bak/mzzhong/Ant_Data/GroundingLines/RIS_{}_shelf_latlon.xyz'.format(str(shelf_points_test_id))
+            shelf_points_test_id = 20211931
+            # Need to derive EIS ice shelf like RIS 
+            shelf_point_file = '/net/kamb/ssd-tmp1/mzzhong/insarRoutines/quick_studies/' + str(shelf_points_test_id) + '_shelf_points.xyz'
         
         if os.path.exists(shelf_point_file):
             # if value is 0, then it is not ice shelf

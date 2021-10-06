@@ -37,7 +37,7 @@ def createParser():
 
     parser.add_argument('-t','--task_name',dest='task_name',type=str, help='task name', required=True)
 
-    parser.add_argument('-s','--sub_task_name',dest='sub_task_name',type=str, help='sub task name (tides_3: x2_run, find, invert)')
+    parser.add_argument('-s','--sub_task_name',dest='sub_task_name',type=str, help='sub task name (tides_3: x2_run, find, invert)', default=None)
     
     parser.add_argument('-n','--nthreads',dest='nthreads',type=int, help='number of threads', required=False, default=None)
     

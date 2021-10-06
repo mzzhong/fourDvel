@@ -284,6 +284,9 @@ class estimate(configure):
                     elif gl_list_option == 10:
                         enum_grounding_level = np.asarray([-4.00, -3.10, -2.60, -2.20, -1.90, -1.70, -1.60, -1.56, -1.53, -1.51, -1.5, -1.49, -1.47, -1.44, -1.40, -1.30, -1.10, -0.80, -0.40, 0.10, 1.00, 3.00, 4.00])
 
+                    elif gl_list_option == 11:
+                        enum_grounding_level = np.asarray([-3.0, -2.3, -2.2, -2.1, -2.0, -1.9, -1.8, -1.7, -1.6, -1.5, -1.4, -1.2, -0.9, -0.5, 0.0])
+
                     else:
                         raise ValueError()
 
@@ -293,7 +296,7 @@ class estimate(configure):
                     print('enum_grounding_level for manual mode: ', enum_grounding_level)
 
                     # convert to integer
-                    enum_grounding_level_int = [int(round(gl*(10**6))) if gl else None for gl in enum_grounding_level]
+                    enum_grounding_level_int = [int(round(gl*(10**6))) if gl or gl==0 else None for gl in enum_grounding_level]
 
                     if enum_grounding_run_mode == 'continue':
                         if set(enum_grounding_level_int).issubset(set(completed_enum_gl)):
@@ -304,6 +307,8 @@ class estimate(configure):
                         else:
                             # We have some new values to enumerate
                             enum_grounding_level_int = set(enum_grounding_level_int) - set(completed_enum_gl)
+                            print(enum_grounding_level)
+                            print(enum_grounding_level_int)
                             enum_grounding_level_int = sorted(list(enum_grounding_level_int))
 
                     print("Remaining gl values for manual eumeration if passing the ice shelf check: ", enum_grounding_level_int)
@@ -343,17 +348,14 @@ class estimate(configure):
                         gl_high = 0.0
 
                     elif self.proj == 'Evans':
-                        # full range
-                        #gl_low  =   -3.0
-                        #gl_high =   3.0
+                        # full range 1
+                        gl_low  =   -3.0
+                        gl_high =   3.0
 
                         # half range
-                        gl_low = -3.0
-                        gl_high = 0.0
+                        #gl_low = -3.0
+                        #gl_high = 0.0
 
-                        # ad hoc
-                        gl_low = -2.3
-                        gl_high = -0.7
 
                     else:
                         raise ValueError()

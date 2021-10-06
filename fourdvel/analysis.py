@@ -48,9 +48,10 @@ class analysis(configure):
         if analysis_name.startswith("slr"):
             self.slr_name = analysis_name.split('_',1)[1]
 
-    def set_task_name(self, task_name):
+    def set_task_name(self, task_name, sub_task_name=None):
 
         self.task_name = task_name
+        self.sub_task_name = sub_task_name
 
     def load_everything(self):
 
@@ -869,7 +870,7 @@ class analysis(configure):
                 plot_stop_day = datetime.date(2021,11,1)
 
                 off1_day = datetime.date(2017,2,1)
-                off2_day = datetime.date(2021,6,1)
+                off2_day = datetime.date(2021,8,1)
 
             else:
                 raise ValueError()
@@ -919,7 +920,7 @@ class analysis(configure):
 
             elif self.proj == 'Evans':
                 ax.text(off1+8,-2.65, "2017-02-01",fontsize=15)
-                ax.text(off2-240,-2.65, "2021-06-01",fontsize=15)
+                ax.text(off2-240,-2.65, "2021-08-01",fontsize=15)
 
             # Plot the acquisitions on the tide time series
             plot_acquisition_times = 1
