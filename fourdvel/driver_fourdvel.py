@@ -343,6 +343,9 @@ class driver_fourdvel():
         else:
             raise ValueError()
 
+
+
+
         if do_calculation:
 
             # Count the total number of tiles
@@ -487,6 +490,7 @@ class driver_fourdvel():
  
             # Loop through the results
             for ip, point_pkl in enumerate(point_results):
+
                 if point_pkl.endswith('.pkl'):
                     print(ip)
     
@@ -504,8 +508,24 @@ class driver_fourdvel():
                     tasks.grid_set_resid_of_tides.update(all_sets['resid_of_tides_set'])
                     tasks.grid_set_others.update(all_sets['others_set'])
                     tasks.grid_set_residual_analysis.update(all_sets['residual_analysis_set'])
-                    
+
+
+                    #point_set = set(all_sets['tide_vec_set'].keys())
+
+                    #print('point set size: ', len(point_set))
+
+                    #on_ephemeral_grounding = tasks.check_point_set_with_requirements(point_set, kind='ephemeral_grounding')
+                    #on_ice_shelf = tasks.check_point_set_with_requirements(point_set, kind='ice_shelf')
+
+                    #if on_ice_shelf and not on_ephemeral_grounding:
+                    #    print('Need to redo this: ', point_pkl)
+                    #    cmd = 'rm estimations/20211822/point_result/' + point_pkl
+                    #    print(cmd)
+                    #    os.system(cmd)
+
                     #tasks.grid_set_analysis.update(all_sets['analysis_set'])
+
+        #return
 
         ## Save the final results in dictionary manager
         forceUnSaveTides = False

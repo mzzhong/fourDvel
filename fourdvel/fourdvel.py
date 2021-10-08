@@ -705,7 +705,7 @@ class fourdvel(basics):
             return False
 
         else:
-            raise ValueError()
+            raise ValueError('Unknown kind {}'.format(kind))
             
     def get_CSK_trackDates_from_log(self):
         import csv

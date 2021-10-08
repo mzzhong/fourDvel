@@ -271,7 +271,7 @@ class estimate(configure):
                         gl_high = -10
                         enum_space = 1
 
-                    # For Evans synthetic test
+                    # For Evans synthetic test ephemeral grounding  at -0.5
                     elif gl_list_option == 8:
                         enum_grounding_level = np.asarray([-3.00, -2.10, -1.60, -1.20, -0.90, -0.70, -0.60, -0.56, -0.53, -0.51, -0.5, -0.49, -0.47, -0.44, -0.40, -0.30, -0.10, 0.20, 0.60, 1.10, 1.70, 2.40, 3.00])
 
@@ -280,12 +280,13 @@ class estimate(configure):
                         gl_low = -3.0
                         gl_high = 0.0
 
-                    # For Rutford synthetic test
+                    # For Rutford synthetic test ephemeral grounding at -1.5
                     elif gl_list_option == 10:
                         enum_grounding_level = np.asarray([-4.00, -3.10, -2.60, -2.20, -1.90, -1.70, -1.60, -1.56, -1.53, -1.51, -1.5, -1.49, -1.47, -1.44, -1.40, -1.30, -1.10, -0.80, -0.40, 0.10, 1.00, 3.00, 4.00])
 
+                    # For compare infer K for avaibale and all data. EG at -1.8
                     elif gl_list_option == 11:
-                        enum_grounding_level = np.asarray([-3.0, -2.3, -2.2, -2.1, -2.0, -1.9, -1.8, -1.7, -1.6, -1.5, -1.4, -1.2, -0.9, -0.5, 0.0])
+                        enum_grounding_level = np.asarray([-3.0, -2.5, -2.0, -1.9, -1.85, -1.83, -1.81, -1.80, -1.79, -1.77, -1.74, -1.7, -1.5, -1.0, -0.0])
 
                     else:
                         raise ValueError()
@@ -401,7 +402,12 @@ class estimate(configure):
                             else:
                                 # the inversion actually fails, but to make it easier for parallel computation,
                                 # set the gl_low to be -4, other values also work
-                                gl_low = -4.0
+                                if self.proj == 'Rutford':
+                                    gl_low = -4.0
+                                elif self.proj == 'Evans':
+                                    gl_low = -3.0
+                                else:
+                                    raise ValueError()
 
                             # find the spacing of this stage
                             enum_space = auto_enum_stages[next_auto_enum_stage][1]
@@ -456,6 +462,7 @@ class estimate(configure):
 
                 if self.point_set_check_kind is not None:
                     point_set_check_kind = self.point_set_check_kind
+
 
                 if not self.check_point_set_with_requirements(point_set, kind=point_set_check_kind):
                     print("This point_set does not pass the check for coverage, skip enumeration")

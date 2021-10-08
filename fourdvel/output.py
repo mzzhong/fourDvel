@@ -335,7 +335,8 @@ class output(fourdvel):
                                 #gl_ci_thres = 1.5
 
                             elif self.proj == 'Evans':
-                                gl_ci_thres = 0.5
+                                #gl_ci_thres = 0.5
+                                gl_ci_thres = 0.6
 
                             else:
                                 raise ValueError()
@@ -415,8 +416,8 @@ class output(fourdvel):
 
                             # clip every thing outside ice-shelf
                             if model_up == 0:
-                                #grid_set_quant[point] = np.nan
-                                grid_set_quant[point] = 10
+                                grid_set_quant[point] = np.nan
+                                #grid_set_quant[point] = 10
 
                         else:
                             raise ValueError()
