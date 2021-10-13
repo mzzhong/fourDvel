@@ -2931,6 +2931,7 @@ class fourdvel(basics):
                 likelihoods_proc = []
 
                 for i, grounding_level_int in enumerate(grounding_levels):
+                    # Remove -10
                     if grounding_level_int != -10 * 10**6:
                         grounding_levels_proc.append(grounding_levels[i])
                         likelihoods_proc.append(likelihoods[i])
@@ -2991,7 +2992,8 @@ class fourdvel(basics):
                     #    print(gl_ci_2)
 
                     #print(gls_interp / 10**6)
-                    #print(gl_probs_interp) 
+                    #print(gl_probs_interp)
+ 
                     gl_ci_2 = self.calc_hpdi_v2(gls_interp/10**6, gl_probs_interp)
 
                 else:
@@ -3512,6 +3514,10 @@ class fourdvel(basics):
             speed = np.sqrt(data_vec[0]**2 + data_vec[1]**2)
 
             if not np.isnan(angle) and speed >=0.1:
+
+            # 2021.10.11 for test only
+            #if not np.isnan(angle) and speed >=0.05:
+                
                 length = 0.2
                 quant = (angle, length)
 
