@@ -219,6 +219,7 @@ class estimate(configure):
                 else:
                     raise ValueError("Unknown enum grounding run mode")
 
+
                 ###### Prepare the grounding level values to be enumerated #########
                 if gl_option == 'no_grounding':
 
@@ -338,6 +339,7 @@ class estimate(configure):
                         raise ValueError("Unknown auto gl option")
 
                     # Set the search range parameters for auto
+                    # This is designed to be a global control for all values
                     # Range of search
                     if self.proj == 'Rutford':
                         # full range
@@ -393,29 +395,29 @@ class estimate(configure):
                         for point in point_set:
                             optimal_gl = others_set[point]["optimal_grounding_level"]
 
-                            # The optimal_gl can be -10 * 10**6, so the gl_low may be meaningless
+                            # The optimal_gl can be -10 * 10**6, so the optimal_gl_low may be meaningless
                             # Thie case is taken care of in the sanity check for ice shelf below
 
                             # If optimal_gl is not NaN
                             if not np.isnan(optimal_gl):
-                                gl_low = optimal_gl/10**6 - auto_enum_stages[next_auto_enum_stage][0]
+                                optimal_gl_low = optimal_gl/10**6 - auto_enum_stages[next_auto_enum_stage][0]
                             else:
                                 # the inversion actually fails, but to make it easier for parallel computation,
                                 # set the gl_low to be -4, other values also work
                                 if self.proj == 'Rutford':
-                                    gl_low = -4.0
+                                    optimal_gl_low = gl_low
                                 elif self.proj == 'Evans':
-                                    gl_low = -3.0
+                                    optimal_gl_low = gl_low
                                 else:
                                     raise ValueError()
 
                             # find the spacing of this stage
                             enum_space = auto_enum_stages[next_auto_enum_stage][1]
                             # set the enum range and spacing for this point
-                            enum_grounding_level_auto_mode_set[point] = [int(round(gl_low * 10**6)), int(round(enum_space * 10**6))]
+                            enum_grounding_level_auto_mode_set[point] = [int(round(optimal_gl_low * 10**6)), int(round(enum_space * 10**6))]
                             
                             #print(others_set[point]['grounding_level_model_likelihood'])
-                            #print(optimal_gl, gl_low, enum_space, current_auto_enum_stage)
+                            #print(optimal_gl, optimal_gl_low, enum_space, current_auto_enum_stage)
 
                             if point == self.test_point:
                                 print('optimal gl: ', optimal_gl)
@@ -463,7 +465,6 @@ class estimate(configure):
                 if self.point_set_check_kind is not None:
                     point_set_check_kind = self.point_set_check_kind
 
-
                 if not self.check_point_set_with_requirements(point_set, kind=point_set_check_kind):
                     print("This point_set does not pass the check for coverage, skip enumeration")
                     point_set_on_ice_shelf = False
@@ -484,6 +485,7 @@ class estimate(configure):
                 else:
                     print("This point_set passes the check for coverage, perform enumeration")
                     point_set_on_ice_shelf = True
+
 
                 ## Check for finding optimal gl or inverting optimal gl
                 if tides_3_mode == "find_optimal_gl":
@@ -580,6 +582,7 @@ class estimate(configure):
                             grounding_level_int = {}
 
                             for point in point_set:
+
                                 gl_low_int = enum_grounding_level_auto_mode_set[point][0]
                                 gl_enum_spacing_int = enum_grounding_level_auto_mode_set[point][1]
 
@@ -605,7 +608,7 @@ class estimate(configure):
                                 if point == self.test_point:
                                     print("Auto mode enumeration at test point: ")
                                     print(given_grounding_level[point], gl_low_int, enum_grounding_level, gl_enum_spacing_int)
-
+                                    print('gl_a_min and max: ', gl_a_min, gl_a_max)
                         else:
                             raise ValueError("Unknown gl_option")
 

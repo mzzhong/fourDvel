@@ -3514,15 +3514,19 @@ class fourdvel(basics):
             speed = np.sqrt(data_vec[0]**2 + data_vec[1]**2)
 
             if not np.isnan(angle) and speed >=0.1:
-
-            # 2021.10.11 for test only
-            #if not np.isnan(angle) and speed >=0.05:
-                
                 length = 0.2
                 quant = (angle, length)
 
             else:
                 quant = (0, 0)
+
+            # 2021.10.14 for test only
+            if not np.isnan(angle) and speed >=0.1:
+                length = 0.2
+                quant = (angle, length)
+
+            else:
+                quant = (np.nan, np.nan)
 
             return quant
 

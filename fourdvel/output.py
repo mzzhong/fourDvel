@@ -861,7 +861,7 @@ class output(fourdvel):
                             else:
                                 raise Exception()
     
-                            #downsample = 1
+                            downsample = 1
                             if lon_ind % downsample==0 and lat_ind % downsample==0:
                                 output_keys.append((lon,lat))
     
