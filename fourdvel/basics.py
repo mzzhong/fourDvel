@@ -585,11 +585,25 @@ class basics():
 
         return (X, Y, data_values, X_axis, Y_axis, data_mat)
 
-    def read_point_data_from_xyz(self, point, file_name, project, winsize=(1,1), add_mean_phase = True):
+
+    def read_point_set_data_from_xyz(self, point_set, file_name, project, winsize=(1,1), add_mean_phase = True):
+
+        data_df = pd.read_csv(file_name, delim_whitespace=True, header=None)
+
+        data_list = []
+        for point in point_set:
+            data_value = self.read_point_data_from_xyz(point, file_name, project, winsize, add_mean_phase, data_df)
+            data_list.append(data_value)
+
+        return data_list
+
+    def read_point_data_from_xyz(self, point, file_name, project, winsize=(1,1), add_mean_phase = True, data_df = None):
 
         local_f2i = 10**4
 
-        data_df = pd.read_csv(file_name, delim_whitespace=True, header=None)
+        if data_df is None:
+            data_df = pd.read_csv(file_name, delim_whitespace=True, header=None)
+
         X = data_df.iloc[:,0] * local_f2i
         Y = data_df.iloc[:,1] * local_f2i
         values = data_df.iloc[:,2]
@@ -668,8 +682,8 @@ class basics():
         else:
             mean_phase = None
 
-        print(quant_name)
-        print(mean_phase)
+        #print("quant_name: ", quant_name)
+        #print("mean phase: ", mean_phase)
         return mean_phase
 
     def get_ref_point(self, data_prefix):

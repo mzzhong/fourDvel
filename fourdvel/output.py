@@ -235,9 +235,18 @@ class output(fourdvel):
         this_result_folder = self.estimation_dir
         test_id = self.test_id
 
+        # load others results
         with open(this_result_folder + '/' 
                     + str(test_id) + '_' + 'grid_set_others.pkl','rb') as f:
             this_grid_set = pickle.load(f)
+
+        # load up amplitude scaling output at estimation stage
+        if self.task_name == 'tides_3':
+            up_amp_scale_file = this_result_folder + '/' + str(test_id) + '_est_up_amplitude_scaling.xyz'
+            up_amp_scale_grid_set = self.read_xyz_into_dict(up_amp_scale_file)
+            #print(list(up_amp_scale_grid_set.keys())[0])
+            #print(list(this_grid_set.keys())[0])
+            #print(stop) 
 
         # Set quant_list for others
         quant_list = [  'secular_east_north_velocity_corr',
@@ -254,10 +263,17 @@ class output(fourdvel):
 
         if self.task_name == 'tides_3':
             # credible interval needs to before grounding level for filtering purposes
-            quant_list = quant_list + ["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level"] 
+            #quant_list = quant_list + ["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level"] 
+            
+            #quant_list = quant_list + ["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level"] 
+            # up_scale is deprecated
+            quant_list = quant_list + ["grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level"] 
+            
             #quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "grounding_duration", "height"]
 
-            quant_list_for_bias = ['optimal_grounding_level', 'up_scale']
+            #quant_list_for_bias = ['optimal_grounding_level', 'up_scale']
+            # up_scale is deprecated
+            quant_list_for_bias = ['optimal_grounding_level']
 
         elif self.task_name == 'tides_1':
             quant_list_for_bias = []
@@ -329,14 +345,22 @@ class output(fourdvel):
                             # Determine credible interval size
                             if self.proj == 'Rutford':
                                 #gl_ci_thres = 100
+                                #gl_ci_thres = 0.4
                                 #gl_ci_thres = 0.5
-                                gl_ci_thres = 0.6
+                                # 2022.03.11: I use 0.6 for the manuscripts
+                                #gl_ci_thres = 0.4
+                                #gl_ci_thres = 0.6
+                                gl_ci_thres = 0.8
                                 #gl_ci_thres = 1.0
+                                #gl_ci_thres = 1.1
+                                #gl_ci_thres = 1.2
                                 #gl_ci_thres = 1.5
 
                             elif self.proj == 'Evans':
                                 #gl_ci_thres = 0.5
+                                # 2022.03.11: I use 0.6 for manuscripts
                                 gl_ci_thres = 0.6
+                                #gl_ci_thres = 1.0
 
                             else:
                                 raise ValueError()
@@ -390,7 +414,7 @@ class output(fourdvel):
                             optimal_grounding_level_int = this_grid_set[point].get("optimal_grounding_level", np.nan)
                             optimal_grounding_level = optimal_grounding_level_int / 10**6
 
-                            crsp_up_scale = this_grid_set[point].get("up_scale",np.nan)
+                            crsp_up_scale = up_amp_scale_grid_set.get(point, np.nan)
 
                             # unscaled
                             if quant_name.endswith('prescale'):
@@ -861,7 +885,7 @@ class output(fourdvel):
                             else:
                                 raise Exception()
     
-                            downsample = 1
+                            #downsample = 1
                             if lon_ind % downsample==0 and lat_ind % downsample==0:
                                 output_keys.append((lon,lat))
     

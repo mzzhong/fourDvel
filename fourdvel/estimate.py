@@ -342,26 +342,29 @@ class estimate(configure):
                     # This is designed to be a global control for all values
                     # Range of search
                     if self.proj == 'Rutford':
-                        # full range
-                        #gl_low  =   -4.0
-                        #gl_high =   4.0
+                        # half range (I use this for manuscripts before 2022.3)
+                        #gl_low = -4.0
+                        #gl_high = 0.0
 
-                        # half range
-                        gl_low = -4.0
-                        gl_high = 0.0
+                        # full range
+                        gl_low  =   -4.0
+                        gl_high =   4.0
 
                     elif self.proj == 'Evans':
-                        # full range 1
-                        gl_low  =   -3.0
-                        gl_high =   3.0
-
                         # half range
                         #gl_low = -3.0
                         #gl_high = 0.0
 
+                        # full range 1 (I use this manuscript before 2022.3))
+                        gl_low  =   -3.0
+                        gl_high =   3.0
+
 
                     else:
                         raise ValueError()
+
+                    print("gl_low: ", gl_low)
+                    print("gl_high: ", gl_high)
 
                     # Derive the gl values to be enumerated
                     if current_auto_enum_stage == 0:
@@ -527,11 +530,11 @@ class estimate(configure):
             ### Main: Loop through the grounding level ###
             for ienum, enum_grounding_level in enumerate(enum_grounding_level_int):
 
-                # Default inversion ("tides_1")
+                # Default linear inversion ("tides_1")
                 if enum_grounding_level is None:
                      linear_design_mat_set = linear_design_mat_set_orig
 
-                # Inversion with the grounding level ("tides_3")
+                # Nonlinear inversion with the grounding level ("tides_3")
                 else:
                     # Make a deep copy of dictionary of design matrix
                     linear_design_mat_set = copy.deepcopy(linear_design_mat_set_orig)
@@ -586,7 +589,7 @@ class estimate(configure):
                                 gl_low_int = enum_grounding_level_auto_mode_set[point][0]
                                 gl_enum_spacing_int = enum_grounding_level_auto_mode_set[point][1]
 
-                                # Need to distinguish if on ice shelf
+                                # Need to distinguish if the point is on ice shelf
                                 if point_set_on_ice_shelf:
                                     grounding_level_int_point = gl_low_int + enum_grounding_level * gl_enum_spacing_int
                                     
@@ -600,7 +603,9 @@ class estimate(configure):
                                 else:
                                     # -10 * 10**6
                                     grounding_level_int_point = enum_grounding_level
-
+                                    gl_a_min = gl_low
+                                    gl_a_max = gl_high
+ 
                                 # Save to the two dicts
                                 grounding_level_int[point] = grounding_level_int_point
                                 given_grounding_level[point] = grounding_level_int_point / 10**6
@@ -608,7 +613,7 @@ class estimate(configure):
                                 if point == self.test_point:
                                     print("Auto mode enumeration at test point: ")
                                     print(given_grounding_level[point], gl_low_int, enum_grounding_level, gl_enum_spacing_int)
-                                    print('gl_a_min and max: ', gl_a_min, gl_a_max)
+                                    print('gl_a_min and max (prescribed, not applicable on points without enumeration): ', gl_a_min, gl_a_max)
                         else:
                             raise ValueError("Unknown gl_option")
 
