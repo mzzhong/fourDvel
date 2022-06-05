@@ -5,4 +5,5 @@ deprecated
 .~*
 dev
 fourdvel/__pycache__
+__pycache__
 *gmt
