@@ -1,6 +1,6 @@
 # fourDvel2 
 Routines for inferring time-dependent, 3d displacement fields from displacement data derived from temporally-dense synthetic-apeature radar observations
-fourDvel2 is an extention of fourDvel to allow inferring ephemeral grounding on ice shelves
+fourDvel2 is an extention of [fourDvel](https://github.com/bminchew/fourDvel) to allow inferring ephemeral grounding on ice shelves
 
 ## Requirement
 - numpy
