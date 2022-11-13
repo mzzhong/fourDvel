@@ -268,7 +268,9 @@ class output(fourdvel):
             #quant_list = quant_list + ["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level"] 
             # up_scale is deprecated
             quant_list = quant_list + ["grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level"] 
-            
+            # 2022.09.17
+            quant_list = quant_list + ["lowest_tide_height"]
+ 
             #quant_list=["up_scale", "grounding_level_credible_interval", "optimal_grounding_level_prescale", "optimal_grounding_level", "grounding_duration", "height"]
 
             #quant_list_for_bias = ['optimal_grounding_level', 'up_scale']
@@ -533,6 +535,21 @@ class output(fourdvel):
                         else:
                             raise ValueError()
 
+                    elif quant_name in ["lowest_tide_height"]:
+                        if state == 'true':
+                            grid_set_quant[point] = this_grid_set[point]["lowest_tide_height"]
+
+                            if grid_set_quant[point] is None:
+                                grid_set_quant[point] = np.nan
+
+                            # only ice shelf
+                            model_up = self.grid_set_velo[point][2]
+                            if model_up == 0:
+                                grid_set_quant[point] = np.nan
+
+                        elif state == 'est':
+                            grid_set_quant[point] = np.nan
+
                     else:
                         print(quant_name, "is not found")
                         raise ValueError()
@@ -554,6 +571,8 @@ class output(fourdvel):
                 if state == 'est' and quant_name in ["num_of_s1_offset_pairs"]:
                     grid_set_num_of_s1_offset_pairs = grid_set_quant
 
+                #if state == 'est' and quant_name in ["lowest_tide_height"]:
+                #    grid_set_lowest_tide_height = grid_set_quant
 
                 # Write to xyz file.
                 xyz_name = os.path.join(this_result_folder, str(test_id) + '_' + state + '_' + 'others' + '_' + quant_name + '.xyz')
@@ -618,7 +637,9 @@ class output(fourdvel):
             subquant_names['best_slr_results'] = ['slope','intercept','r_value','p_value','min_proxy_tide','track_num']
             subquant_names['best_slr_data_stats']=['data_mean','data_median','data_std','picked_data_mean','picked_data_median','picked_data_std']
             subquant_names['lowest_tide']=['height','track_num']
-    
+   
+            print('subquant_names: ', subquant_names)
+            #print(stop) 
             for quant_name in quant_names:
     
                 for subquant_name in subquant_names[quant_name]:
@@ -1271,6 +1292,8 @@ def main(iargs=None):
 
     if out.task_name in ['residual_analysis']:
         out.output_mode = 'analysis'
+
+    print('output_mode: ', out.output_mode)
 
     # output estimation
     if out.output_mode == 'estimation':
